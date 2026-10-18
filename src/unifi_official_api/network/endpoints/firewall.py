@@ -4,8 +4,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from pydantic import ValidationError
+
+from ...exceptions import UniFiValidationError
 from ..models import FirewallRule, FirewallZone
-from ..models.firewall import FirewallPolicyOrdering
+from ..models.firewall import (
+    FirewallPolicyOrdering,
+    OrderedFirewallPolicyIds,
+)
 
 if TYPE_CHECKING:
     from ..client import UniFiNetworkClient
@@ -168,6 +174,7 @@ class FirewallEndpoint:
         offset: int | None = None,
         limit: int | None = None,
         filter_str: str | None = None,
+        strict: bool = False,
     ) -> list[FirewallRule]:
         """
         List all firewall rules.
@@ -181,12 +188,17 @@ class FirewallEndpoint:
             limit: Maximum number of items to return.
             filter_str: Filter query string using API filter syntax.
                 Example: "action.eq('drop')" or "and(name.isNotNull(), enabled.eq(true))"
+            strict: Used by the rule export. Every page must be a list of valid
+                rules, otherwise ``UniFiValidationError`` is raised, and the
+                response bodies are not logged.
 
         Returns:
             List of firewall rules.
 
         """
         path = self._client.build_api_path(f"/sites/{site_id}/firewall/policies")
+        parse = self._parse_rules_strict if strict else self._parse_rules_response
+        get_options: dict[str, Any] = {"log_body": False} if strict else {}
 
         # When caller supplies explicit pagination, honour it as a single request.
         if offset is not None or limit is not None:
@@ -197,8 +209,8 @@ class FirewallEndpoint:
                 params["limit"] = limit
             if filter_str:
                 params["filter"] = filter_str
-            return self._parse_rules_response(
-                await self._client._get(path, params=params if params else None)
+            return parse(
+                await self._client._get(path, params=params if params else None, **get_options)
             )
 
         # Auto-paginate to retrieve all rules.
@@ -211,8 +223,8 @@ class FirewallEndpoint:
             if filter_str:
                 params["filter"] = filter_str
 
-            response = await self._client._get(path, params=params)
-            rules = self._parse_rules_response(response)
+            response = await self._client._get(path, params=params, **get_options)
+            rules = parse(response)
             all_rules.extend(rules)
 
             # Check if there are more pages.
@@ -220,6 +232,18 @@ class FirewallEndpoint:
             if total is None or current_offset + page_size >= total:
                 break
             current_offset += page_size
+
+        if strict:
+            # Every page was valid, but the pages must also add up: the console
+            # reports how many policies there are, and a policy added or removed
+            # between two page requests shifts the offsets.
+            msg = "Incomplete firewall policy list"
+            if total is not None and len(all_rules) != total:
+                raise UniFiValidationError(msg)
+            if total is None and len(rules) >= page_size:
+                raise UniFiValidationError(msg)
+            if len({rule.id for rule in all_rules}) != len(all_rules):
+                raise UniFiValidationError(msg)
 
         return all_rules
 
@@ -232,6 +256,26 @@ class FirewallEndpoint:
         if isinstance(data, list):
             return [FirewallRule.model_validate(item) for item in data]
         return []
+
+    @staticmethod
+    def _parse_rules_strict(response: Any) -> list[FirewallRule]:
+        """Parse one page of firewall policies; anything but valid rules raises."""
+        data = response.get("data") if isinstance(response, dict) else response
+        if not isinstance(data, list) or not all(isinstance(i, dict) for i in data):
+            msg = "Unexpected firewall policy list response"
+            raise UniFiValidationError(msg)
+        rules: list[FirewallRule] = []
+        for item in data:
+            try:
+                rules.append(FirewallRule.model_validate(item))
+            except ValidationError:
+                break
+        else:
+            return rules
+        # Raised outside the handler so no validation error, which quotes the
+        # record, is attached to it as context.
+        msg = "Invalid firewall policy record"
+        raise UniFiValidationError(msg)
 
     async def get_rule(self, site_id: str, rule_id: str) -> FirewallRule:
         """
@@ -261,7 +305,7 @@ class FirewallEndpoint:
         site_id: str,
         *,
         name: str,
-        action: str = "drop",
+        action: str | dict[str, Any] = "drop",
         protocol: str = "all",
         source_zone_id: str | None = None,
         destination_zone_id: str | None = None,
@@ -273,8 +317,9 @@ class FirewallEndpoint:
         Args:
             site_id: The site ID.
             name: Rule name.
-            action: Rule action (accept, drop, reject).
-            protocol: Protocol to match.
+            action: Legacy action name or pre-built ALLOW/BLOCK/REJECT object.
+                ALLOW defaults allowReturnTraffic to False if omitted.
+            protocol: Only all is supported; use ipProtocolScope for other protocols.
             source_zone_id: Source zone ID.
             destination_zone_id: Destination zone ID.
             **kwargs: Additional parameters.
@@ -284,16 +329,46 @@ class FirewallEndpoint:
 
         """
         path = self._client.build_api_path(f"/sites/{site_id}/firewall/policies")
+        action_types = {
+            "ACCEPT": "ALLOW",
+            "ALLOW": "ALLOW",
+            "DROP": "BLOCK",
+            "DENY": "BLOCK",
+            "BLOCK": "BLOCK",
+            "REJECT": "REJECT",
+        }
+        action_value = action.get("type") if isinstance(action, dict) else action
+        action_type = (
+            action_types.get(action_value.upper()) if isinstance(action_value, str) else None
+        )
+        if action_type is None:
+            msg = f"Unsupported firewall action: {action_value}"
+            raise ValueError(msg)
+        if protocol != "all" and "ipProtocolScope" not in kwargs:
+            msg = "Use ipProtocolScope for protocols other than all"
+            raise ValueError(msg)
+        action_data: dict[str, Any] = dict(action) if isinstance(action, dict) else {}
+        action_data["type"] = action_type
+        if action_type == "ALLOW":
+            action_data.setdefault("allowReturnTraffic", False)
+            if not isinstance(action_data["allowReturnTraffic"], bool):
+                msg = "ALLOW allowReturnTraffic must be a boolean"
+                raise ValueError(msg)
         data: dict[str, Any] = {
             "name": name,
-            "action": action,
-            "protocol": protocol,
+            "action": action_data,
+            "source": {"zoneId": source_zone_id},
+            "destination": {"zoneId": destination_zone_id},
+            "ipProtocolScope": {"ipVersion": "IPV4"},
+            "enabled": True,
+            "loggingEnabled": False,
         }
-        if source_zone_id is not None:
-            data["sourceZoneId"] = source_zone_id
-        if destination_zone_id is not None:
-            data["destinationZoneId"] = destination_zone_id
         data.update(kwargs)
+        for field in ("source", "destination"):
+            zone = data[field]
+            if not isinstance(zone, dict) or not zone.get("zoneId"):
+                msg = f"A {field} zoneId is required"
+                raise ValueError(msg)
 
         response = await self._client._post(path, json_data=data)
         if isinstance(response, dict):
@@ -329,8 +404,9 @@ class FirewallEndpoint:
         """
         Update a firewall rule.
 
-        UniFi Network expects a full policy document via PUT rather than
-        a partial PATCH payload on current controller versions.
+        Full policy updates require a complete policy document via PUT.
+        Use ``patch_rule`` for the partial update the spec supports
+        (``loggingEnabled``).
 
         Args:
             site_id: The site ID.
@@ -355,7 +431,8 @@ class FirewallEndpoint:
         result = self._extract_rule_payload(response)
         if result is not None:
             return FirewallRule.model_validate(result)
-        return FirewallRule.model_validate(current_payload)
+        # No body: return what was sent, with the id the PUT body can't carry.
+        return FirewallRule.model_validate({**current_payload, "id": rule_id})
 
     async def delete_rule(self, site_id: str, rule_id: str) -> bool:
         """
@@ -377,90 +454,122 @@ class FirewallEndpoint:
         self,
         site_id: str,
         rule_id: str,
-        **kwargs: Any,
+        *,
+        logging_enabled: bool,
     ) -> FirewallRule:
         """
-        Partially update a firewall rule.
+        Patch a firewall rule's loggingEnabled, the only field the spec patches.
 
-        Despite the name, this uses GET+PUT internally because UniFi Network
-        rejects PATCH on current controller versions.
+        Use ``update_rule`` for any other change.
 
         Args:
             site_id: The site ID.
             rule_id: The rule ID.
-            **kwargs: Fields to update.
+            logging_enabled: Whether logging is enabled for this policy.
 
         Returns:
             The updated firewall rule.
 
         """
-        return await self.update_rule(site_id, rule_id, **kwargs)
+        data = {"loggingEnabled": logging_enabled}
+
+        path = self._client.build_api_path(f"/sites/{site_id}/firewall/policies/{rule_id}")
+        response = await self._client._patch(path, json_data=data)
+        result = self._extract_rule_payload(response)
+        if isinstance(result, dict):
+            return FirewallRule.model_validate(result)
+        msg = "Failed to patch firewall rule"
+        raise ValueError(msg)
 
     async def get_policy_ordering(
         self,
         site_id: str,
         *,
-        access_zone_id: str,
-        infrastructure_zone_id: str,
+        source_firewall_zone_id: str,
+        destination_firewall_zone_id: str,
     ) -> FirewallPolicyOrdering:
         """
         Get firewall policy ordering for a zone pair.
 
         Args:
             site_id: The site ID.
-            access_zone_id: The source/access zone ID.
-            infrastructure_zone_id: The destination zone ID.
+            source_firewall_zone_id: The source firewall zone ID.
+            destination_firewall_zone_id: The destination firewall zone ID.
 
         Returns:
             The policy ordering configuration.
 
         """
         params = {
-            "accessZoneId": access_zone_id,
-            "infrastructureZoneId": infrastructure_zone_id,
+            "sourceFirewallZoneId": source_firewall_zone_id,
+            "destinationFirewallZoneId": destination_firewall_zone_id,
         }
-        path = self._client.build_api_path(f"/sites/{site_id}/firewall/policy-orderings")
+        path = self._client.build_api_path(f"/sites/{site_id}/firewall/policies/ordering")
         response = await self._client._get(path, params=params)
 
         if isinstance(response, dict):
             data = response.get("data", response)
             if isinstance(data, dict):
                 return FirewallPolicyOrdering.model_validate(data)
-        raise ValueError("Failed to get firewall policy ordering")
+        msg = "Failed to get firewall policy ordering"
+        raise ValueError(msg)
 
     async def update_policy_ordering(
         self,
         site_id: str,
         *,
-        access_zone_id: str,
-        infrastructure_zone_id: str,
-        ordered_policy_ids: list[str],
+        source_firewall_zone_id: str,
+        destination_firewall_zone_id: str,
+        ordered_firewall_policy_ids: dict[str, list[str]] | OrderedFirewallPolicyIds,
     ) -> FirewallPolicyOrdering:
         """
         Update firewall policy ordering for a zone pair.
 
         Args:
             site_id: The site ID.
-            access_zone_id: The source/access zone ID.
-            infrastructure_zone_id: The destination zone ID.
-            ordered_policy_ids: List of user-defined policy IDs in desired order.
+            source_firewall_zone_id: The source firewall zone ID.
+            destination_firewall_zone_id: The destination firewall zone ID.
+            ordered_firewall_policy_ids: Ordered policy IDs around system rules.
 
         Returns:
             The updated policy ordering configuration.
 
         """
         params = {
-            "accessZoneId": access_zone_id,
-            "infrastructureZoneId": infrastructure_zone_id,
+            "sourceFirewallZoneId": source_firewall_zone_id,
+            "destinationFirewallZoneId": destination_firewall_zone_id,
         }
+        if isinstance(ordered_firewall_policy_ids, dict):
+            ordered_firewall_policy_ids = OrderedFirewallPolicyIds.model_validate(
+                ordered_firewall_policy_ids.get(
+                    "orderedFirewallPolicyIds", ordered_firewall_policy_ids
+                )
+            )
+            # The PUT replaces the whole ordering, so a list the caller left
+            # out must not be sent as the model's empty default.
+            if not {"before_system_defined", "after_system_defined"}.issubset(
+                ordered_firewall_policy_ids.model_fields_set
+            ):
+                msg = (
+                    "ordered_firewall_policy_ids needs both beforeSystemDefined "
+                    "and afterSystemDefined"
+                )
+                raise ValueError(msg)
+        # Only the two spec fields; the model allows extra keys on input.
+        payload = ordered_firewall_policy_ids.model_dump(
+            by_alias=True,
+            include={"before_system_defined", "after_system_defined"},
+        )
+
         data = {
-            "orderedPolicyIds": ordered_policy_ids,
+            "orderedFirewallPolicyIds": payload,
         }
-        path = self._client.build_api_path(f"/sites/{site_id}/firewall/policy-orderings")
+        path = self._client.build_api_path(f"/sites/{site_id}/firewall/policies/ordering")
         response = await self._client._put(path, json_data=data, params=params)
 
         if isinstance(response, dict):
             result = response.get("data", response)
             if isinstance(result, dict):
                 return FirewallPolicyOrdering.model_validate(result)
-        raise ValueError("Failed to update firewall policy ordering")
+        msg = "Failed to update firewall policy ordering"
+        raise ValueError(msg)

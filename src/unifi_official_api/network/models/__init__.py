@@ -17,21 +17,49 @@ from .application import ApplicationInfo
 from .client import Client, ClientType
 from .device import (
     Device,
+    DeviceFeatures,
+    DeviceInterfacePort,
+    DeviceInterfaces,
     DevicePort,
+    DevicePortPoE,
     DeviceState,
+    DeviceSwitchingFeature,
     DeviceType,
+    DeviceUplink,
+    LegacyOutletMetrics,
     LegacyPortMetrics,
+    Outlet,
     PortBytesMetrics,
+    device_id_is_mac,
+    parse_outlet_metrics,
 )
 from .dns import DNSPolicy, DNSPolicyMetadata, DNSRecordType
 from .firewall import (
+    FirewallAction,
     FirewallActionConfig,
     FirewallPolicyOrdering,
+    FirewallProtocol,
     FirewallRule,
     FirewallZone,
     OrderedFirewallPolicyIds,
 )
+from .lag import (
+    LAG,
+    LagMember,
+    LagType,
+    McLagDomain,
+    McLagLocalLag,
+    McLagPeer,
+    McLagRole,
+)
+from .nat_rule import NatRule, is_predefined_nat_rule
 from .network import Network, NetworkPurpose, NetworkType
+from .port_forward import PortForward
+from .report import (
+    DEFAULT_SITE_REPORT_ATTRS,
+    SITE_REPORT_INTERVALS,
+    SiteReportBucket,
+)
 from .resources import (
     DeviceTag,
     RADIUSProfile,
@@ -42,19 +70,10 @@ from .resources import (
     WANInterface,
     WANStatus,
 )
+from .routes import PolicyBasedRoute
 from .site import Site, SiteHealth
-from .switching import (
-    Lag,
-    LagMember,
-    LagPage,
-    LagType,
-    McLagDomain,
-    McLagDomainPage,
-    McLagPeer,
-    SwitchStack,
-    SwitchStackMember,
-    SwitchStackPage,
-)
+from .stack import SwitchStack, SwitchStackLag, SwitchStackMember
+from .static_route import StaticRoute
 from .traffic import (
     Country,
     DPIApplication,
@@ -62,7 +81,9 @@ from .traffic import (
     TrafficMatchingList,
     TrafficMatchingType,
 )
+from .traffic_rule import TrafficRule
 from .voucher import Voucher, VoucherCreateRequest
+from .vpn_client import VpnClient
 from .wifi import WifiNetwork, WifiSecurity
 
 __all__ = [
@@ -83,25 +104,52 @@ __all__ = [
     "ClientType",
     # Device
     "Device",
+    "DeviceFeatures",
+    "DeviceInterfacePort",
+    "DeviceInterfaces",
     "DevicePort",
+    "DevicePortPoE",
     "DeviceState",
+    "DeviceSwitchingFeature",
     "DeviceType",
+    "DeviceUplink",
+    "LegacyOutletMetrics",
     "LegacyPortMetrics",
+    "Outlet",
     "PortBytesMetrics",
+    "device_id_is_mac",
+    "parse_outlet_metrics",
     # DNS
     "DNSPolicy",
     "DNSPolicyMetadata",
     "DNSRecordType",
     # Firewall
+    "FirewallAction",
     "FirewallActionConfig",
     "FirewallPolicyOrdering",
+    "FirewallProtocol",
     "FirewallRule",
     "FirewallZone",
     "OrderedFirewallPolicyIds",
+    # LAG / switch stacking
+    "LAG",
+    "LagMember",
+    "LagType",
+    "McLagDomain",
+    "McLagLocalLag",
+    "McLagPeer",
+    "McLagRole",
+    "SwitchStack",
+    "SwitchStackLag",
+    "SwitchStackMember",
     # Network
     "Network",
     "NetworkPurpose",
     "NetworkType",
+    # Report
+    "DEFAULT_SITE_REPORT_ATTRS",
+    "SITE_REPORT_INTERVALS",
+    "SiteReportBucket",
     # Resources
     "DeviceTag",
     "RADIUSProfile",
@@ -111,29 +159,31 @@ __all__ = [
     "VPNTunnelStatus",
     "WANInterface",
     "WANStatus",
+    # NAT Rule
+    "NatRule",
+    "is_predefined_nat_rule",
+    # Port Forward
+    "PortForward",
+    # Routes
+    "PolicyBasedRoute",
     # Site
     "Site",
     "SiteHealth",
-    # Switching
-    "Lag",
-    "LagMember",
-    "LagPage",
-    "LagType",
-    "McLagDomain",
-    "McLagDomainPage",
-    "McLagPeer",
-    "SwitchStack",
-    "SwitchStackMember",
-    "SwitchStackPage",
+    # Static Route
+    "StaticRoute",
     # Traffic
     "Country",
     "DPIApplication",
     "DPICategory",
     "TrafficMatchingList",
     "TrafficMatchingType",
+    # Traffic Rule
+    "TrafficRule",
     # Voucher
     "Voucher",
     "VoucherCreateRequest",
+    # VPN Client
+    "VpnClient",
     # WiFi
     "WifiNetwork",
     "WifiSecurity",

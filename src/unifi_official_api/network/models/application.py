@@ -1,17 +1,16 @@
-"""Application info models for UniFi Network API."""
+"""Application info model for UniFi Network API."""
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ApplicationInfo(BaseModel):
-    """
-    UniFi Network application information.
+    """Model representing UniFi Network application information."""
 
-    Returned by the GET /v1/info endpoint.
-    """
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
 
     application_version: str = Field(alias="applicationVersion")
 
-    model_config = {"populate_by_name": True, "extra": "allow"}
+
+__all__ = ["ApplicationInfo"]

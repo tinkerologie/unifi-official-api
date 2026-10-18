@@ -1,3 +1,3 @@
 """Version information for unifi-official-api."""
 
-__version__ = "1.4.0"
+__version__ = "2.0.0"

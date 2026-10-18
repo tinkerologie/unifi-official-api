@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from aioresponses import aioresponses
 
+from unifi_official_api.exceptions import UniFiUnsupportedError
 from unifi_official_api.protect import UniFiProtectClient
 from unifi_official_api.protect.models import LightMode, RecordingMode
 
@@ -243,10 +245,16 @@ class TestLightsEndpoint:
         """Test setting light brightness."""
         mock_aioresponse.patch(
             "https://192.168.1.1/proxy/protect/integration/v1/lights/light-1",
-            payload={"data": {"id": "light-1", "mac": "AA:BB:CC:DD:EE:FF", "brightness": 75}},
+            payload={
+                "data": {
+                    "id": "light-1",
+                    "mac": "AA:BB:CC:DD:EE:FF",
+                    "lightDeviceSettings": {"ledLevel": 5},
+                }
+            },
         )
 
-        light = await protect_client.lights.set_brightness("light-1", 75)
+        light = await protect_client.lights.set_brightness("light-1", 5)
         assert light is not None
 
 
@@ -301,9 +309,41 @@ class TestChimesEndpoint:
         mock_aioresponse: aioresponses,
     ) -> None:
         """Test setting chime volume."""
+        mock_aioresponse.get(
+            "https://192.168.1.1/proxy/protect/integration/v1/chimes/chime-1",
+            payload={
+                "data": {
+                    "id": "chime-1",
+                    "mac": "AA:BB:CC:DD:EE:FF",
+                    "name": "Door Chime",
+                    "ringSettings": [
+                        {
+                            "cameraId": "cam-1",
+                            "ringtoneId": "rt-1",
+                            "repeatTimes": 1,
+                            "volume": 30,
+                        }
+                    ],
+                }
+            },
+        )
         mock_aioresponse.patch(
             "https://192.168.1.1/proxy/protect/integration/v1/chimes/chime-1",
-            payload={"data": {"id": "chime-1", "mac": "AA:BB:CC:DD:EE:FF", "volume": 50}},
+            payload={
+                "data": {
+                    "id": "chime-1",
+                    "mac": "AA:BB:CC:DD:EE:FF",
+                    "name": "Door Chime",
+                    "ringSettings": [
+                        {
+                            "cameraId": "cam-1",
+                            "ringtoneId": "rt-1",
+                            "repeatTimes": 1,
+                            "volume": 50,
+                        }
+                    ],
+                }
+            },
         )
 
         chime = await protect_client.chimes.set_volume("chime-1", 50)
@@ -314,14 +354,9 @@ class TestChimesEndpoint:
         protect_client: UniFiProtectClient,
         mock_aioresponse: aioresponses,
     ) -> None:
-        """Test playing chime."""
-        mock_aioresponse.post(
-            "https://192.168.1.1/proxy/protect/integration/v1/chimes/chime-1/play",
-            payload={},
-        )
-
-        result = await protect_client.chimes.play("chime-1")
-        assert result is True
+        """Test playing chime raises UniFiUnsupportedError."""
+        with pytest.raises(UniFiUnsupportedError, match="does not support chime playback"):
+            await protect_client.chimes.play("chime-1")
 
 
 class TestNVREndpoint:

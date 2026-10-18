@@ -50,6 +50,7 @@ class TestProtectExtendedEndpoints:
         mock_aioresponse.patch(
             "https://192.168.1.1/proxy/protect/integration/v1/sirens/siren-1",
             payload={"data": {"id": "siren-1", "name": "Main Siren Updated", "volume": 100}},
+            repeat=True,
         )
         mock_aioresponse.post(
             "https://192.168.1.1/proxy/protect/integration/v1/sirens/siren-1/play",
@@ -75,7 +76,8 @@ class TestProtectExtendedEndpoints:
             updated = await client.sirens.update("siren-1", volume=100)
             assert updated.volume == 100
 
-            await client.sirens.play("siren-1", duration_seconds=10, volume=80)
+            await client.sirens.play("siren-1", duration=10)
+            await client.sirens.set_volume("siren-1", 80)
             await client.sirens.stop("siren-1")
             await client.sirens.test_sound("siren-1")
 
@@ -548,6 +550,7 @@ class TestProtectExtendedEndpoints:
         )
         mock_aioresponse.post(
             "https://192.168.1.1/proxy/protect/integration/v1/pos/cameras/cam-1/transactions",
+            payload={"created": True, "eventId": "tx-123"},
             status=200,
         )
 
@@ -559,11 +562,11 @@ class TestProtectExtendedEndpoints:
             u = await client.users.get_user("u-1")
             assert u.id == "u-1"
 
-            ulp_users = await client.users.get_ulp_users()
+            ulp_users = await client.ulp_users.get_all()
             assert len(ulp_users) == 1
             assert isinstance(ulp_users[0], ULPUser)
 
-            ulp_u = await client.users.get_ulp_user("ulp-1")
+            ulp_u = await client.ulp_users.get("ulp-1")
             assert ulp_u.id == "ulp-1"
 
             req = POSTransactionRequest(
@@ -572,7 +575,8 @@ class TestProtectExtendedEndpoints:
                 amount=49.99,
                 currency="USD",
             )
-            await client.pos.ingest_transaction("cam-1", req)
+            res = await client.pos.ingest_transaction("cam-1", req)
+            assert res.created is True
 
     async def test_users_error_branches(
         self, client: UniFiProtectClient, mock_aioresponse: aioresponses
@@ -580,19 +584,19 @@ class TestProtectExtendedEndpoints:
         """Test users error branches."""
         mock_aioresponse.get("https://192.168.1.1/proxy/protect/integration/v1/users", payload=None)
         mock_aioresponse.get(
-            "https://192.168.1.1/proxy/protect/integration/v1/users/bad-id", payload={}
+            "https://192.168.1.1/proxy/protect/integration/v1/users/bad-id", payload=None
         )
         mock_aioresponse.get(
             "https://192.168.1.1/proxy/protect/integration/v1/ulp-users", payload=None
         )
         mock_aioresponse.get(
-            "https://192.168.1.1/proxy/protect/integration/v1/ulp-users/bad-id", payload={}
+            "https://192.168.1.1/proxy/protect/integration/v1/ulp-users/bad-id", payload=None
         )
 
         async with client:
             assert await client.users.get_users() == []
             with pytest.raises(ValueError, match="not found"):
                 await client.users.get_user("bad-id")
-            assert await client.users.get_ulp_users() == []
+            assert await client.ulp_users.get_all() == []
             with pytest.raises(ValueError, match="not found"):
-                await client.users.get_ulp_user("bad-id")
+                await client.ulp_users.get("bad-id")

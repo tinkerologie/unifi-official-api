@@ -1,17 +1,34 @@
-"""Pydantic models for UniFi InnerSpace API."""
+"""Models for UniFi InnerSpace API."""
 
 from __future__ import annotations
 
 from .access_point import InnerSpaceAccessPoint, InnerSpaceMountType
-from .floor_plan import FloorPlan
-from .inventory import InventoryDevice
-from .project import ProjectData, ProjectMeta
+from .application import ApplicationInfo
+from .floor_plan import FloorPlan, InnerSpaceFloorPlan
+from .inventory import InnerSpaceInventoryDevice, InventoryDevice
+from .project import (
+    InnerSpaceBaseModel,
+    InnerSpacePlan,
+    InnerSpaceProduct,
+    InnerSpaceProject,
+    InnerSpaceProjectIdentity,
+    ProjectData,
+    ProjectMeta,
+)
 from .switch import InnerSpaceSwitch
 
 __all__ = [
+    "ApplicationInfo",
     "FloorPlan",
     "InnerSpaceAccessPoint",
+    "InnerSpaceBaseModel",
+    "InnerSpaceFloorPlan",
+    "InnerSpaceInventoryDevice",
     "InnerSpaceMountType",
+    "InnerSpacePlan",
+    "InnerSpaceProduct",
+    "InnerSpaceProject",
+    "InnerSpaceProjectIdentity",
     "InnerSpaceSwitch",
     "InventoryDevice",
     "ProjectData",

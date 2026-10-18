@@ -56,7 +56,7 @@ class TrafficMatchingList(BaseModel):
 class DPICategory(BaseModel):
     """DPI (Deep Packet Inspection) Category."""
 
-    id: str = Field(..., description="Category identifier")
+    id: int = Field(..., description="Category identifier")
     name: str = Field(..., description="Category name")
     description: str | None = Field(None, description="Category description")
 
@@ -64,7 +64,7 @@ class DPICategory(BaseModel):
 class DPIApplication(BaseModel):
     """DPI Application."""
 
-    id: str = Field(..., description="Application identifier")
+    id: int = Field(..., description="Application identifier")
     name: str = Field(..., description="Application name")
     category_id: str | None = Field(None, alias="categoryId")
     description: str | None = Field(None, description="Application description")

@@ -12,7 +12,11 @@ from aioresponses import aioresponses
 
 from unifi_official_api import ApiKeyAuth, LocalAuth
 from unifi_official_api.const import ConnectionType
-from unifi_official_api.exceptions import UniFiConnectionError, UniFiTimeoutError
+from unifi_official_api.exceptions import (
+    UniFiConnectionError,
+    UniFiTimeoutError,
+    UniFiUnsupportedError,
+)
 from unifi_official_api.network import UniFiNetworkClient
 from unifi_official_api.network.models import ApplicationInfo
 from unifi_official_api.network.models.client import ClientType
@@ -171,25 +175,16 @@ class TestNetworkEndpointPagination:
                 assert sites == []
 
     async def test_sites_get_list_response(self, auth: LocalAuth) -> None:
-        with aioresponses() as m:
-            m.get(
-                re.compile(r".*/sites/s1"),
-                payload={"data": {"id": "s1", "name": "Default"}},
-            )
-            async with UniFiNetworkClient(
-                auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-            ) as client:
-                site = await client.sites.get("s1")
-                assert site.id == "s1"
+        async with UniFiNetworkClient(
+            auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
+        ) as client:
+            assert not hasattr(client.sites, "get")
 
     async def test_sites_get_not_found(self, auth: LocalAuth) -> None:
-        with aioresponses() as m:
-            m.get(re.compile(r".*/sites/.*"), payload=[])
-            async with UniFiNetworkClient(
-                auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-            ) as client:
-                with pytest.raises(ValueError, match="not found"):
-                    await client.sites.get("missing")
+        async with UniFiNetworkClient(
+            auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
+        ) as client:
+            assert not hasattr(client.sites, "get")
 
     # --- Devices ---
     async def test_devices_get_all_with_pagination(self, auth: LocalAuth) -> None:
@@ -284,7 +279,7 @@ class TestNetworkEndpointPagination:
 
     async def test_clients_execute_action(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
-            m.post(re.compile(r".*/clients/c1/block"), payload={})
+            m.post(re.compile(r".*/cmd/stamgr"), payload={"meta": {"rc": "ok"}})
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
@@ -341,9 +336,7 @@ class TestNetworkEndpointPagination:
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                n = await client.networks.create(
-                    "s1", name="Test", vlan_id=100, subnet="192.168.100.0/24"
-                )
+                n = await client.networks.create("s1", name="Test", vlan_id=100)
                 assert n.id == "n1"
 
     async def test_networks_create_error(self, auth: LocalAuth) -> None:
@@ -357,7 +350,7 @@ class TestNetworkEndpointPagination:
 
     async def test_networks_update(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
-            m.patch(
+            m.put(
                 re.compile(r".*/networks/n1"),
                 payload={"data": {"id": "n1", "name": "Updated", "type": "corporate"}},
             )
@@ -369,7 +362,7 @@ class TestNetworkEndpointPagination:
 
     async def test_networks_update_error(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
-            m.patch(re.compile(r".*/networks/.*"), payload=[])
+            m.put(re.compile(r".*/networks/.*"), payload=[])
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
@@ -453,7 +446,7 @@ class TestNetworkEndpointPagination:
         with aioresponses() as m:
             m.post(
                 re.compile(r".*/wifi/broadcasts"),
-                payload={"data": {"id": "w1", "name": "New", "ssid": "NewSSID"}},
+                payload={"data": {"id": "w1", "name": "New", "ssid": "New"}},
             )
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
@@ -461,7 +454,7 @@ class TestNetworkEndpointPagination:
                 w = await client.wifi.create(
                     "s1",
                     name="New",
-                    ssid="NewSSID",
+                    ssid="New",
                     passphrase="secret",
                     network_id="n1",
                 )
@@ -474,7 +467,7 @@ class TestNetworkEndpointPagination:
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
                 with pytest.raises(ValueError):
-                    await client.wifi.create("s1", name="X", ssid="Y")
+                    await client.wifi.create("s1", name="X", ssid="X", passphrase="secret")
 
     async def test_wifi_update(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
@@ -527,7 +520,9 @@ class TestNetworkEndpointPagination:
 
     async def test_resources_vpn_tunnels_pagination(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
-            m.get(re.compile(r".*/vpn/tunnels.*"), payload=[{"id": "t1", "name": "VPN"}])
+            m.get(
+                re.compile(r".*/vpn/site-to-site-tunnels.*"), payload=[{"id": "t1", "name": "VPN"}]
+            )
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
@@ -750,49 +745,41 @@ class TestNetworkEndpointPagination:
 
     async def test_firewall_patch_rule(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
-            m.get(
-                re.compile(r".*/firewall/policies/r1"),
-                payload={"data": {"id": "r1", "name": "Old", "action": "drop"}},
-            )
-            m.put(
+            m.patch(
                 re.compile(r".*/firewall/policies/r1"),
                 payload={"data": {"id": "r1", "name": "Patched", "action": "drop"}},
             )
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                r = await client.firewall.patch_rule("s1", "r1", enabled=False)
+                r = await client.firewall.patch_rule("s1", "r1", logging_enabled=False)
                 assert r.id == "r1"
 
     async def test_firewall_patch_rule_list_response(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
-            m.get(
-                re.compile(r".*/firewall/policies/r1"),
-                payload={"data": {"id": "r1", "name": "Old", "action": "drop"}},
-            )
-            m.put(
+            m.patch(
                 re.compile(r".*/firewall/policies/r1"),
                 payload={"data": [{"id": "r1", "name": "P", "action": "drop"}]},
             )
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                r = await client.firewall.patch_rule("s1", "r1", enabled=False)
+                r = await client.firewall.patch_rule("s1", "r1", logging_enabled=False)
                 assert r.id == "r1"
 
     async def test_firewall_patch_rule_error(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
-            m.get(re.compile(r".*/firewall/policies/.*"), payload={"data": []})
+            m.patch(re.compile(r".*/firewall/policies/.*"), payload={"data": []})
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
                 with pytest.raises(ValueError):
-                    await client.firewall.patch_rule("s1", "r1", enabled=False)
+                    await client.firewall.patch_rule("s1", "r1", logging_enabled=False)
 
     async def test_firewall_get_policy_ordering(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
             m.get(
-                re.compile(r".*/firewall/policy-orderings.*"),
+                re.compile(r".*/firewall/policies/ordering.*"),
                 payload={
                     "data": {
                         "orderedFirewallPolicyIds": {
@@ -806,25 +793,29 @@ class TestNetworkEndpointPagination:
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
                 o = await client.firewall.get_policy_ordering(
-                    "s1", access_zone_id="z1", infrastructure_zone_id="z2"
+                    "s1",
+                    source_firewall_zone_id="z1",
+                    destination_firewall_zone_id="z2",
                 )
                 assert o.ordered_firewall_policy_ids.before_system_defined == ["p1"]
 
     async def test_firewall_get_policy_ordering_error(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
-            m.get(re.compile(r".*/firewall/policy-orderings.*"), payload=[])
+            m.get(re.compile(r".*/firewall/policies/ordering.*"), payload=[])
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
                 with pytest.raises(ValueError):
                     await client.firewall.get_policy_ordering(
-                        "s1", access_zone_id="z1", infrastructure_zone_id="z2"
+                        "s1",
+                        source_firewall_zone_id="z1",
+                        destination_firewall_zone_id="z2",
                     )
 
     async def test_firewall_update_policy_ordering(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
             m.put(
-                re.compile(r".*/firewall/policy-orderings.*"),
+                re.compile(r".*/firewall/policies/ordering.*"),
                 payload={
                     "data": {
                         "orderedFirewallPolicyIds": {
@@ -839,24 +830,30 @@ class TestNetworkEndpointPagination:
             ) as client:
                 o = await client.firewall.update_policy_ordering(
                     "s1",
-                    access_zone_id="z1",
-                    infrastructure_zone_id="z2",
-                    ordered_policy_ids=["p2", "p1"],
+                    source_firewall_zone_id="z1",
+                    destination_firewall_zone_id="z2",
+                    ordered_firewall_policy_ids={
+                        "beforeSystemDefined": ["p2", "p1"],
+                        "afterSystemDefined": [],
+                    },
                 )
                 assert len(o.ordered_firewall_policy_ids.before_system_defined) == 2
 
     async def test_firewall_update_policy_ordering_error(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
-            m.put(re.compile(r".*/firewall/policy-orderings.*"), payload=[])
+            m.put(re.compile(r".*/firewall/policies/ordering.*"), payload=[])
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
                 with pytest.raises(ValueError):
                     await client.firewall.update_policy_ordering(
                         "s1",
-                        access_zone_id="z1",
-                        infrastructure_zone_id="z2",
-                        ordered_policy_ids=["p1"],
+                        source_firewall_zone_id="z1",
+                        destination_firewall_zone_id="z2",
+                        ordered_firewall_policy_ids={
+                            "beforeSystemDefined": ["p1"],
+                            "afterSystemDefined": [],
+                        },
                     )
 
     # --- ACL ---
@@ -1076,24 +1073,24 @@ class TestNetworkEndpointPagination:
         with aioresponses() as m:
             m.get(
                 re.compile(r".*/dpi/categories"),
-                payload=[{"id": "cat1", "name": "Social"}],
+                payload=[{"id": 1, "name": "Social"}],
             )
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                cats = await client.traffic.get_dpi_categories("s1")
+                cats = await client.traffic.get_dpi_categories()
                 assert len(cats) == 1
 
     async def test_traffic_dpi_applications(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
             m.get(
                 re.compile(r".*/dpi/applications"),
-                payload=[{"id": "app1", "name": "Facebook"}],
+                payload=[{"id": 1, "name": "Facebook"}],
             )
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                apps = await client.traffic.get_dpi_applications("s1")
+                apps = await client.traffic.get_dpi_applications()
                 assert len(apps) == 1
 
     async def test_traffic_countries(self, auth: LocalAuth) -> None:
@@ -1105,7 +1102,7 @@ class TestNetworkEndpointPagination:
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                countries = await client.traffic.get_countries("s1")
+                countries = await client.traffic.get_countries()
                 assert len(countries) == 1
 
 
@@ -1224,7 +1221,7 @@ class TestProtectClientCoverage:
 
     async def test_validate_connection(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
-            m.get(re.compile(r".*/sites"), payload={"data": []})
+            m.get(re.compile(r".*/cameras"), payload={"data": []})
             async with UniFiProtectClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
@@ -1636,7 +1633,7 @@ class TestProtectEndpointsCoverage:
         async with UniFiProtectClient(
             auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
         ) as client:
-            with pytest.raises(ValueError, match="Brightness"):
+            with pytest.raises(ValueError, match="between 1 and 6"):
                 await client.lights.set_brightness("l1", 150)
 
     # --- Chimes ---
@@ -1693,13 +1690,11 @@ class TestProtectEndpointsCoverage:
                 await client.chimes.set_volume("ch1", 150)
 
     async def test_chimes_play(self, auth: LocalAuth) -> None:
-        with aioresponses() as m:
-            m.post(re.compile(r".*/chimes/ch1/play"), payload={})
-            async with UniFiProtectClient(
-                auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-            ) as client:
-                result = await client.chimes.play("ch1")
-                assert result is True
+        async with UniFiProtectClient(
+            auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
+        ) as client:
+            with pytest.raises(UniFiUnsupportedError):
+                await client.chimes.play("ch1")
 
     # --- Sensors ---
     async def test_sensors_get_all_none(self, auth: LocalAuth) -> None:
@@ -2182,17 +2177,18 @@ class TestNoneAndNonListResponses:
 
     # --- Sites: get with list data ---
     async def test_sites_get_list_data_branch(self, auth: LocalAuth) -> None:
-        """Cover sites.py lines 76-77: data is list in get response."""
+        """Cover sites.py lines 76-77: data is list in get_all response."""
         with aioresponses() as m:
             m.get(
-                re.compile(r".*/sites/s1"),
+                re.compile(r".*/sites"),
                 payload={"data": [{"id": "s1", "name": "Default"}]},
             )
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                site = await client.sites.get("s1")
-                assert site.id == "s1"
+                sites = await client.sites.get_all()
+                assert len(sites) == 1
+                assert sites[0].id == "s1"
 
     # --- Devices: None response ---
     async def test_devices_get_all_none_response(self, auth: LocalAuth) -> None:
@@ -2455,7 +2451,7 @@ class TestNoneAndNonListResponses:
             auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
         ) as client:
             with patch.object(client, "_get", new_callable=AsyncMock, return_value=None):
-                cats = await client.traffic.get_dpi_categories("s1")
+                cats = await client.traffic.get_dpi_categories()
                 assert cats == []
 
     async def test_traffic_dpi_applications_none(self, auth: LocalAuth) -> None:
@@ -2464,7 +2460,7 @@ class TestNoneAndNonListResponses:
             auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
         ) as client:
             with patch.object(client, "_get", new_callable=AsyncMock, return_value=None):
-                apps = await client.traffic.get_dpi_applications("s1")
+                apps = await client.traffic.get_dpi_applications()
                 assert apps == []
 
     async def test_traffic_countries_none(self, auth: LocalAuth) -> None:
@@ -2473,7 +2469,7 @@ class TestNoneAndNonListResponses:
             auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
         ) as client:
             with patch.object(client, "_get", new_callable=AsyncMock, return_value=None):
-                countries = await client.traffic.get_countries("s1")
+                countries = await client.traffic.get_countries()
                 assert countries == []
 
     # --- Resources: None responses ---
@@ -2718,14 +2714,13 @@ class TestPartialBranches:
                 d = await client.devices.get("s1", "d1")
                 assert d.id == "d1"
 
-    # --- sites.py 76->78: get with list data (already covered above but using patch) ---
+    # --- sites.py non-list data ---
     async def test_sites_get_not_found_error(self, auth: LocalAuth) -> None:
         async with UniFiNetworkClient(
             auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
         ) as client:
             with patch.object(client, "_get", new_callable=AsyncMock, return_value={"data": "str"}):
-                with pytest.raises(ValueError, match="not found"):
-                    await client.sites.get("s1")
+                assert await client.sites.get_all() == []
 
     # --- acl.py branches: get with dict data, get with list ---
     async def test_acl_get_not_found(self, auth: LocalAuth) -> None:
@@ -2840,7 +2835,7 @@ class TestPartialBranches:
         async with UniFiNetworkClient(
             auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
         ) as client:
-            with patch.object(client, "_patch", new_callable=AsyncMock, return_value=[]):
+            with patch.object(client, "_put", new_callable=AsyncMock, return_value=[]):
                 with pytest.raises(ValueError, match="Failed to update"):
                     await client.networks.update("s1", "n1")
 
@@ -2871,7 +2866,7 @@ class TestPartialBranches:
         ) as client:
             with patch.object(client, "_post", new_callable=AsyncMock, return_value=[]):
                 with pytest.raises(ValueError, match="Failed to create"):
-                    await client.wifi.create("s1", name="Test", ssid="Test", password="12345678")
+                    await client.wifi.create("s1", name="Test", ssid="Test", passphrase="secret")
 
     async def test_wifi_update_error(self, auth: LocalAuth) -> None:
         async with UniFiNetworkClient(
@@ -2908,7 +2903,7 @@ class TestPartialBranches:
         ) as client:
             with patch.object(client, "_post", new_callable=AsyncMock, return_value=[]):
                 with pytest.raises(ValueError, match="Failed to create"):
-                    await client.vouchers.create("s1")
+                    await client.vouchers.create("s1", name="Test", time_limit_minutes=60)
 
     async def test_vouchers_delete_error(self, auth: LocalAuth) -> None:
         async with UniFiNetworkClient(
@@ -2942,8 +2937,8 @@ class TestPartialBranches:
                     await client.traffic.create_list(
                         "s1",
                         name="Test",
-                        list_type=TrafficMatchingType.DOMAIN,
-                        entries=["test.com"],
+                        list_type=TrafficMatchingType.PORTS,
+                        entries=["80"],
                     )
 
     async def test_traffic_update_error(self, auth: LocalAuth) -> None:
@@ -3394,7 +3389,7 @@ class TestPartialBranches:
         ) as client:
             with patch.object(
                 client,
-                "_patch",
+                "_put",
                 new_callable=AsyncMock,
                 return_value={"id": "n1", "name": "Updated"},
             ):
@@ -3425,7 +3420,7 @@ class TestPartialBranches:
                 new_callable=AsyncMock,
                 return_value={"id": "w1", "name": "Test", "ssid": "Test"},
             ):
-                w = await client.wifi.create("s1", name="Test", ssid="Test", password="12345678")
+                w = await client.wifi.create("s1", name="Test", ssid="Test", passphrase="secret")
                 assert w.id == "w1"
 
     async def test_wifi_update_dict_direct(self, auth: LocalAuth) -> None:
@@ -3484,7 +3479,13 @@ class TestPartialBranches:
         ) as client:
             with patch.object(client, "_post", new_callable=AsyncMock, return_value=[]):
                 with pytest.raises(ValueError, match="Failed to create"):
-                    await client.firewall.create_rule("s1", name="Test")
+                    await client.firewall.create_rule(
+                        "s1",
+                        name="Test",
+                        action="accept",
+                        source_zone_id="z1",
+                        destination_zone_id="z2",
+                    )
 
     async def test_firewall_update_rule_error(self, auth: LocalAuth) -> None:
         async with UniFiNetworkClient(
@@ -3502,7 +3503,10 @@ class TestPartialBranches:
                 with pytest.raises(ValueError, match="Failed to update"):
                     await client.firewall.update_policy_ordering(
                         "s1",
-                        access_zone_id="z1",
-                        infrastructure_zone_id="z2",
-                        ordered_policy_ids=["p1"],
+                        source_firewall_zone_id="z1",
+                        destination_firewall_zone_id="z2",
+                        ordered_firewall_policy_ids={
+                            "beforeSystemDefined": ["p1"],
+                            "afterSystemDefined": [],
+                        },
                     )

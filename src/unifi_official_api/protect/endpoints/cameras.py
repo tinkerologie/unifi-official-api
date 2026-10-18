@@ -1,14 +1,17 @@
 """Cameras endpoint for UniFi Protect API."""
 
-from __future__ import annotations
-
+import logging
 from typing import TYPE_CHECKING, Any
+
+from pydantic import ValidationError
 
 from ..models import Camera, RecordingMode
 from ..models.files import RTSPSStream, TalkbackSession
 
 if TYPE_CHECKING:
     from ..client import UniFiProtectClient
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class CamerasEndpoint:
@@ -23,28 +26,53 @@ class CamerasEndpoint:
 
         """
         self._client = client
+        # False when the most recent get_all() silently dropped an item on a
+        # ValidationError. Callers need to tell a complete listing from a short
+        # one: a device absent because its payload would not parse is still
+        # adopted, and must not be treated as removed.
+        self.last_result_complete: bool = True
 
-    async def get_all(self, site_id: str | None = None) -> list[Camera]:
+    async def get_all(
+        self,
+        site_id: str | None = None,
+        *,
+        expected_unsupported: bool = False,
+    ) -> list[Camera]:
         """
         List all cameras.
 
         Args:
             site_id: The site ID (required for REMOTE connections, ignored for LOCAL).
+            expected_unsupported: Whether a non-JSON 2xx response is an
+                expected unsupported-endpoint signal.
 
         Returns:
             List of cameras.
 
         """
         path = self._client.build_api_path("/cameras", site_id)
-        response = await self._client._get(path)
+        self.last_result_complete = True
+        response = await self._client._get(path, expected_unsupported=expected_unsupported)
 
         if response is None:
             return []
 
         data = response.get("data", response) if isinstance(response, dict) else response
-        if isinstance(data, list):
-            return [Camera.model_validate(item) for item in data]
-        return []
+        if not isinstance(data, list):
+            return []
+
+        cameras: list[Camera] = []
+        for item in data:
+            try:
+                cameras.append(Camera.model_validate(item))
+            except ValidationError as err:
+                self.last_result_complete = False
+                _LOGGER.warning(
+                    "Skipping camera that failed to parse (id=%s): %s",
+                    item.get("id") if isinstance(item, dict) else "?",
+                    err,
+                )
+        return cameras
 
     async def get(self, camera_id: str, site_id: str | None = None) -> Camera:
         """
@@ -119,31 +147,39 @@ class CamerasEndpoint:
     async def get_snapshot(
         self,
         camera_id: str,
+        site_id: str | None = None,
+        *,
+        high_quality: bool = False,
         width: int | None = None,
         height: int | None = None,
-        site_id: str | None = None,
     ) -> bytes:
         """
         Get a snapshot from the camera.
 
+        The Protect Integration API snapshot endpoint does not accept width or
+        height query parameters (sending them returns HTTP 500). It optionally
+        accepts ``highQuality`` for cameras that support a full-HD snapshot.
+
         Args:
             camera_id: The camera ID.
-            width: Optional width for the snapshot.
-            height: Optional height for the snapshot.
             site_id: The site ID (required for REMOTE connections, ignored for LOCAL).
+            high_quality: Request a full-HD snapshot (only supported on some
+                cameras; ignored by the API when unsupported).
+            width: Optional width for compatibility.
+            height: Optional height for compatibility.
 
         Returns:
-            The snapshot image bytes.
+            The raw snapshot image bytes.
 
         """
+        # width/height are accepted for compatibility only; the API rejects them.
+        del width, height
         params: dict[str, Any] = {}
-        if width:
-            params["w"] = width
-        if height:
-            params["h"] = height
+        if high_quality:
+            params["highQuality"] = "true"
 
         path = self._client.build_api_path(f"/cameras/{camera_id}/snapshot", site_id)
-        return await self._client._get_binary(path, params=params)
+        return await self._client._get_binary(path, params=params or None)
 
     async def restart(self, camera_id: str, site_id: str | None = None) -> bool:
         """
@@ -179,8 +215,8 @@ class CamerasEndpoint:
             The updated camera.
 
         """
-        if not 0 <= volume <= 100:
-            raise ValueError("Volume must be between 0 and 100")
+        if not 1 <= volume <= 100:
+            raise ValueError("Volume must be between 1 and 100")
         return await self.update(camera_id, site_id, micVolume=volume)
 
     async def set_speaker_volume(

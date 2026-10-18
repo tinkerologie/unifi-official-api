@@ -1,20 +1,16 @@
-"""Client models for UniFi Network API."""
+"""Client models for UniFi Network Integration v1 API."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ClientType(StrEnum):
-    """
-    Types of network clients.
-
-    The API returns either uppercase (WIRED/WIRELESS/VPN/TELEPORT) or lowercase variants.
-    This enum normalizes both cases to uppercase values for consistent comparisons.
-    """
+    """Client connection types in the v1 API."""
 
     WIRED = "WIRED"
     WIRELESS = "WIRELESS"
@@ -23,52 +19,88 @@ class ClientType(StrEnum):
 
     @classmethod
     def _missing_(cls, value: object) -> ClientType | None:
-        """Handle case-insensitive enum lookup."""
+        """Handle lowercase or mixed-case client types."""
         if isinstance(value, str):
-            upper_value = value.upper()
+            upper = value.upper()
             for member in cls:
-                if member.value == upper_value:
+                if member.value == upper:
                     return member
         return None
 
 
+class ClientAccess(BaseModel):
+    """Client access information (guest/default access state)."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    type: str | None = None
+    authorized: bool | None = None
+    authorization_type: str | None = Field(default=None, alias="authorizationType")
+    authorized_at: int | None = Field(default=None, alias="authorizedAt")
+    expires_at: int | None = Field(default=None, alias="expiresAt")
+    data_usage_limit_mbytes: int | None = Field(default=None, alias="dataUsageLimitMBytes")
+    rx_rate_limit_kbps: int | None = Field(default=None, alias="rxRateLimitKbps")
+    tx_rate_limit_kbps: int | None = Field(default=None, alias="txRateLimitKbps")
+    data_usage_b: int | None = Field(default=None, alias="dataUsageB")
+
+
 class Client(BaseModel):
-    """Model representing a connected network client."""
+    """Model representing a connected network client (station) in the v1 API."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
 
     id: str
-    mac: str | None = Field(default=None, alias="macAddress")
     name: str | None = None
-    hostname: str | None = None
+    type: ClientType | str | None = None
     ip: str | None = Field(default=None, alias="ipAddress")
-    type: ClientType | None = None
-    network_id: str | None = Field(default=None, alias="networkId")
+    mac: str | None = Field(default=None, alias="macAddress")
+    connected_at: datetime | str | None = Field(default=None, alias="connectedAt")
+    uplink_device_id: str | None = Field(default=None, alias="uplinkDeviceId")
+    access: ClientAccess | dict[str, Any] | None = None
     site_id: str | None = Field(default=None, alias="siteId")
-    connected: bool = True
-    authorized: bool = True
-    blocked: bool = False
-    first_seen: datetime | None = Field(default=None, alias="firstSeen")
-    last_seen: datetime | None = Field(default=None, alias="lastSeen")
-    uptime: int | None = None
-    tx_bytes: int | None = Field(default=None, alias="txBytes")
-    rx_bytes: int | None = Field(default=None, alias="rxBytes")
-    tx_rate: int | None = Field(default=None, alias="txRate")
-    rx_rate: int | None = Field(default=None, alias="rxRate")
-    signal: int | None = None
-    noise: int | None = None
-    channel: int | None = None
-    radio: str | None = None
-    essid: str | None = None
-    bssid: str | None = None
-    ap_mac: str | None = Field(default=None, alias="apMac")
-    sw_mac: str | None = Field(default=None, alias="swMac")
-    sw_port: int | None = Field(default=None, alias="swPort")
-    vlan: int | None = None
-    os_name: str | None = Field(default=None, alias="osName")
-    device_name: str | None = Field(default=None, alias="deviceName")
+    network_id: str | None = Field(default=None, alias="networkId")
 
-    model_config = {"populate_by_name": True, "extra": "allow", "use_enum_values": True}
+    @field_validator("type", mode="before")
+    @classmethod
+    def _normalize_client_type(cls, value: Any) -> Any:
+        """Normalize client type to known enum where possible."""
+        if isinstance(value, str):
+            for member in ClientType:
+                if member.value == value or member.name == value.upper():
+                    return member
+        return value
+
+    @model_validator(mode="before")
+    @classmethod
+    def _populate_id_fallback(cls, data: Any) -> Any:
+        """Populate id from _id or mac if missing."""
+        if not isinstance(data, dict):
+            return data
+        if "id" not in data or not data["id"]:
+            fallback = data.get("_id") or data.get("macAddress") or data.get("mac")
+            if fallback:
+                data = {**data, "id": fallback}
+        return data
 
     @property
     def display_name(self) -> str:
-        """Get the display name for the client."""
-        return self.name or self.hostname or self.mac or "Unknown"
+        """Return display name (name, hostname if present, MAC, or 'Unknown')."""
+        hostname = getattr(self, "hostname", None)
+        return self.name or hostname or self.mac or "Unknown"
+
+    @property
+    def ip_address(self) -> str | None:
+        """Return IP address."""
+        return self.ip
+
+    @property
+    def mac_address(self) -> str | None:
+        """Return MAC address."""
+        return self.mac
+
+
+__all__ = [
+    "Client",
+    "ClientAccess",
+    "ClientType",
+]

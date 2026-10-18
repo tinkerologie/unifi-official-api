@@ -2,68 +2,105 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
-from ..models.user import ProtectUser, ULPUser
+from pydantic import ValidationError
+
+from ..models.user import ProtectUser, User
 
 if TYPE_CHECKING:
     from ..client import UniFiProtectClient
 
+_LOGGER = logging.getLogger(__name__)
+
 
 class UsersEndpoint:
-    """Endpoint for managing UniFi Protect local and identity users."""
+    """Endpoint for UniFi Protect users."""
 
     def __init__(self, client: UniFiProtectClient) -> None:
+        """Initialize the users endpoint."""
         self._client = client
+        self.last_result_complete: bool = True
 
-    async def get_users(self, site_id: str | None = None) -> list[ProtectUser]:
+    async def get_all(
+        self,
+        site_id: str | None = None,
+        *,
+        expected_unsupported: bool = False,
+    ) -> list[User]:
+        """
+        Get all Protect users.
+
+        Args:
+            site_id: The site ID (required for REMOTE connections, ignored for LOCAL).
+            expected_unsupported: Whether a non-JSON 2xx response is expected.
+
+        Returns:
+            List of Protect users.
+
+        """
         path = self._client.build_api_path("/users", site_id)
-        response = await self._client._get(path)
+        self.last_result_complete = True
+        response = await self._client._get(path, expected_unsupported=expected_unsupported)
+
         if response is None:
             return []
-        data = response.get("data", response) if isinstance(response, dict) else response
-        if isinstance(data, list):
-            return [ProtectUser.model_validate(item) for item in data]
-        return []
 
-    async def get_user(self, user_id: str, site_id: str | None = None) -> ProtectUser:
+        data = response.get("data", response) if isinstance(response, dict) else response
+        if not isinstance(data, list):
+            return []
+
+        users: list[User] = []
+        for item in data:
+            try:
+                users.append(User.model_validate(item))
+            except ValidationError as err:
+                self.last_result_complete = False
+                _LOGGER.warning(
+                    "Skipping user that failed to parse (id=%s): %s",
+                    item.get("id") if isinstance(item, dict) else "?",
+                    err.errors(include_input=False, include_context=False),
+                )
+        return users
+
+    async def get(self, user_id: str, site_id: str | None = None) -> User:
+        """
+        Get a specific Protect user by ID.
+
+        Args:
+            user_id: The primary key of the user.
+            site_id: The site ID (required for REMOTE connections, ignored for LOCAL).
+
+        Returns:
+            The Protect user.
+
+        Raises:
+            ValueError: If the user is not found.
+
+        """
+        if not isinstance(user_id, str) or not user_id.strip():
+            msg = "User ID must be a non-empty string"
+            raise ValueError(msg)
+
         path = self._client.build_api_path(f"/users/{user_id}", site_id)
         response = await self._client._get(path)
+
         if isinstance(response, dict):
             data = response.get("data", response)
-            if isinstance(data, dict) and "id" in data:
-                return ProtectUser.model_validate(data)
-            if (
-                isinstance(data, list)
-                and len(data) > 0
-                and isinstance(data[0], dict)
-                and "id" in data[0]
-            ):
-                return ProtectUser.model_validate(data[0])
-        raise ValueError(f"User {user_id} not found")
+            if isinstance(data, dict):
+                return User.model_validate(data)
+        msg = f"User {user_id} not found"
+        raise ValueError(msg)
 
-    async def get_ulp_users(self, site_id: str | None = None) -> list[ULPUser]:
-        path = self._client.build_api_path("/ulp-users", site_id)
-        response = await self._client._get(path)
-        if response is None:
-            return []
-        data = response.get("data", response) if isinstance(response, dict) else response
-        if isinstance(data, list):
-            return [ULPUser.model_validate(item) for item in data]
-        return []
+    # Backwards compatibility methods
+    async def get_users(self, site_id: str | None = None) -> list[ProtectUser]:
+        """List all protect users (alias for get_all)."""
+        return await self.get_all(site_id=site_id)
 
-    async def get_ulp_user(self, ulp_user_id: str, site_id: str | None = None) -> ULPUser:
-        path = self._client.build_api_path(f"/ulp-users/{ulp_user_id}", site_id)
-        response = await self._client._get(path)
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict) and "id" in data:
-                return ULPUser.model_validate(data)
-            if (
-                isinstance(data, list)
-                and len(data) > 0
-                and isinstance(data[0], dict)
-                and "id" in data[0]
-            ):
-                return ULPUser.model_validate(data[0])
-        raise ValueError(f"ULP User {ulp_user_id} not found")
+    async def get_user(self, user_id: str, site_id: str | None = None) -> ProtectUser:
+        """Get a single protect user (alias for get)."""
+        return await self.get(user_id=user_id, site_id=site_id)
+
+
+__all__ = ["UsersEndpoint"]

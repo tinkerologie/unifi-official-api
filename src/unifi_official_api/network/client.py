@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 
@@ -14,23 +14,37 @@ from ..const import (
     NETWORK_API_BASE_URL,
     NETWORK_INTEGRATION_PATH,
     NETWORK_LEGACY_PATH,
+    NETWORK_LEGACY_V2_PATH,
     ConnectionType,
 )
+from ..site_manager import UniFiSiteManagerClient
 from .endpoints import (
     ACLEndpoint,
     ClientsEndpoint,
     DevicesEndpoint,
     DNSEndpoint,
     FirewallEndpoint,
+    LagsEndpoint,
+    NatRulesEndpoint,
     NetworksEndpoint,
+    PortForwardsEndpoint,
+    ReportsEndpoint,
     ResourcesEndpoint,
+    RoutesEndpoint,
     SitesEndpoint,
+    StacksEndpoint,
+    StaticRoutesEndpoint,
     SwitchingEndpoint,
     TrafficEndpoint,
+    TrafficRulesEndpoint,
     VouchersEndpoint,
+    VpnClientsEndpoint,
     WifiEndpoint,
 )
-from .models import ApplicationInfo
+from .models import ApplicationInfo, SiteReportBucket
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 class UniFiNetworkClient(BaseUniFiClient):
@@ -46,7 +60,7 @@ class UniFiNetworkClient(BaseUniFiClient):
 
     Example (Local Connection):
         ```python
-        from unifi_official_api import LocalAuth, ConnectionType
+        from unifi_official_api import ConnectionType, LocalAuth
         from unifi_official_api.network import UniFiNetworkClient
 
         async with UniFiNetworkClient(
@@ -135,7 +149,16 @@ class UniFiNetworkClient(BaseUniFiClient):
         self._traffic = TrafficEndpoint(self)
         self._resources = ResourcesEndpoint(self)
         self._dns = DNSEndpoint(self)
+        self._lags = LagsEndpoint(self)
+        self._stacks = StacksEndpoint(self)
         self._switching = SwitchingEndpoint(self)
+        self._routes = RoutesEndpoint(self)
+        self._vpn_clients = VpnClientsEndpoint(self)
+        self._port_forwards = PortForwardsEndpoint(self)
+        self._traffic_rules = TrafficRulesEndpoint(self)
+        self._nat_rules = NatRulesEndpoint(self)
+        self._static_routes = StaticRoutesEndpoint(self)
+        self._reports = ReportsEndpoint(self)
 
     @property
     def connection_type(self) -> ConnectionType:
@@ -230,6 +253,37 @@ class UniFiNetworkClient(BaseUniFiClient):
         connector_path = NETWORK_LEGACY_PATH.removeprefix("/proxy")
         return f"/v1/connector/consoles/{console_id}{connector_path}{endpoint}"
 
+    def build_legacy_v2_api_path(self, site_name: str, endpoint: str) -> str:
+        """
+        Build the full legacy v2 Network API path based on connection type.
+
+        Used for private v2 controller endpoints such as Policy-Based Routes
+        (``/proxy/network/v2/api/site/{site_name}/trafficroutes``).
+
+        Args:
+            site_name: The UniFi classic site name, for example ``default``.
+            endpoint: The legacy endpoint path after ``/site/{site_name}``, for
+                example ``/trafficroutes``.
+
+        Returns:
+            Full legacy v2 API path with the proper prefix for the connection type.
+
+        """
+        if not site_name:
+            raise ValueError("site_name is required")
+
+        if not endpoint.startswith("/"):
+            endpoint = f"/{endpoint}"
+
+        if self._connection_type == ConnectionType.LOCAL:
+            return f"{NETWORK_LEGACY_V2_PATH}/site/{site_name}{endpoint}"
+
+        console_id = self._require_console_id()
+
+        # The connector adds /proxy/ when forwarding to the console, so strip it.
+        connector_path = NETWORK_LEGACY_V2_PATH.removeprefix("/proxy")
+        return f"/v1/connector/consoles/{console_id}{connector_path}/site/{site_name}{endpoint}"
+
     @property
     def devices(self) -> DevicesEndpoint:
         """Access device management endpoints."""
@@ -286,9 +340,76 @@ class UniFiNetworkClient(BaseUniFiClient):
         return self._dns
 
     @property
+    def lags(self) -> LagsEndpoint:
+        """Access switching LAG and MC-LAG domain endpoints."""
+        return self._lags
+
+    @property
+    def stacks(self) -> StacksEndpoint:
+        """Access switch stack endpoints."""
+        return self._stacks
+
+    @property
     def switching(self) -> SwitchingEndpoint:
-        """Access switching management endpoints (LAGs, MC-LAG, switch stacks)."""
+        """Access switching endpoints."""
         return self._switching
+
+    @property
+    def routes(self) -> RoutesEndpoint:
+        """Access policy-based routes (traffic routes) endpoints."""
+        return self._routes
+
+    @property
+    def vpn_clients(self) -> VpnClientsEndpoint:
+        """Access VPN client configuration endpoints."""
+        return self._vpn_clients
+
+    @property
+    def port_forwards(self) -> PortForwardsEndpoint:
+        """Access port forwarding rule endpoints."""
+        return self._port_forwards
+
+    @property
+    def traffic_rules(self) -> TrafficRulesEndpoint:
+        """Access traffic rule endpoints."""
+        return self._traffic_rules
+
+    @property
+    def nat_rules(self) -> NatRulesEndpoint:
+        """Access NAT rule endpoints."""
+        return self._nat_rules
+
+    @property
+    def static_routes(self) -> StaticRoutesEndpoint:
+        """Access static route endpoints."""
+        return self._static_routes
+
+    @property
+    def reports(self) -> ReportsEndpoint:
+        """Access historical site traffic report endpoints."""
+        return self._reports
+
+    async def get_site_report(
+        self,
+        site_name: str,
+        interval: str,
+        *,
+        start_ms: int | None = None,
+        end_ms: int | None = None,
+        start: int | None = None,
+        end: int | None = None,
+        attrs: Sequence[str] | None = None,
+    ) -> list[SiteReportBucket]:
+        """Fetch historical site traffic report buckets via ``reports`` endpoint."""
+        return await self._reports.get_site_report(
+            site_name,
+            interval,
+            start_ms=start_ms,
+            end_ms=end_ms,
+            start=start,
+            end=end,
+            attrs=attrs,
+        )
 
     async def validate_connection(self) -> bool:
         """
@@ -322,15 +443,16 @@ class UniFiNetworkClient(BaseUniFiClient):
         if self._connection_type != ConnectionType.REMOTE:
             raise ValueError("get_hosts is only available for REMOTE connections")
 
-        response = await self._get("/v1/hosts")
-        if response is None:
-            return []
-
-        data = response.get("data", response) if isinstance(response, dict) else response
-        if isinstance(data, list):
-            return [item for item in data if isinstance(item, dict)]
-
-        return []
+        # Keep the discovery API for existing callers while Site Manager owns
+        # the account-wide endpoint and its pagination rules.
+        if not isinstance(self._auth, ApiKeyAuth):
+            raise ValueError("get_hosts requires cloud API key authentication")
+        client = UniFiSiteManagerClient(
+            auth=self._auth,
+            session=await self._ensure_session(),
+            timeout=int(self._timeout.total or DEFAULT_TIMEOUT),
+        )
+        return await client.list_hosts()
 
     async def get_application_info(self) -> ApplicationInfo:
         """

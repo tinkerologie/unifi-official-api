@@ -2,12 +2,30 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+import logging
+from typing import TYPE_CHECKING, Any, Final
 
+from pydantic import ValidationError
+
+from ...validation import sanitized_validation_fields
 from ..models.voucher import Voucher
+
+_LOGGER = logging.getLogger(__name__)
+
+VOUCHER_PAGE_SIZE: Final = 1000
+VOUCHER_MAX_PAGES: Final = 50
 
 if TYPE_CHECKING:
     from ..client import UniFiNetworkClient
+
+
+def _validate_voucher(item: Any) -> Voucher:
+    """Validate voucher model while sanitizing validation errors."""
+    try:
+        return Voucher.model_validate(item)
+    except ValidationError as err:
+        msg = f"Invalid voucher data (fields: {sanitized_validation_fields(err)})"
+        raise ValueError(msg) from None
 
 
 class VouchersEndpoint:
@@ -22,6 +40,60 @@ class VouchersEndpoint:
 
         """
         self._client = client
+
+    async def get_all_pages(self, site_id: str) -> list[Voucher]:
+        """List every voucher, retrying one inconsistent inventory from offset 0."""
+        for _ in range(2):
+            vouchers = await self._get_all_pages_attempt(site_id)
+            if vouchers is not None:
+                return vouchers
+        msg = (
+            f"Incomplete voucher listing for site {site_id}: "
+            "distinct inventory is smaller than totalCount"
+        )
+        raise RuntimeError(msg)
+
+    async def _get_all_pages_attempt(self, site_id: str) -> list[Voucher] | None:
+        """Return a fresh inventory, or None when distinct IDs fall short of total."""
+        path = self._client.build_api_path(f"/sites/{site_id}/hotspot/vouchers")
+        vouchers_by_id: dict[str, Voucher] = {}
+        offset = 0
+        for _ in range(VOUCHER_MAX_PAGES):
+            response = await self._client._get(
+                path,
+                params={"offset": offset, "limit": VOUCHER_PAGE_SIZE},
+                expected_unsupported=True,
+                log_body=False,
+            )
+            data = response.get("data", response) if isinstance(response, dict) else response
+            items = data if isinstance(data, list) else []
+            if not items:
+                break
+            prior_count = len(vouchers_by_id)
+            for item in items:
+                voucher = _validate_voucher(item)
+                vouchers_by_id[voucher.id] = voucher
+            if len(vouchers_by_id) == prior_count:
+                msg = f"Incomplete voucher listing for site {site_id}: no progress made on page"
+                raise RuntimeError(msg)
+            offset += len(items)
+            total = response.get("totalCount") if isinstance(response, dict) else None
+            if isinstance(total, int) and not isinstance(total, bool):
+                if offset >= total:
+                    if len(vouchers_by_id) < total:
+                        # Inserts ahead of the offset can overlap pages. Discard
+                        # this inventory so the caller can restart once.
+                        return None
+                    break
+            elif len(items) < VOUCHER_PAGE_SIZE:
+                break
+        else:
+            msg = (
+                f"Incomplete voucher listing for site {site_id}: "
+                f"reached page limit {VOUCHER_MAX_PAGES}"
+            )
+            raise RuntimeError(msg)
+        return list(vouchers_by_id.values())
 
     async def get_all(
         self,
@@ -50,14 +122,16 @@ class VouchersEndpoint:
         if filter_str:
             params["filter"] = filter_str
 
-        response = await self._client._get(path, params=params)
+        response = await self._client._get(
+            path, params=params, expected_unsupported=True, log_body=False
+        )
 
         if response is None:
             return []
 
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [Voucher.model_validate(item) for item in data]
+            return [_validate_voucher(item) for item in data]
         return []
 
     async def get(self, site_id: str, voucher_id: str) -> Voucher:
@@ -73,24 +147,25 @@ class VouchersEndpoint:
 
         """
         path = self._client.build_api_path(f"/sites/{site_id}/hotspot/vouchers/{voucher_id}")
-        response = await self._client._get(path)
+        response = await self._client._get(path, expected_unsupported=True, log_body=False)
 
         if isinstance(response, dict):
             data = response.get("data", response)
             if isinstance(data, dict):
-                return Voucher.model_validate(data)
+                return _validate_voucher(data)
             if isinstance(data, list) and len(data) > 0:
-                return Voucher.model_validate(data[0])
-        raise ValueError(f"Voucher {voucher_id} not found")
+                return _validate_voucher(data[0])
+        msg = f"Voucher {voucher_id} not found"
+        raise ValueError(msg)
 
     async def create(
         self,
         site_id: str,
         *,
+        name: str,
+        time_limit_minutes: int,
         count: int = 1,
-        name: str | None = None,
         authorized_guest_limit: int | None = None,
-        time_limit_minutes: int | None = None,
         data_usage_limit_mbytes: int | None = None,
         rx_rate_limit_kbps: int | None = None,
         tx_rate_limit_kbps: int | None = None,
@@ -100,10 +175,10 @@ class VouchersEndpoint:
 
         Args:
             site_id: The site ID.
-            count: Number of vouchers to create (1-10000).
-            name: Optional voucher note/label.
-            authorized_guest_limit: Maximum guests per voucher.
+            name: Voucher note/label.
             time_limit_minutes: Access duration in minutes.
+            count: Number of vouchers to create (1-10000).
+            authorized_guest_limit: Maximum guests per voucher.
             data_usage_limit_mbytes: Download limit in megabytes.
             rx_rate_limit_kbps: Download speed limit.
             tx_rate_limit_kbps: Upload speed limit.
@@ -113,13 +188,13 @@ class VouchersEndpoint:
 
         """
         path = self._client.build_api_path(f"/sites/{site_id}/hotspot/vouchers")
-        data: dict[str, Any] = {"count": count}
-        if name is not None:
-            data["name"] = name
+        data: dict[str, Any] = {
+            "count": count,
+            "name": name,
+            "timeLimitMinutes": time_limit_minutes,
+        }
         if authorized_guest_limit is not None:
             data["authorizedGuestLimit"] = authorized_guest_limit
-        if time_limit_minutes is not None:
-            data["timeLimitMinutes"] = time_limit_minutes
         if data_usage_limit_mbytes is not None:
             data["dataUsageLimitMBytes"] = data_usage_limit_mbytes
         if rx_rate_limit_kbps is not None:
@@ -127,15 +202,19 @@ class VouchersEndpoint:
         if tx_rate_limit_kbps is not None:
             data["txRateLimitKbps"] = tx_rate_limit_kbps
 
-        response = await self._client._post(path, json_data=data)
+        response = await self._client._post(path, json_data=data, log_body=False)
 
         if isinstance(response, dict):
             result = response.get("data", response)
+            # The spec's creation result wraps the list: {"vouchers": [...]}.
+            if isinstance(result, dict) and isinstance(result.get("vouchers"), list):
+                result = result["vouchers"]
             if isinstance(result, list) and len(result) > 0:
-                return [Voucher.model_validate(item) for item in result]
+                return [_validate_voucher(item) for item in result]
             if isinstance(result, dict):
-                return [Voucher.model_validate(result)]
-        raise ValueError("Failed to create vouchers")
+                return [_validate_voucher(result)]
+        msg = "Failed to create vouchers"
+        raise ValueError(msg)
 
     async def delete(self, site_id: str, voucher_id: str) -> bool:
         """
@@ -150,8 +229,26 @@ class VouchersEndpoint:
 
         """
         path = self._client.build_api_path(f"/sites/{site_id}/hotspot/vouchers/{voucher_id}")
-        await self._client._delete(path)
+        await self._client._delete(path, log_body=False)
         return True
+
+    async def delete_by_filter(self, site_id: str, filter_str: str) -> int:
+        """
+        Delete vouchers matching a filter expression.
+
+        Args:
+            site_id: The site ID.
+            filter_str: Filter query string using API filter syntax.
+
+        Returns:
+            The number of vouchers deleted.
+
+        """
+        path = self._client.build_api_path(f"/sites/{site_id}/hotspot/vouchers")
+        response = await self._client._delete(path, params={"filter": filter_str}, log_body=False)
+        if isinstance(response, dict):
+            return int(response.get("vouchersDeleted", 0))
+        return 0
 
     async def delete_multiple(self, site_id: str, voucher_ids: list[str]) -> bool:
         """

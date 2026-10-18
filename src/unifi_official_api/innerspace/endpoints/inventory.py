@@ -2,45 +2,49 @@
 
 from __future__ import annotations
 
+import builtins
 from typing import TYPE_CHECKING, Any
 
-from ..models.inventory import InventoryDevice
+from unifi_official_api.innerspace.models import InnerSpaceInventoryDevice
 
 if TYPE_CHECKING:
-    from ..client import UniFiInnerSpaceClient
+    from unifi_official_api.innerspace.client import UniFiInnerSpaceClient
 
 
 class InventoryEndpoint:
-    """Endpoint for retrieving unplaced hardware device inventory in UniFi InnerSpace."""
+    """Endpoint for ``GET /v1/inventory``."""
 
     def __init__(self, client: UniFiInnerSpaceClient) -> None:
-        """
-        Initialize the inventory endpoint.
-
-        Args:
-            client: The UniFi InnerSpace client.
-        """
         self._client = client
 
-    async def get_all(self, site_id: str | None = None) -> list[InventoryDevice]:
-        """
-        List unplaced device inventory.
-
-        Args:
-            site_id: Optional site ID filter.
-
-        Returns:
-            List of unplaced devices.
-        """
-        path = self._client.build_api_path("/inventory")
+    async def list(
+        self,
+        site_id: str | None = None,
+    ) -> builtins.list[InnerSpaceInventoryDevice]:
+        """List all devices known to InnerSpace (placed and unplaced)."""
         params: dict[str, Any] = {}
-        if site_id:
+        if site_id is not None:
             params["siteId"] = site_id
-        response = await self._client._get(path, params=params if params else None)
-        if response is None:
-            return []
-        if isinstance(response, dict):
-            devs = response.get("devices", response.get("data", []))
-            if isinstance(devs, list):
-                return [InventoryDevice.model_validate(item) for item in devs]
-        return []
+        return await self._client._list_collection(
+            "/inventory",
+            ("inventory", "devices"),
+            InnerSpaceInventoryDevice,
+            params=params if params else None,
+        )
+
+    async def get_all(
+        self,
+        site_id: str | None = None,
+    ) -> builtins.list[InnerSpaceInventoryDevice]:
+        """List all devices known to InnerSpace (alias for ``list``)."""
+        return await self.list(site_id=site_id)
+
+    async def get_inventory(
+        self,
+        site_id: str | None = None,
+    ) -> builtins.list[InnerSpaceInventoryDevice]:
+        """List all devices known to InnerSpace (alias for ``list``)."""
+        return await self.list(site_id=site_id)
+
+
+__all__ = ["InventoryEndpoint"]

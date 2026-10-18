@@ -10,6 +10,21 @@ if TYPE_CHECKING:
     from ..client import UniFiNetworkClient
 
 
+_STANDARD_BROADCAST_DEFAULTS: dict[str, Any] = {
+    "type": "STANDARD",
+    "enabled": True,
+    "channel2gLockedTo6": False,
+    "clientIsolationEnabled": False,
+    "dtimPeriod2gLockedTo3": False,
+    "multicastToUnicastConversionEnabled": False,
+    "uapsdEnabled": False,
+    "advertiseDeviceName": False,
+    "arpProxyEnabled": False,
+    "broadcastingFrequenciesGHz": [2.4, 5],
+    "bssTransitionEnabled": False,
+}
+
+
 class WifiEndpoint:
     """Endpoint for managing WiFi configurations."""
 
@@ -40,6 +55,33 @@ class WifiEndpoint:
 
         """
         self._client = client
+
+    async def get_legacy_configs(self, site_name: str) -> list[dict[str, Any]]:
+        """
+        List WLAN configurations from the classic API.
+
+        The official Integration API redacts secrets (``ssid``, ``passphrase``,
+        ``security`` are returned as ``null``). The classic ``/rest/wlanconf``
+        endpoint exposes the SSID name, passphrase, and security mode, which are
+        required to build WiFi QR codes.
+
+        Args:
+            site_name: The classic site name (for example ``default``).
+
+        Returns:
+            List of raw WLAN configuration dictionaries.
+
+        """
+        path = self._client.build_legacy_api_path(site_name, "/rest/wlanconf")
+        response = await self._client._get(path, log_body=False)
+
+        if response is None:
+            return []
+
+        data = response.get("data", response) if isinstance(response, dict) else response
+        if isinstance(data, list):
+            return [item for item in data if isinstance(item, dict)]
+        return []
 
     async def get_all(
         self,
@@ -117,10 +159,10 @@ class WifiEndpoint:
 
         Args:
             site_id: The site ID.
-            name: WiFi network name.
-            ssid: The SSID to broadcast.
-            passphrase: WiFi password (required for secured networks).
-            security: Security type.
+            name: Broadcast name and SSID.
+            ssid: Must match name; the API has a single broadcast name.
+            passphrase: WiFi password (required for WPA2, rejected for OPEN).
+            security: OPEN or WPA2; other types require securityConfiguration.
             network_id: Associated network ID.
             hidden: Whether to hide the SSID.
             **kwargs: Additional parameters.
@@ -130,16 +172,39 @@ class WifiEndpoint:
 
         """
         path = self._client.build_api_path(f"/sites/{site_id}/wifi/broadcasts")
+        if ssid != name:
+            msg = "ssid must match name; the API has one broadcast name"
+            raise ValueError(msg)
+        security_configuration: dict[str, Any]
+        if "securityConfiguration" in kwargs:
+            security_configuration = kwargs["securityConfiguration"]
+        elif security in (WifiSecurity.OPEN, WifiSecurity.OPEN_UPPER):
+            if passphrase is not None:
+                msg = "OPEN security does not accept a passphrase"
+                raise ValueError(msg)
+            security_configuration = {"type": "OPEN"}
+        elif security in (WifiSecurity.WPA2, WifiSecurity.WPA2_PERSONAL):
+            if not passphrase:
+                msg = "WPA2 requires a passphrase"
+                raise ValueError(msg)
+            security_configuration = {
+                "type": "WPA2_PERSONAL",
+                "passphrase": passphrase,
+            }
+        else:
+            msg = "Use securityConfiguration for unsupported security types"
+            raise ValueError(msg)
         data: dict[str, Any] = {
+            **_STANDARD_BROADCAST_DEFAULTS,
+            "broadcastingFrequenciesGHz": list(
+                _STANDARD_BROADCAST_DEFAULTS["broadcastingFrequenciesGHz"]
+            ),
             "name": name,
-            "ssid": ssid,
-            "security": security.value,
-            "hidden": hidden,
+            "hideName": hidden,
+            "securityConfiguration": security_configuration,
         }
-        if passphrase is not None:
-            data["passphrase"] = passphrase
         if network_id is not None:
-            data["networkId"] = network_id
+            data["network"] = {"type": "SPECIFIC", "networkId": network_id}
         data.update(kwargs)
 
         response = await self._client._post(path, json_data=data)
@@ -182,7 +247,8 @@ class WifiEndpoint:
         result = self._extract_wifi_payload(response)
         if result is not None:
             return WifiNetwork.model_validate(result)
-        raise ValueError(f"Failed to update WiFi network {wifi_id}")
+        # No body: return what was sent, with the id the PUT body can't carry.
+        return WifiNetwork.model_validate({**current_payload, "id": wifi_id})
 
     async def delete(self, site_id: str, wifi_id: str) -> bool:
         """

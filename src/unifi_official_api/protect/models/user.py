@@ -1,33 +1,52 @@
-"""User models for UniFi Protect."""
+"""User models for UniFi Protect API."""
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
+
+from .ulp_user import ULPUser, UlpUser, UlpUserStatus
 
 
-class ProtectUser(BaseModel):
-    """UniFi Protect local user."""
-
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
+class UserGroup(BaseModel):
+    """Permission group associated with a UniFi Protect user."""
 
     id: str
-    name: str = ""
-    first_name: str | None = Field(default=None, alias="firstName")
-    last_name: str | None = Field(default=None, alias="lastName")
-    email: str | None = None
-    ucore_user_id: str | None = Field(default=None, alias="ucoreUserId")
+    name: str | None = None
+    permissions: list[str] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True, "extra": "allow"}
+
+
+class User(BaseModel):
+    """UniFi Protect user account model."""
+
+    id: str = Field(..., description="User primary key")
+    name: str = Field(..., description="Display name")
+    first_name: str | None = Field(default=None, alias="firstName", description="First name")
+    last_name: str | None = Field(default=None, alias="lastName", description="Last name")
+    email: str | None = Field(default=None, description="Email address")
+    ucore_user_id: str | None = Field(
+        default=None,
+        alias="ucoreUserId",
+        description="UniFi OS (UCore) user ID for cross-referencing with ULP users",
+    )
     model_key: str = Field(default="user", alias="modelKey")
 
+    model_config = {"populate_by_name": True, "extra": "allow"}
 
-class ULPUser(BaseModel):
-    """UniFi Identity (ULP) user."""
+    @property
+    def display_name(self) -> str:
+        """Return display name for the user."""
+        return self.name or self.email or self.id
 
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
 
-    id: str
-    first_name: str = Field(alias="firstName")
-    last_name: str = Field(alias="lastName")
-    full_name: str = Field(alias="fullName")
-    email: str = ""
-    status: str = "ACTIVE"
-    model_key: str = Field(default="ulpUser", alias="modelKey")
+ProtectUser = User
+
+__all__ = [
+    "ProtectUser",
+    "ULPUser",
+    "UlpUser",
+    "UlpUserStatus",
+    "User",
+    "UserGroup",
+]

@@ -2,12 +2,66 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+import logging
+from typing import TYPE_CHECKING, Any, Final
 
-from ..models import Device, LegacyPortMetrics, PortBytesMetrics
+from ...exceptions import UniFiValidationError
+from ..models import (
+    Device,
+    LegacyOutletMetrics,
+    LegacyPortMetrics,
+    PortBytesMetrics,
+    parse_outlet_metrics,
+)
 
 if TYPE_CHECKING:
     from ..client import UniFiNetworkClient
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def _seed_outlet_overrides(device_dict: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Build a full outlet_overrides array from a device's sensed outlet_table.
+
+    The controller treats outlet_overrides as the complete desired state: any
+    outlet missing from the array reverts to its default. A device that has
+    never had an outlet changed reports an empty overrides array, so writing a
+    single-entry array would reset every other outlet. Seeding from the sensed
+    outlet_table preserves the current state of untouched outlets.
+    """
+    outlet_table = device_dict.get("outlet_table")
+    if not isinstance(outlet_table, list):
+        return []
+
+    overrides: list[dict[str, Any]] = []
+    for outlet in outlet_table:
+        if not isinstance(outlet, dict):
+            continue
+
+        index = outlet.get("index")
+        if index is None:
+            index = outlet.get("outlet_idx")
+        try:
+            index_int = int(index)  # type: ignore[arg-type]
+        except TypeError, ValueError:
+            continue
+
+        override: dict[str, Any] = {
+            "index": index_int,
+            "relay_state": bool(outlet.get("relay_state", False)),
+        }
+        if "name" in outlet:
+            override["name"] = outlet["name"]
+        if "cycle_enabled" in outlet:
+            override["cycle_enabled"] = bool(outlet["cycle_enabled"])
+        overrides.append(override)
+
+    return overrides
+
+
+DEVICE_ACTIONS: Final = frozenset({"RESTART"})
+PORT_ACTIONS: Final = frozenset({"POWER_CYCLE"})
 
 
 class DevicesEndpoint:
@@ -60,7 +114,19 @@ class DevicesEndpoint:
 
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [Device.model_validate(item) for item in data]
+            devices: list[Device] = []
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                try:
+                    devices.append(Device.model_validate(item))
+                except Exception as err:
+                    _LOGGER.warning(
+                        "Failed to validate device (%s): %s",
+                        item.get("id") or item.get("name") or "unknown",
+                        err,
+                    )
+            return devices
         return []
 
     async def get(self, site_id: str, device_id: str) -> Device:
@@ -87,25 +153,57 @@ class DevicesEndpoint:
         raise ValueError(f"Device {device_id} not found")
 
     async def restart(self, site_id: str, device_id: str) -> bool:
+        """Restart a device via the documented device-actions endpoint."""
+        return await self.execute_action(site_id, device_id, "RESTART")
+
+    async def execute_action(self, site_id: str, device_id: str, action: str) -> bool:
         """
-        Restart a device.
+        Execute an adopted-device action.
 
-        Args:
-            site_id: The site ID.
-            device_id: The device ID.
-
-        Returns:
-            True if successful.
-
+        Spec: ``POST /v1/sites/{siteId}/devices/{deviceId}/actions`` with
+        ``{"action": ...}``; Network v10.6.106 defines only ``RESTART``.
         """
-        path = self._client.build_api_path(f"/sites/{site_id}/devices/{device_id}/restart")
-        await self._client._post(path)
+        if action not in DEVICE_ACTIONS:
+            msg = f"Action must be one of: {', '.join(sorted(DEVICE_ACTIONS))}"
+            raise ValueError(msg)
+        path = self._client.build_api_path(f"/sites/{site_id}/devices/{device_id}/actions")
+        await self._client._post(path, json_data={"action": action})
+        return True
+
+    async def power_cycle_port(self, site_id: str, device_id: str, port_idx: int) -> bool:
+        """Power cycle a port via the documented port-actions endpoint."""
+        return await self.execute_port_action(site_id, device_id, port_idx, "POWER_CYCLE")
+
+    async def execute_port_action(
+        self,
+        site_id: str,
+        device_id: str,
+        port_idx: int,
+        action: str,
+    ) -> bool:
+        """
+        Execute an adopted-device port action.
+
+        Spec:
+        ``POST /v1/sites/{siteId}/devices/{deviceId}/interfaces/ports/``
+        ``{portIdx}/actions`` with ``{"action": ...}``; Network v10.6.106
+        defines only ``POWER_CYCLE``.
+        """
+        if action not in PORT_ACTIONS:
+            msg = f"Action must be one of: {', '.join(sorted(PORT_ACTIONS))}"
+            raise ValueError(msg)
+        path = self._client.build_api_path(
+            f"/sites/{site_id}/devices/{device_id}/interfaces/ports/{port_idx}/actions"
+        )
+        await self._client._post(path, json_data={"action": action})
         return True
 
     async def adopt(
         self,
         site_id: str,
         mac: str,
+        *,
+        ignore_device_limit: bool = False,
     ) -> bool:
         """
         Adopt a device.
@@ -113,13 +211,20 @@ class DevicesEndpoint:
         Args:
             site_id: The site ID.
             mac: The device MAC address.
+            ignore_device_limit: Whether to ignore device adoption limit.
 
         Returns:
             True if successful.
 
         """
-        path = self._client.build_api_path(f"/sites/{site_id}/devices/adopt")
-        await self._client._post(path, json_data={"macAddress": mac})
+        path = self._client.build_api_path(f"/sites/{site_id}/devices")
+        await self._client._post(
+            path,
+            json_data={
+                "macAddress": mac,
+                "ignoreDeviceLimit": ignore_device_limit,
+            },
+        )
         return True
 
     async def forget(self, site_id: str, device_id: str) -> bool:
@@ -136,23 +241,6 @@ class DevicesEndpoint:
         """
         path = self._client.build_api_path(f"/sites/{site_id}/devices/{device_id}")
         await self._client._delete(path)
-        return True
-
-    async def locate(self, site_id: str, device_id: str, enabled: bool = True) -> bool:
-        """
-        Enable or disable locate mode (LED blinking) on a device.
-
-        Args:
-            site_id: The site ID.
-            device_id: The device ID.
-            enabled: Whether to enable or disable locate mode.
-
-        Returns:
-            True if successful.
-
-        """
-        path = self._client.build_api_path(f"/sites/{site_id}/devices/{device_id}/locate")
-        await self._client._post(path, json_data={"enabled": enabled})
         return True
 
     async def get_pending_adoption(
@@ -190,7 +278,19 @@ class DevicesEndpoint:
 
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [Device.model_validate(item) for item in data]
+            devices = []
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                try:
+                    devices.append(Device.model_validate(item))
+                except Exception as err:
+                    _LOGGER.warning(
+                        "Failed to validate pending device (%s): %s",
+                        item.get("id") or item.get("name") or "unknown",
+                        err,
+                    )
+            return devices
         return []
 
     async def get_statistics(
@@ -273,7 +373,7 @@ class DevicesEndpoint:
                 return [data]
         return []
 
-    async def get_port_metrics(  # noqa: PLR0912, PLR0915
+    async def get_port_metrics(
         self,
         site_name: str,
         device_mac: str,
@@ -287,8 +387,8 @@ class DevicesEndpoint:
 
         Returns:
             Normalized per-port legacy metrics. Port dictionary keys preserve
-            the index reported by the legacy API and are not normalized to
-            0-based numbering.
+            the index reported by the legacy API and are not normalized to the
+            0-based numbering expected by ``execute_port_action()``.
 
         """
         legacy = await self.get_legacy_device_stats(site_name, device_mac)
@@ -305,13 +405,13 @@ class DevicesEndpoint:
         def _to_float(value: Any) -> float | None:
             try:
                 return float(value)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 return None
 
         def _to_int(value: Any) -> int | None:
             try:
                 return int(value)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 return None
 
         def _get_port_idx(port: dict[str, Any]) -> int | None:
@@ -367,34 +467,151 @@ class DevicesEndpoint:
         if poe_total_w is None and poe_ports:
             poe_total_w = float(sum(poe_ports.values()))
 
+        # Extract system stats if present (e.g. for devices without v1 UUID stats).
+        # ``system-stats`` carries the CPU/memory percentages; the similarly
+        # named ``sys_stats`` carries raw counters (loadavg_*, mem_total,
+        # mem_used) and has no cpu/mem keys at all. Real gateway consoles
+        # report both, so each key is resolved across both objects and the
+        # device root instead of committing to one object up front.
+        stat_sources = [
+            source
+            for source in (
+                legacy.get("system-stats"),
+                legacy.get("sys_stats"),
+                legacy,
+            )
+            if isinstance(source, dict)
+        ]
+
+        def _stat(key: str) -> Any:
+            for source in stat_sources:
+                value = source.get(key)
+                if value is not None:
+                    return value
+            return None
+
+        cpu = _stat("cpu")
+        mem = _stat("mem")
+        uptime = _stat("uptime")
+
+        cpu_utilization_pct = _to_float(cpu)
+        memory_utilization_pct = _to_float(mem)
+        uptime_sec = _to_int(uptime)
+
         return LegacyPortMetrics(
             poe_total_w=poe_total_w,
             poe_ports=poe_ports,
             port_bytes=port_bytes,
+            cpu_utilization_pct=cpu_utilization_pct,
+            memory_utilization_pct=memory_utilization_pct,
+            uptime_sec=uptime_sec,
         )
 
-    async def execute_action(
+    async def get_outlet_metrics(
         self,
-        site_id: str,
-        device_id: str,
-        action: str,
-    ) -> bool:
+        site_name: str,
+        device_mac: str,
+    ) -> LegacyOutletMetrics:
         """
-        Execute an action on a device.
+        Get normalized legacy outlet metrics for a device.
 
         Args:
-            site_id: The site ID.
-            device_id: The device ID.
-            action: The action to execute (restart, locate, provision, upgrade).
+            site_name: The UniFi site name, for example ``default``.
+            device_mac: The device MAC address used by the legacy endpoint.
+
+        Returns:
+            Normalized outlet metrics and device power totals.
+
+        """
+        legacy = await self.get_legacy_device_stats(site_name, device_mac)
+        return parse_outlet_metrics(legacy)
+
+    async def set_outlet_state(
+        self,
+        site_name: str,
+        device_id: str,
+        outlet_index: int,
+        state: bool,
+        cycle_enabled: bool | None = None,
+        current_device: dict[str, Any] | None = None,
+    ) -> bool:
+        """
+        Set the power relay state and/or cycle_enabled setting on a PDU outlet.
+
+        Performs a read-modify-write on outlet_overrides via the legacy
+        rest/device endpoint.
+
+        Args:
+            site_name: The UniFi site name, for example ``default``.
+            device_id: The legacy device MongoDB _id or device identifier.
+            outlet_index: 1-based outlet index.
+            state: True to turn the outlet ON (relay closed), False to turn
+                it OFF (relay open).
+            cycle_enabled: Optional boolean to enable or disable power
+                cycling on internet loss.
+            current_device: Required device snapshot (outlet_overrides /
+                outlet_table) to source the read side from. The singular
+                ``rest/device/{id}`` route is write-only on UniFi OS
+                controllers and 404s on GET, so the caller must supply the
+                snapshot from cached ``/stat/device`` data.
 
         Returns:
             True if successful.
 
-        """
-        valid_actions = {"restart", "locate", "provision", "upgrade"}
-        if action not in valid_actions:
-            raise ValueError(f"Action must be one of: {', '.join(valid_actions)}")
+        Raises:
+            UniFiValidationError: If ``current_device`` carries neither an
+                existing ``outlet_overrides`` array nor an ``outlet_table`` to
+                seed one from. The controller treats ``outlet_overrides`` as
+                the complete desired state, so writing a partial array would
+                reset every sibling outlet on the device.
 
-        path = self._client.build_api_path(f"/sites/{site_id}/devices/{device_id}/{action}")
-        await self._client._post(path)
+        """
+        device_dict: dict[str, Any] = current_device or {}
+
+        target_id = device_dict.get("_id", device_id)
+        raw_overrides = device_dict.get("outlet_overrides")
+        outlet_overrides: list[dict[str, Any]] = []
+        if isinstance(raw_overrides, list):
+            outlet_overrides = [dict(item) for item in raw_overrides if isinstance(item, dict)]
+
+        if not outlet_overrides:
+            outlet_overrides = _seed_outlet_overrides(device_dict)
+
+        if not outlet_overrides:
+            msg = (
+                f"Refusing to write outlet {outlet_index} on device {device_id}: "
+                "no outlet_overrides or outlet_table available to seed the full "
+                "override array from. Writing a partial array would reset the "
+                "device's other outlets."
+            )
+            raise UniFiValidationError(msg)
+
+        found = False
+        for override in outlet_overrides:
+            idx = override.get("index")
+            if idx is None:
+                idx = override.get("outlet_idx")
+            try:
+                idx_int = int(idx)  # type: ignore[arg-type]
+            except TypeError, ValueError:
+                continue
+
+            if idx_int == outlet_index:
+                override["relay_state"] = state
+                if cycle_enabled is not None:
+                    override["cycle_enabled"] = cycle_enabled
+                found = True
+                break
+
+        if not found:
+            new_override: dict[str, Any] = {
+                "index": outlet_index,
+                "relay_state": state,
+            }
+            if cycle_enabled is not None:
+                new_override["cycle_enabled"] = cycle_enabled
+            outlet_overrides.append(new_override)
+
+        put_path = self._client.build_legacy_api_path(site_name, f"/rest/device/{target_id}")
+        await self._client._put(put_path, json_data={"outlet_overrides": outlet_overrides})
         return True

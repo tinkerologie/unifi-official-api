@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ._base import ProtectDeviceEndpoint
 from .alarm_hubs import AlarmHubsEndpoint
 from .alarm_manager import AlarmManagerEndpoint
 from .application import ApplicationEndpoint
@@ -15,11 +16,12 @@ from .lights import LightsEndpoint
 from .link_stations import LinkStationsEndpoint
 from .liveviews import LiveViewsEndpoint
 from .nvr import NVREndpoint
-from .pos import POSEndpoint
+from .pos import POSEndpoint, PosEndpoint
 from .relays import RelaysEndpoint
 from .sensors import SensorsEndpoint
 from .sirens import SirensEndpoint
 from .speakers import SpeakersEndpoint
+from .ulp_users import UlpUsersEndpoint
 from .users import UsersEndpoint
 from .viewers import ViewersEndpoint
 
@@ -38,10 +40,13 @@ __all__ = [
     "LiveViewsEndpoint",
     "NVREndpoint",
     "POSEndpoint",
+    "PosEndpoint",
+    "ProtectDeviceEndpoint",
     "RelaysEndpoint",
     "SensorsEndpoint",
     "SirensEndpoint",
     "SpeakersEndpoint",
+    "UlpUsersEndpoint",
     "UsersEndpoint",
     "ViewersEndpoint",
 ]

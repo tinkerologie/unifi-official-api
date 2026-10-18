@@ -1,54 +1,35 @@
-"""UniFi Official API - Async Python library for UniFi Network and Protect APIs.
+"""UniFi Official API - Async Python library for UniFi APIs.
 
 This library provides async Python clients for the official UniFi APIs:
 - UniFi Network API: Manage network devices, clients, WiFi, and more
 - UniFi Protect API: Manage cameras, sensors, lights, and NVR settings
+- UniFi Access API: Manage doors, emergency modes, users, and webhooks
+- UniFi InnerSpace API: Floor plans, CAD imports, and WiFi heatmaps
+- UniFi Mobility API: LTE/5G mobile routers, failover, and data usage
+- UniFi Site Manager API: Organization-level multi-console fleet management
+- UniFi Carrier Fabric API: Enterprise carrier infrastructure
 
 Supports both LOCAL (direct to device) and REMOTE (via cloud) connections.
-
-Example (Local Connection):
-    ```python
-    from unifi_official_api import LocalAuth, ConnectionType
-    from unifi_official_api.network import UniFiNetworkClient
-
-    async with UniFiNetworkClient(
-        auth=LocalAuth(api_key="your-local-api-key", verify_ssl=False),
-        base_url="https://192.168.1.1",
-        connection_type=ConnectionType.LOCAL,
-    ) as client:
-        sites = await client.sites.get_all()
-        devices = await client.devices.get_all(site_id="default")
-    ```
-
-Example (Remote/Cloud Connection):
-    ```python
-    from unifi_official_api import ApiKeyAuth, ConnectionType
-    from unifi_official_api.network import UniFiNetworkClient
-
-    async with UniFiNetworkClient(
-        auth=ApiKeyAuth(api_key="your-cloud-api-key"),
-        connection_type=ConnectionType.REMOTE,
-        console_id="your-console-id",
-    ) as client:
-        sites = await client.sites.get_all()
-        devices = await client.devices.get_all(site_id="default")
-    ```
 """
 
 from __future__ import annotations
 
 from ._version import __version__
-from .auth import ApiKeyAuth, ApiKeyType, LocalAuth
+from .access import UniFiAccessClient
+from .auth import AccessTokenAuth, ApiKeyAuth, ApiKeyType, LocalAuth
 from .carrier_fabric import UniFiCarrierFabricClient
 from .const import ConnectionType
 from .exceptions import (
     UniFiAuthenticationError,
     UniFiConnectionError,
     UniFiError,
+    UniFiGlobalAlarmManagerError,
     UniFiNotFoundError,
     UniFiRateLimitError,
     UniFiResponseError,
+    UniFiRuleNotEditableError,
     UniFiTimeoutError,
+    UniFiUnsupportedError,
     UniFiValidationError,
 )
 from .innerspace import UniFiInnerSpaceClient
@@ -61,10 +42,12 @@ __all__ = [
     # Version
     "__version__",
     # Authentication
+    "AccessTokenAuth",
     "ApiKeyAuth",
     "ApiKeyType",
     "LocalAuth",
     # Clients
+    "UniFiAccessClient",
     "UniFiCarrierFabricClient",
     "UniFiInnerSpaceClient",
     "UniFiMobilityClient",
@@ -77,9 +60,12 @@ __all__ = [
     "UniFiAuthenticationError",
     "UniFiConnectionError",
     "UniFiError",
+    "UniFiGlobalAlarmManagerError",
     "UniFiNotFoundError",
     "UniFiRateLimitError",
     "UniFiResponseError",
+    "UniFiRuleNotEditableError",
     "UniFiTimeoutError",
+    "UniFiUnsupportedError",
     "UniFiValidationError",
 ]

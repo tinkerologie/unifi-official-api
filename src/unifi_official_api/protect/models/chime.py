@@ -7,6 +7,17 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
+class ChimeRingSetting(BaseModel):
+    """Per-camera ring configuration on a chime."""
+
+    camera_id: str | None = Field(default=None, alias="cameraId")
+    repeat_times: int | None = Field(default=None, alias="repeatTimes")
+    ringtone_id: str | None = Field(default=None, alias="ringtoneId")
+    volume: int | None = None
+
+    model_config = {"populate_by_name": True, "extra": "allow"}
+
+
 class Chime(BaseModel):
     """Model representing a UniFi Protect chime."""
 

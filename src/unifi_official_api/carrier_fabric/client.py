@@ -2,27 +2,60 @@
 
 from __future__ import annotations
 
-import aiohttp
+import json
+import logging
+from typing import TYPE_CHECKING, Any
 
-from ..auth import ApiKeyAuth
-from ..base import BaseUniFiClient
-from ..const import (
+from unifi_official_api.base import BaseUniFiClient
+from unifi_official_api.const import (
     CARRIER_FABRIC_API_BASE_URL,
     DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_TIMEOUT,
 )
-from .endpoints import (
-    ServicePlansEndpoint,
-    SubscribersEndpoint,
+from unifi_official_api.exceptions import (
+    UniFiAuthenticationError,
+    UniFiResponseError,
 )
+
+from .endpoints import ServicePlansEndpoint, SubscribersEndpoint
+
+if TYPE_CHECKING:
+    import aiohttp
+
+    from unifi_official_api.auth import ApiKeyAuth
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def _extract_api_error_code(response_text: str | None) -> str | None:
+    """Extract machine-readable error code from Carrier Fabric response body."""
+    if not response_text:
+        return None
+    try:
+        data = json.loads(response_text)
+    except ValueError, TypeError:
+        return None
+
+    if isinstance(data, dict):
+        error = data.get("error")
+        if isinstance(error, dict):
+            code = error.get("code")
+            if isinstance(code, str) and code:
+                return code
+        elif isinstance(error, str) and error:
+            return error
+        code = data.get("code")
+        if isinstance(code, str) and code:
+            return code
+    return None
 
 
 class UniFiCarrierFabricClient(BaseUniFiClient):
     """
-    Async client for the UniFi Carrier Fabric / ISP Subscriber API (api.ui.com).
+    Async client for the UniFi Carrier Fabric API.
 
-    Provides subscriber lifecycle provisioning, gateway host attachment/linking,
-    bandwidth service plans, and subscription state controls.
+    Uses cloud API key authentication (`X-API-Key`) to communicate with
+    https://api.ui.com/v1/carrier.
     """
 
     def __init__(
@@ -34,16 +67,7 @@ class UniFiCarrierFabricClient(BaseUniFiClient):
         timeout: int = DEFAULT_TIMEOUT,
         connect_timeout: int = DEFAULT_CONNECT_TIMEOUT,
     ) -> None:
-        """
-        Initialize the UniFi Carrier Fabric client.
-
-        Args:
-            auth: Cloud API key authentication (ApiKeyAuth).
-            base_url: Base URL (defaults to https://api.ui.com).
-            session: Optional aiohttp session to reuse.
-            timeout: Request timeout in seconds.
-            connect_timeout: Connection timeout in seconds.
-        """
+        """Initialize the UniFi Carrier Fabric client."""
         super().__init__(
             auth=auth,
             base_url=base_url,
@@ -51,27 +75,57 @@ class UniFiCarrierFabricClient(BaseUniFiClient):
             timeout=timeout,
             connect_timeout=connect_timeout,
         )
-
-        # Initialize endpoints
         self._subscribers = SubscribersEndpoint(self)
         self._service_plans = ServicePlansEndpoint(self)
 
     @property
     def subscribers(self) -> SubscribersEndpoint:
-        """Access subscriber lifecycle endpoints."""
+        """Access subscriber management endpoints."""
         return self._subscribers
 
     @property
     def service_plans(self) -> ServicePlansEndpoint:
-        """Access bandwidth service plan endpoints."""
+        """Access service plan endpoints."""
         return self._service_plans
+
+    def _response_log_text(self, response_text: str, *, limit: int) -> str:
+        """Keep subscriber and plan data out of transport logs."""
+        return "[Carrier Fabric response omitted]"[:limit] if response_text else "empty"
+
+    async def _handle_response(
+        self,
+        response: aiohttp.ClientResponse,
+        *,
+        expected_unsupported: bool = False,
+        request_path: str | None = None,
+        log_body: bool = True,
+    ) -> dict[str, Any] | list[Any] | None:
+        """Handle response with error code extraction and privacy-preserving logging."""
+        try:
+            return await super()._handle_response(
+                response,
+                expected_unsupported=expected_unsupported,
+                request_path=request_path,
+                log_body=log_body,
+            )
+        except (UniFiAuthenticationError, UniFiResponseError) as err:
+            response_text = getattr(err, "response_body", None)
+            if response_text is None:
+                response_text = await response.text()
+            err.api_error_code = _extract_api_error_code(response_text)
+            raise
 
     async def validate_connection(self) -> bool:
         """
-        Validate authentication with api.ui.com.
+        Validate connection by listing service plans.
 
         Returns:
-            True if connection and API key are valid.
+            True if connection is valid.
+
+        Raises:
+            UniFiAuthenticationError: If authentication fails.
+            UniFiConnectionError: If connection fails.
+
         """
-        response = await self._get("/v1/carrier/service-plans")
-        return response is not None
+        await self._service_plans.get_all()
+        return True

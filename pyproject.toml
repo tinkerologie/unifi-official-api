@@ -5,10 +5,10 @@ build-backend = "hatchling.build"
 [project]
 name = "unifi-official-api"
 dynamic = ["version"]
-description = "Async Python library for the official UniFi Network and Protect APIs"
+description = "Async Python library for the official UniFi Network, Protect, InnerSpace, Mobility, Site Manager, Carrier Fabric, and Access APIs"
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 authors = [
     { name = "Ruaan Deysel" },
 ]
@@ -17,6 +17,11 @@ keywords = [
     "ubiquiti",
     "network",
     "protect",
+    "access",
+    "innerspace",
+    "mobility",
+    "site-manager",
+    "carrier-fabric",
     "api",
     "async",
     "home-assistant",
@@ -30,9 +35,6 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Topic :: Home Automation",
     "Topic :: Software Development :: Libraries :: Python Modules",
@@ -45,6 +47,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Protect talkback audio transcoding/streaming
+talkback = [
+    "av>=12.0.0",
+]
 # Testing dependencies
 test = [
     "pytest>=8.0.0",
@@ -86,7 +92,7 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.14"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
@@ -94,7 +100,7 @@ disallow_untyped_defs = true
 disallow_incomplete_defs = true
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py314"
 line-length = 100
 src = ["src", "tests"]
 
@@ -115,22 +121,33 @@ select = [
     "ASYNC",  # flake8-async
 ]
 ignore = [
+    "PLR0911",  # Too many return statements
+    "PLR0912",  # Too many branches
     "PLR0913",  # Too many arguments
+    "PLR0915",  # Too many statements
+    "PLR0917",  # Too many positional arguments
     "PLR2004",  # Magic value comparison
     "RUF022",   # __all__ not sorted (we group by category)
+    "UP046",    # Generic subclass vs type parameter (needed for mypy stability)
 ]
 
 [tool.ruff.lint.isort]
 known-first-party = ["unifi_official_api"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["PLC0415"]  # Allow imports in test functions
+"tests/*" = [
+    "PLC0415",  # Allow imports in test functions
+    "ARG",      # Unused arguments in test mocks and fixtures
+    "E501",     # Long lines in tests
+    "SIM117",   # Nested with statements in tests
+]
 
 [tool.coverage.run]
 source = ["src/unifi_official_api"]
 branch = true
 
 [tool.coverage.report]
+fail_under = 95
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",

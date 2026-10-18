@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 import aiohttp
 
@@ -13,9 +13,16 @@ from ..const import (
     DEFAULT_TIMEOUT,
     PROTECT_API_BASE_URL,
     PROTECT_INTEGRATION_PATH,
+    PROTECT_RATE_LIMIT_REQUESTS,
+    PROTECT_RATE_LIMIT_WINDOW,
     ConnectionType,
 )
-from ..exceptions import UniFiConnectionError, UniFiTimeoutError
+from ..exceptions import (
+    UniFiAuthenticationError,
+    UniFiConnectionError,
+    UniFiRateLimitError,
+    UniFiResponseError,
+)
 from .endpoints import (
     AlarmHubsEndpoint,
     AlarmManagerEndpoint,
@@ -35,6 +42,7 @@ from .endpoints import (
     SensorsEndpoint,
     SirensEndpoint,
     SpeakersEndpoint,
+    UlpUsersEndpoint,
     UsersEndpoint,
     ViewersEndpoint,
 )
@@ -89,6 +97,11 @@ class UniFiProtectClient(BaseUniFiClient):
             )
         ```
     """
+
+    RATE_LIMIT: ClassVar[tuple[int, float] | None] = (
+        PROTECT_RATE_LIMIT_REQUESTS,
+        PROTECT_RATE_LIMIT_WINDOW,
+    )
 
     def __init__(
         self,
@@ -155,6 +168,7 @@ class UniFiProtectClient(BaseUniFiClient):
         self._alarm_manager = AlarmManagerEndpoint(self)
         self._arm_profiles = ArmProfilesEndpoint(self)
         self._users = UsersEndpoint(self)
+        self._ulp_users = UlpUsersEndpoint(self)
         self._pos = POSEndpoint(self)
         self._nvr = NVREndpoint(self)
         self._liveviews = LiveViewsEndpoint(self)
@@ -270,8 +284,13 @@ class UniFiProtectClient(BaseUniFiClient):
 
     @property
     def users(self) -> UsersEndpoint:
-        """Access Protect and UniFi Identity user endpoints."""
+        """Access Protect user endpoints."""
         return self._users
+
+    @property
+    def ulp_users(self) -> UlpUsersEndpoint:
+        """Access UniFi Identity (ULP) user management endpoints."""
+        return self._ulp_users
 
     @property
     def pos(self) -> POSEndpoint:
@@ -322,7 +341,7 @@ class UniFiProtectClient(BaseUniFiClient):
             UniFiConnectionError: If connection fails.
 
         """
-        response = await self._get(self.build_api_path("/sites"))
+        response = await self._get(self.build_api_path("/cameras"))
         return response is not None
 
     async def get_sites(self) -> list[dict[str, Any]]:
@@ -362,7 +381,7 @@ class UniFiProtectClient(BaseUniFiClient):
 
             async with client.websocket.subscribe_events(host_id, site_id) as events:
                 async for event in events:
-                    print(f"Event: {event}")
+                    logger.info("Event: %s", event)
             ```
 
         """
@@ -390,29 +409,12 @@ class UniFiProtectClient(BaseUniFiClient):
             UniFiTimeoutError: If request times out.
 
         """
-        session = await self._ensure_session()
-        url = self._build_url(path)
-        headers = self._get_headers()
-        # Remove JSON content type for binary requests
-        headers.pop("Content-Type", None)
-        headers["Accept"] = "*/*"
-
         try:
-            async with session.get(
-                url,
-                params=params,
-                headers=headers,
-            ) as response:
-                if response.status >= 400:
-                    text = await response.text()
-                    raise UniFiConnectionError(
-                        f"Failed to fetch binary data: {response.status} - {text}"
-                    )
-                return await response.read()
-
-        except aiohttp.ClientConnectorError as err:
-            raise UniFiConnectionError(f"Failed to connect to {url}: {err}") from err
-        except TimeoutError as err:
-            raise UniFiTimeoutError(f"Request to {url} timed out") from err
-        except aiohttp.ClientError as err:
-            raise UniFiConnectionError(f"Request to {url} failed: {err}") from err
+            data, _ = await self._get_binary_with_content_type(path, params=params)
+            return data
+        except UniFiAuthenticationError as err:
+            msg = f"Failed to fetch binary data: {err.status_code} - {err.message}"
+            raise UniFiConnectionError(msg) from err
+        except (UniFiRateLimitError, UniFiResponseError) as err:
+            msg = f"Failed to fetch binary data: {err.status_code} - {err.response_body}"
+            raise UniFiConnectionError(msg) from err

@@ -10,6 +10,7 @@ from unifi_official_api import (
     ConnectionType,
     LocalAuth,
     UniFiConnectionError,
+    UniFiResponseError,
 )
 from unifi_official_api.innerspace import (
     FloorPlan,
@@ -99,10 +100,10 @@ class TestUniFiInnerSpaceClient:
     ) -> None:
         """Test project endpoint error branch."""
         mock_aioresponse.get(
-            "https://192.168.1.1/proxy/innerspace/integration/v1/project", payload={}
+            "https://192.168.1.1/proxy/innerspace/integration/v1/project", payload="bad"
         )
         async with local_client:
-            with pytest.raises(ValueError, match="Failed to retrieve"):
+            with pytest.raises(UniFiResponseError):
                 await local_client.project.get()
 
     async def test_floor_plans_endpoint(
@@ -261,8 +262,8 @@ class TestUniFiInnerSpaceClient:
     ) -> None:
         """Test validate_connection."""
         mock_aioresponse.get(
-            "https://192.168.1.1/proxy/innerspace/integration/v1/floor_plans",
-            payload={"floor_plans": []},
+            "https://192.168.1.1/proxy/innerspace/integration/v1/project",
+            payload={"project": {"id": "p1"}},
         )
         async with local_client:
             assert await local_client.validate_connection() is True

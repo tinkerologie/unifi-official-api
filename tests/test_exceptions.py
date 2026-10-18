@@ -6,10 +6,13 @@ from unifi_official_api import (
     UniFiAuthenticationError,
     UniFiConnectionError,
     UniFiError,
+    UniFiGlobalAlarmManagerError,
     UniFiNotFoundError,
     UniFiRateLimitError,
     UniFiResponseError,
+    UniFiRuleNotEditableError,
     UniFiTimeoutError,
+    UniFiUnsupportedError,
     UniFiValidationError,
 )
 
@@ -49,6 +52,26 @@ class TestUniFiConnectionError:
         assert isinstance(error, UniFiError)
 
 
+class TestUniFiUnsupportedError:
+    """Tests for UniFiUnsupportedError."""
+
+    def test_create_unsupported_error(self) -> None:
+        """Test creating unsupported error."""
+        error = UniFiUnsupportedError("Operation not supported")
+        assert str(error) == "Operation not supported"
+        assert isinstance(error, UniFiError)
+
+
+class TestUniFiRuleNotEditableError:
+    """Tests for UniFiRuleNotEditableError."""
+
+    def test_create_rule_not_editable_error(self) -> None:
+        """Test creating rule not editable error."""
+        error = UniFiRuleNotEditableError("Rule managed by console")
+        assert str(error) == "Rule managed by console"
+        assert isinstance(error, UniFiError)
+
+
 class TestUniFiResponseError:
     """Tests for UniFiResponseError."""
 
@@ -59,7 +82,8 @@ class TestUniFiResponseError:
             status_code=400,
             response_body='{"error": "invalid"}',
         )
-        assert str(error) == "Bad request"
+        assert str(error) == "UniFiResponseError(status=400)"
+        assert error.message == "Bad request"
         assert error.status_code == 400
         assert error.response_body == '{"error": "invalid"}'
         assert isinstance(error, UniFiError)
@@ -71,7 +95,19 @@ class TestUniFiNotFoundError:
     def test_create_not_found_error(self) -> None:
         """Test creating not found error."""
         error = UniFiNotFoundError("Device not found", status_code=404)
+        assert str(error) == "UniFiNotFoundError(status=404)"
         assert error.status_code == 404
+        assert isinstance(error, UniFiResponseError)
+
+
+class TestUniFiGlobalAlarmManagerError:
+    """Tests for UniFiGlobalAlarmManagerError."""
+
+    def test_create_alarm_manager_error(self) -> None:
+        """Test creating global alarm manager error."""
+        error = UniFiGlobalAlarmManagerError("Alarm arming refused", status_code=400)
+        assert str(error) == "UniFiGlobalAlarmManagerError(status=400)"
+        assert error.status_code == 400
         assert isinstance(error, UniFiResponseError)
 
 
@@ -85,6 +121,7 @@ class TestUniFiRateLimitError:
             status_code=429,
             retry_after=60,
         )
+        assert str(error) == "UniFiRateLimitError(status=429)"
         assert error.status_code == 429
         assert error.retry_after == 60
         assert isinstance(error, UniFiResponseError)

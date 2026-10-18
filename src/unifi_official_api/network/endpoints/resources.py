@@ -37,7 +37,7 @@ class ResourcesEndpoint:
         *,
         offset: int | None = None,
         limit: int | None = None,
-        filter_str: str | None = None,
+        filter_str: str | None = None,  # noqa: ARG002 - retained for compatibility
     ) -> list[WANInterface]:
         """
         List all WAN interfaces.
@@ -46,7 +46,7 @@ class ResourcesEndpoint:
             site_id: The site ID.
             offset: Pagination offset.
             limit: Maximum results.
-            filter_str: Filter query string using API filter syntax.
+            filter_str: Unsupported by getWansOverviewPage; ignored.
 
         Returns:
             List of WAN interfaces.
@@ -57,11 +57,9 @@ class ResourcesEndpoint:
             params["offset"] = offset
         if limit is not None:
             params["limit"] = limit
-        if filter_str:
-            params["filter"] = filter_str
 
         path = self._client.build_api_path(f"/sites/{site_id}/wans")
-        response = await self._client._get(path, params=params if params else None)
+        response = await self._client._get(path, params=params or None)
 
         if response is None:
             return []
@@ -102,8 +100,8 @@ class ResourcesEndpoint:
         if filter_str:
             params["filter"] = filter_str
 
-        path = self._client.build_api_path(f"/sites/{site_id}/vpn/tunnels")
-        response = await self._client._get(path, params=params if params else None)
+        path = self._client.build_api_path(f"/sites/{site_id}/vpn/site-to-site-tunnels")
+        response = await self._client._get(path, params=params or None)
 
         if response is None:
             return []
