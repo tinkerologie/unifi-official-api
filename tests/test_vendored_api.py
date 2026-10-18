@@ -2931,7 +2931,11 @@ async def test_security_family_listing_expected_unsupported_log_level(
         await getattr(client, family).get_all(expected_unsupported=opted_in)
 
     assert exc.value.status_code == 200
-    warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+    warnings = [
+        r.getMessage()
+        for r in caplog.records
+        if r.levelno >= logging.WARNING and r.name.startswith("unifi_official_api")
+    ]
     if opted_in:
         assert warnings == []
     else:

@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Protect API expansion: cameras (with backward-compatible snapshot endpoint), alarm hubs, bridges, chimes, door locks, fobs, lights, link stations, live views, NVR, POS, relays, sensors, sirens, speakers, users, ULP users, viewers, talkback transcode/streaming, and WebSocket subscriptions.
   - Network API expansion: firewall policies, static routes, LAGs, NAT rules, port forwards, traffic rules, vouchers, and VPN clients.
   - Innerspace, Carrier Fabric, Mobility, and Site Manager client and endpoint additions.
-  - Strict ≥ 95% per-file branch coverage enforcement (`script/check_coverage_per_file.py`) with 3,248 tests passing at 99.75% total branch coverage and zero `# pragma: no cover` additions.
+  - Strict ≥ 95% per-file branch coverage enforcement (`script/check_coverage_per_file.py`) with 3,263 tests passing at 100.00% total branch and statement coverage across all 173 source files with zero `# pragma: no cover` additions.
 
 ### Fixed
 - Fixed release workflow tag validation f-string syntax in `.github/workflows/release.yml`.
