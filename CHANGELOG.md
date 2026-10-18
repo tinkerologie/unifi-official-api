@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-18
+
 ### Added
 - **v2.0.0 Architecture & Endpoint Uplift (Issue #41)**:
   - Full Python ≥ 3.14 compatibility with strict static typing across all 173 source modules (`mypy src/ --strict`).
