@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from .client import UniFiCarrierFabricClient
 from .models import (
+    CarrierFabricMeta,
     HostLinkResponse,
     Meta,
     ServicePlan,
@@ -15,6 +16,7 @@ from .models import (
 )
 
 __all__ = [
+    "CarrierFabricMeta",
     "HostLinkResponse",
     "Meta",
     "ServicePlan",

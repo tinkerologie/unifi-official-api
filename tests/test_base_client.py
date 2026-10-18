@@ -156,8 +156,8 @@ class TestBaseClientErrorHandling:
             async with UniFiNetworkClient(
                 auth=auth, base_url=base_url, connection_type=ConnectionType.LOCAL
             ) as client:
-                result = await client.sites.get_all()
-                assert result == []
+                with pytest.raises(UniFiResponseError):
+                    await client.sites.get_all()
 
 
 class TestNetworkEndpoints:
@@ -194,18 +194,11 @@ class TestNetworkEndpoints:
                 assert sites[0].id == "site-1"
 
     async def test_sites_get(self, auth: LocalAuth, base_url: str, site_id: str) -> None:
-        """Test getting a specific site."""
-        with aioresponses() as m:
-            m.get(
-                f"{base_url}/proxy/network/integration/v1/sites/{site_id}",
-                payload={"data": {"id": site_id, "name": "Default"}},
-            )
-
-            async with UniFiNetworkClient(
-                auth=auth, base_url=base_url, connection_type=ConnectionType.LOCAL
-            ) as client:
-                site = await client.sites.get(site_id)
-                assert site.id == site_id
+        """Test that sites endpoint has no individual get method per OpenAPI spec."""
+        async with UniFiNetworkClient(
+            auth=auth, base_url=base_url, connection_type=ConnectionType.LOCAL
+        ) as client:
+            assert not hasattr(client.sites, "get")
 
     async def test_networks_get_all(self, auth: LocalAuth, base_url: str, site_id: str) -> None:
         """Test listing networks."""
@@ -253,7 +246,7 @@ class TestNetworkEndpoints:
     async def test_networks_update(self, auth: LocalAuth, base_url: str, site_id: str) -> None:
         """Test updating a network."""
         with aioresponses() as m:
-            m.patch(
+            m.put(
                 f"{base_url}/proxy/network/integration/v1/sites/{site_id}/networks/net-1",
                 payload={"data": {"id": "net-1", "name": "Updated"}},
             )
@@ -298,13 +291,15 @@ class TestNetworkEndpoints:
         with aioresponses() as m:
             m.post(
                 f"{base_url}/proxy/network/integration/v1/sites/{site_id}/wifi/broadcasts",
-                payload={"data": {"id": "wifi-2", "name": "Guest WiFi", "ssid": "Guest"}},
+                payload={"data": {"id": "wifi-2", "name": "Guest", "ssid": "Guest"}},
             )
 
             async with UniFiNetworkClient(
                 auth=auth, base_url=base_url, connection_type=ConnectionType.LOCAL
             ) as client:
-                wifi = await client.wifi.create(site_id, name="Guest WiFi", ssid="Guest")
+                wifi = await client.wifi.create(
+                    site_id, name="Guest", ssid="Guest", passphrase="password123"
+                )
                 assert wifi.ssid == "Guest"
 
     async def test_firewall_list_zones(self, auth: LocalAuth, base_url: str, site_id: str) -> None:
@@ -362,13 +357,27 @@ class TestNetworkEndpoints:
         with aioresponses() as m:
             m.post(
                 f"{base_url}/proxy/network/integration/v1/sites/{site_id}/firewall/policies",
-                payload={"data": {"id": "rule-2", "name": "Allow", "action": "accept"}},
+                payload={
+                    "data": {
+                        "id": "rule-2",
+                        "name": "Allow",
+                        "action": {"type": "ALLOW"},
+                        "protocol": "all",
+                    }
+                },
             )
 
             async with UniFiNetworkClient(
                 auth=auth, base_url=base_url, connection_type=ConnectionType.LOCAL
             ) as client:
-                rule = await client.firewall.create_rule(site_id, name="Allow", action="accept")
+                rule = await client.firewall.create_rule(
+                    site_id,
+                    name="Allow",
+                    action="accept",
+                    protocol="all",
+                    source_zone_id="zone-1",
+                    destination_zone_id="zone-2",
+                )
                 assert rule.name == "Allow"
 
     async def test_firewall_update_rule(self, auth: LocalAuth, base_url: str, site_id: str) -> None:
@@ -421,53 +430,53 @@ class TestNetworkEndpoints:
                 assert network_client.id == "client-1"
 
     async def test_clients_block(self, auth: LocalAuth, base_url: str, site_id: str) -> None:
-        """Test blocking a client."""
+        """Test blocking a client via stamgr."""
         with aioresponses() as m:
             m.post(
-                f"{base_url}/proxy/network/integration/v1/sites/{site_id}/clients/client-1/block",
-                payload={},
+                f"{base_url}/proxy/network/api/s/{site_id}/cmd/stamgr",
+                payload={"meta": {"rc": "ok"}, "data": []},
             )
 
             async with UniFiNetworkClient(
                 auth=auth, base_url=base_url, connection_type=ConnectionType.LOCAL
             ) as client:
-                result = await client.clients.block(site_id, "client-1")
+                result = await client.clients.block(site_id, "00:11:22:33:44:55")
                 assert result is True
 
     async def test_clients_unblock(self, auth: LocalAuth, base_url: str, site_id: str) -> None:
-        """Test unblocking a client."""
+        """Test unblocking a client via stamgr."""
         with aioresponses() as m:
             m.post(
-                f"{base_url}/proxy/network/integration/v1/sites/{site_id}/clients/client-1/unblock",
-                payload={},
+                f"{base_url}/proxy/network/api/s/{site_id}/cmd/stamgr",
+                payload={"meta": {"rc": "ok"}, "data": []},
             )
 
             async with UniFiNetworkClient(
                 auth=auth, base_url=base_url, connection_type=ConnectionType.LOCAL
             ) as client:
-                result = await client.clients.unblock(site_id, "client-1")
+                result = await client.clients.unblock(site_id, "00:11:22:33:44:55")
                 assert result is True
 
     async def test_clients_reconnect(self, auth: LocalAuth, base_url: str, site_id: str) -> None:
-        """Test reconnecting a client."""
+        """Test reconnecting a client via stamgr."""
         with aioresponses() as m:
             m.post(
-                f"{base_url}/proxy/network/integration/v1/sites/{site_id}/clients/client-1/reconnect",
-                payload={},
+                f"{base_url}/proxy/network/api/s/{site_id}/cmd/stamgr",
+                payload={"meta": {"rc": "ok"}, "data": []},
             )
 
             async with UniFiNetworkClient(
                 auth=auth, base_url=base_url, connection_type=ConnectionType.LOCAL
             ) as client:
-                result = await client.clients.reconnect(site_id, "client-1")
+                result = await client.clients.reconnect(site_id, "00:11:22:33:44:55")
                 assert result is True
 
     async def test_devices_restart(self, auth: LocalAuth, base_url: str, site_id: str) -> None:
         """Test restarting a device."""
         with aioresponses() as m:
             m.post(
-                f"{base_url}/proxy/network/integration/v1/sites/{site_id}/devices/device-1/restart",
-                payload={},
+                f"{base_url}/proxy/network/integration/v1/sites/{site_id}/devices/device-1/actions",
+                status=204,
             )
 
             async with UniFiNetworkClient(
@@ -480,8 +489,8 @@ class TestNetworkEndpoints:
         """Test adopting a device."""
         with aioresponses() as m:
             m.post(
-                f"{base_url}/proxy/network/integration/v1/sites/{site_id}/devices/adopt",
-                payload={},
+                f"{base_url}/proxy/network/integration/v1/sites/{site_id}/devices",
+                status=204,
             )
 
             async with UniFiNetworkClient(

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from enum import StrEnum
 
 from pydantic import BaseModel, Field
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class ViewerState(StrEnum):
@@ -13,6 +16,13 @@ class ViewerState(StrEnum):
     CONNECTED = "CONNECTED"
     CONNECTING = "CONNECTING"
     DISCONNECTED = "DISCONNECTED"
+    UNKNOWN = "UNKNOWN"
+
+    @classmethod
+    def _missing_(cls, value: object) -> ViewerState:
+        """Map unrecognized states to ``UNKNOWN`` instead of raising."""
+        _LOGGER.debug("Unknown ViewerState value %r; mapping to UNKNOWN", value)
+        return cls.UNKNOWN
 
 
 class Viewer(BaseModel):
@@ -25,6 +35,7 @@ class Viewer(BaseModel):
     mac: str = Field(..., description="MAC address")
     liveview: str | None = Field(None, description="Associated liveview ID")
     stream_limit: int = Field(4, alias="streamLimit", description="Max parallel streams")
+    software_version: str | None = Field(default=None, alias="softwareVersion")
 
     model_config = {"populate_by_name": True, "extra": "allow"}
 
@@ -37,3 +48,7 @@ class Viewer(BaseModel):
     def is_connected(self) -> bool:
         """Check if viewer is connected."""
         return self.state == ViewerState.CONNECTED
+
+
+Viewport = Viewer
+ViewportState = ViewerState

@@ -16,6 +16,9 @@ if TYPE_CHECKING:
     from ..client import UniFiNetworkClient
 
 
+_MAX_PORT_NUMBER = 65535
+
+
 class TrafficEndpoint:
     """Endpoint for managing traffic matching lists and DPI resources."""
 
@@ -62,7 +65,7 @@ class TrafficEndpoint:
             params["filter"] = filter_str
 
         path = self._client.build_api_path(f"/sites/{site_id}/traffic-matching-lists")
-        response = await self._client._get(path, params=params if params else None)
+        response = await self._client._get(path, params=params or None)
 
         if response is None:
             return []
@@ -102,6 +105,7 @@ class TrafficEndpoint:
         name: str,
         list_type: TrafficMatchingType,
         entries: list[str] | None = None,
+        items: list[dict[str, Any]] | None = None,
         description: str | None = None,
     ) -> TrafficMatchingList:
         """
@@ -111,21 +115,43 @@ class TrafficEndpoint:
             site_id: The site ID.
             name: List name.
             list_type: List type.
-            entries: List entries.
-            description: Optional description.
+            entries: Single integer port strings for PORTS lists only (1-65535).
+            items: Pre-built spec items, mutually exclusive with entries.
+            description: Unsupported legacy argument; the schema has no description.
 
         Returns:
             The created traffic matching list.
 
         """
         path = self._client.build_api_path(f"/sites/{site_id}/traffic-matching-lists")
+        if description is not None:
+            msg = "description is unsupported for traffic matching lists"
+            raise ValueError(msg)
+        if entries is not None and items is not None:
+            msg = "Supply either entries or items, not both"
+            raise ValueError(msg)
+        if entries is not None:
+            if list_type != TrafficMatchingType.PORTS:
+                msg = "Use items for non-PORTS traffic matching lists"
+                raise ValueError(msg)
+            items = []
+            for entry in entries:
+                if not entry.isascii() or not entry.isdecimal():
+                    msg = "Use items for port ranges or non-integer entries"
+                    raise ValueError(msg)
+                port = int(entry)
+                if not 1 <= port <= _MAX_PORT_NUMBER:
+                    msg = "Use items with port numbers in the range 1-65535"
+                    raise ValueError(msg)
+                items.append({"type": "PORT_NUMBER", "value": port})
+        if not items:
+            msg = "items must contain at least one item"
+            raise ValueError(msg)
         data: dict[str, Any] = {
             "name": name,
             "type": list_type.value,
-            "entries": entries or [],
+            "items": items,
         }
-        if description:
-            data["description"] = description
 
         response = await self._client._post(path, json_data=data)
 
@@ -180,19 +206,35 @@ class TrafficEndpoint:
 
     # DPI Resources
 
-    async def get_dpi_categories(self, site_id: str) -> list[DPICategory]:
+    async def get_dpi_categories(
+        self,
+        *,
+        offset: int | None = None,
+        limit: int | None = None,
+        filter_str: str | None = None,
+    ) -> list[DPICategory]:
         """
         List all DPI categories.
 
         Args:
-            site_id: The site ID.
+            offset: Pagination offset.
+            limit: Maximum results (max 200).
+            filter_str: Filter query string using API filter syntax.
 
         Returns:
             List of DPI categories.
 
         """
-        path = self._client.build_api_path(f"/sites/{site_id}/dpi/categories")
-        response = await self._client._get(path)
+        params: dict[str, Any] = {}
+        if offset is not None:
+            params["offset"] = offset
+        if limit is not None:
+            params["limit"] = min(limit, 200)
+        if filter_str:
+            params["filter"] = filter_str
+
+        path = self._client.build_api_path("/dpi/categories")
+        response = await self._client._get(path, params=params or None)
 
         if response is None:
             return []
@@ -202,19 +244,35 @@ class TrafficEndpoint:
             return [DPICategory.model_validate(item) for item in data]
         return []
 
-    async def get_dpi_applications(self, site_id: str) -> list[DPIApplication]:
+    async def get_dpi_applications(
+        self,
+        *,
+        offset: int | None = None,
+        limit: int | None = None,
+        filter_str: str | None = None,
+    ) -> list[DPIApplication]:
         """
         List all DPI applications.
 
         Args:
-            site_id: The site ID.
+            offset: Pagination offset.
+            limit: Maximum results (max 200).
+            filter_str: Filter query string using API filter syntax.
 
         Returns:
             List of DPI applications.
 
         """
-        path = self._client.build_api_path(f"/sites/{site_id}/dpi/applications")
-        response = await self._client._get(path)
+        params: dict[str, Any] = {}
+        if offset is not None:
+            params["offset"] = offset
+        if limit is not None:
+            params["limit"] = min(limit, 200)
+        if filter_str:
+            params["filter"] = filter_str
+
+        path = self._client.build_api_path("/dpi/applications")
+        response = await self._client._get(path, params=params or None)
 
         if response is None:
             return []
@@ -224,19 +282,35 @@ class TrafficEndpoint:
             return [DPIApplication.model_validate(item) for item in data]
         return []
 
-    async def get_countries(self, site_id: str) -> list[Country]:
+    async def get_countries(
+        self,
+        *,
+        offset: int | None = None,
+        limit: int | None = None,
+        filter_str: str | None = None,
+    ) -> list[Country]:
         """
         List all countries/regions.
 
         Args:
-            site_id: The site ID.
+            offset: Pagination offset.
+            limit: Maximum results (max 200).
+            filter_str: Filter query string using API filter syntax.
 
         Returns:
             List of countries.
 
         """
-        path = self._client.build_api_path(f"/sites/{site_id}/geo/countries")
-        response = await self._client._get(path)
+        params: dict[str, Any] = {}
+        if offset is not None:
+            params["offset"] = offset
+        if limit is not None:
+            params["limit"] = min(limit, 200)
+        if filter_str:
+            params["filter"] = filter_str
+
+        path = self._client.build_api_path("/countries")
+        response = await self._client._get(path, params=params or None)
 
         if response is None:
             return []

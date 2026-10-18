@@ -1,22 +1,24 @@
-"""Switch models for UniFi InnerSpace."""
+"""Switch models for UniFi InnerSpace API."""
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
+
+from .project import InnerSpaceBaseModel
 
 
-class InnerSpaceSwitch(BaseModel):
-    """InnerSpace placed switch."""
+class InnerSpaceSwitch(InnerSpaceBaseModel):
+    """Switch placement entry returned by ``GET /v1/switches``."""
 
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
-
-    id: str
-    name: str
-    model: str
-    type: str = "switch"
+    id: str = Field(min_length=1)
+    name: str = ""
     mac: str | None = None
-    serial: str | None = None
-    floor_plan_id: str = Field(alias="floor_plan_id")
-    x: float
-    y: float
-    status: str = "online"
+    model: str | None = None
+    floor_plan_id: str | None = Field(default=None, alias="floorPlanId")
+    x: float | None = None
+    y: float | None = None
+    port_count: int | None = Field(default=None, alias="portCount")
+    poe_budget: float | None = Field(default=None, alias="poeBudget")
+
+
+__all__ = ["InnerSpaceSwitch"]

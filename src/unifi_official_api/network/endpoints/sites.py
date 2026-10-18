@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
+
+from pydantic import ValidationError
 
 from ..models import Site
 
 if TYPE_CHECKING:
     from ..client import UniFiNetworkClient
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class SitesEndpoint:
@@ -29,6 +34,7 @@ class SitesEndpoint:
         offset: int | None = None,
         limit: int | None = None,
         filter_str: str | None = None,
+        expected_unsupported: bool = False,
     ) -> list[Site]:
         """
         List all sites.
@@ -37,6 +43,10 @@ class SitesEndpoint:
             offset: Number of sites to skip (pagination).
             limit: Maximum number of sites to return.
             filter_str: Filter string for site properties.
+            expected_unsupported: Whether a non-JSON 2xx response is an
+                expected unsupported-endpoint signal - a console without the
+                Network application. Only lowers the log level of an
+                unredirected response; the call still raises.
 
         Returns:
             List of sites.
@@ -51,37 +61,31 @@ class SitesEndpoint:
             params["filter"] = filter_str
 
         path = self._client.build_api_path("/sites")
-        response = await self._client._get(path, params=params if params else None)
+        response = await self._client._get(
+            path,
+            params=params if params else None,
+            expected_unsupported=expected_unsupported,
+        )
 
         if response is None:
             return []
 
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [Site.model_validate(item) for item in data]
+            sites: list[Site] = []
+            for item in data:
+                try:
+                    sites.append(Site.model_validate(item))
+                except ValidationError as err:
+                    _LOGGER.warning(
+                        "Skipping site that failed to parse (id=%s): %s",
+                        item.get("id") or item.get("internalReference")
+                        if isinstance(item, dict)
+                        else "?",
+                        err,
+                    )
+            return sites
         return []
-
-    async def get(self, site_id: str) -> Site:
-        """
-        Get a specific site.
-
-        Args:
-            site_id: The site ID.
-
-        Returns:
-            The site.
-
-        """
-        path = self._client.build_api_path(f"/sites/{site_id}")
-        response = await self._client._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return Site.model_validate(data)
-            if isinstance(data, list) and len(data) > 0:
-                return Site.model_validate(data[0])
-        raise ValueError(f"Site {site_id} not found")
 
     async def get_legacy_all(self) -> list[dict[str, Any]]:
         """

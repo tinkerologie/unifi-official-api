@@ -1,22 +1,46 @@
-"""Floor plan models for UniFi InnerSpace."""
+"""Floor plan models for UniFi InnerSpace API."""
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Any
+
+from pydantic import Field
+
+from .project import (
+    InnerSpaceBaseModel,
+    InnerSpacePlan,
+    InnerSpaceProduct,
+    InnerSpaceProject,
+    InnerSpaceProjectIdentity,
+    ProjectData,
+    ProjectMeta,
+)
 
 
-class FloorPlan(BaseModel):
-    """InnerSpace floor plan."""
+class InnerSpaceFloorPlan(InnerSpaceBaseModel):
+    """Floor plan metadata returned by ``GET /v1/floor_plans``."""
 
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
-
-    id: str
-    name: str
-    floor_number: float | None = Field(default=None, alias="floor_number")
-    image_url: str | None = Field(default=None, alias="image_url")
-    ppm: float | None = None
+    id: str = Field(min_length=1)
+    name: str = ""
+    site_id: str | None = Field(default=None, alias="siteId")
     width: float | None = None
     height: float | None = None
-    origin_x: float | None = Field(default=None, alias="origin_x")
-    origin_y: float | None = Field(default=None, alias="origin_y")
-    site_id: str | None = Field(default=None, alias="site_id")
+    scale: float | None = None
+    image_url: str | None = Field(default=None, alias="imageUrl")
+    image_filename: str | None = Field(default=None, alias="imageFilename")
+    floor_number: int | None = Field(default=None, alias="floorNumber")
+    devices: list[dict[str, Any]] = Field(default_factory=list)
+
+
+FloorPlan = InnerSpaceFloorPlan
+
+__all__ = [
+    "FloorPlan",
+    "InnerSpaceFloorPlan",
+    "InnerSpacePlan",
+    "InnerSpaceProduct",
+    "InnerSpaceProject",
+    "InnerSpaceProjectIdentity",
+    "ProjectData",
+    "ProjectMeta",
+]

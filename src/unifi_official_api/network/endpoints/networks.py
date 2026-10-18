@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ...const import ENDPOINT_NETWORKCONF
 from ..models import Network
 
 if TYPE_CHECKING:
@@ -93,7 +94,7 @@ class NetworksEndpoint:
         name: str,
         vlan_id: int | None = None,
         subnet: str | None = None,
-        dhcp_enabled: bool = True,
+        dhcp_enabled: bool | None = None,
         **kwargs: Any,
     ) -> Network:
         """
@@ -103,23 +104,27 @@ class NetworksEndpoint:
             site_id: The site ID.
             name: Network name.
             vlan_id: VLAN ID.
-            subnet: Network subnet (e.g., "192.168.1.0/24").
-            dhcp_enabled: Whether DHCP is enabled.
-            **kwargs: Additional network parameters.
+            subnet: Unsupported legacy argument; use ipv4Configuration instead.
+            dhcp_enabled: Unsupported legacy argument; use ipv4Configuration.
+            **kwargs: Spec fields. Required: name, vlanId, management and enabled.
+                GATEWAY also requires ipv4Configuration, cellularBackupEnabled,
+                internetAccessEnabled and isolationEnabled.
 
         Returns:
             The created network.
 
         """
         path = self._client.build_api_path(f"/sites/{site_id}/networks")
-        data: dict[str, Any] = {
-            "name": name,
-            "dhcpEnabled": dhcp_enabled,
-        }
+        if subnet is not None or dhcp_enabled is not None:
+            msg = (
+                "subnet and dhcp_enabled are unsupported; use ipv4Configuration "
+                "and management-specific fields: management, enabled, "
+                "cellularBackupEnabled, internetAccessEnabled and isolationEnabled"
+            )
+            raise ValueError(msg)
+        data: dict[str, Any] = {"name": name}
         if vlan_id is not None:
             data["vlanId"] = vlan_id
-        if subnet is not None:
-            data["subnet"] = subnet
         data.update(kwargs)
 
         response = await self._client._post(path, json_data=data)
@@ -136,19 +141,23 @@ class NetworksEndpoint:
         **kwargs: Any,
     ) -> Network:
         """
-        Update a network.
+        Update a network via full object replacement (PUT).
+
+        The OpenAPI spec requires `name`, `management`, `vlanId`, and
+        `enabled`. Keys in kwargs must match the API's camelCase names. Callers
+        should read the existing network first and send the complete object.
 
         Args:
             site_id: The site ID.
             network_id: The network ID.
-            **kwargs: Network parameters to update.
+            **kwargs: Complete network parameters for replacement (camelCase).
 
         Returns:
             The updated network.
 
         """
         path = self._client.build_api_path(f"/sites/{site_id}/networks/{network_id}")
-        response = await self._client._patch(path, json_data=kwargs)
+        response = await self._client._put(path, json_data=kwargs)
 
         if isinstance(response, dict):
             result = response.get("data", response)
@@ -196,3 +205,34 @@ class NetworksEndpoint:
             if isinstance(data, dict):
                 return data
         return {}
+
+    async def get_legacy_all(self, site_name: str) -> list[dict[str, Any]]:
+        """
+        List a site's networks from the classic API (``rest/networkconf``).
+
+        Only the fields needed to work out a network's address range are kept,
+        so the VPN keys and secrets classic network records can carry never
+        leave this method.
+
+        Args:
+            site_name: The classic site name (for example ``default``).
+
+        Returns:
+            Dicts with ``id``, ``purpose``, ``enabled`` and ``ip_subnet``.
+
+        """
+        path = self._client.build_legacy_api_path(site_name, ENDPOINT_NETWORKCONF)
+        response = await self._client._get(path)
+        data = response.get("data") if isinstance(response, dict) else None
+        if not isinstance(data, list):
+            return []
+        return [
+            {
+                "id": item.get("_id") or item.get("id"),
+                "purpose": item.get("purpose"),
+                "enabled": item.get("enabled") is not False,
+                "ip_subnet": item.get("ip_subnet"),
+            }
+            for item in data
+            if isinstance(item, dict)
+        ]

@@ -1,35 +1,49 @@
-"""Access point models for UniFi InnerSpace."""
+"""Access point models for UniFi InnerSpace API."""
 
 from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
+
+from .project import InnerSpaceBaseModel
 
 
 class InnerSpaceMountType(StrEnum):
-    """InnerSpace access point mount type."""
+    """Access point mounting orientation in InnerSpace."""
 
-    CEILING = "ceiling"
-    WALL = "wall"
-    RACK = "rack"
-    FLOOR = "floor"
+    CEILING = "CEILING"
+    WALL = "WALL"
+
+    @classmethod
+    def _missing_(cls, value: object) -> InnerSpaceMountType | None:
+        if isinstance(value, str):
+            upper = value.upper()
+            for member in cls:
+                if member.value == upper:
+                    return member
+        return None
 
 
-class InnerSpaceAccessPoint(BaseModel):
-    """InnerSpace placed access point."""
+class InnerSpaceAccessPoint(InnerSpaceBaseModel):
+    """Access point placement entry returned by ``GET /v1/access_points``."""
 
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
-
-    id: str
-    name: str
-    model: str
+    id: str = Field(min_length=1)
+    name: str = ""
     mac: str | None = None
-    serial: str | None = None
-    floor_plan_id: str = Field(alias="floor_plan_id")
-    x: float
-    y: float
-    height: float = 2.4
-    azimuth: float = 0.0
-    mount: str | InnerSpaceMountType | None = None
-    status: str = "online"
+    model: str | None = None
+    floor_plan_id: str | None = Field(default=None, alias="floorPlanId")
+    x: float | None = None
+    y: float | None = None
+    height: float | None = None
+    mount_type: InnerSpaceMountType | str | None = Field(default=None, alias="mountType")
+    orientation: float | None = None
+    tx_power_2g: float | None = Field(default=None, alias="txPower2g")
+    tx_power_5g: float | None = Field(default=None, alias="txPower5g")
+    tx_power_6g: float | None = Field(default=None, alias="txPower6g")
+
+
+__all__ = [
+    "InnerSpaceAccessPoint",
+    "InnerSpaceMountType",
+]

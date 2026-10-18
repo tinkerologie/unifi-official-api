@@ -1,40 +1,35 @@
-"""Siren models for UniFi Protect."""
+"""Siren models for UniFi Protect API."""
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Any
 
-
-class SirenLedSettings(BaseModel):
-    """Siren LED settings."""
-
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
-
-    is_enabled: bool = Field(default=True, alias="isEnabled")
-
-
-class SirenStatus(BaseModel):
-    """Siren operating status."""
-
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
-
-    is_active: bool = Field(default=False, alias="isActive")
-    activated_at: int | None = Field(default=None, alias="activatedAt")
-    duration: int | None = None
+from pydantic import BaseModel, Field
 
 
 class Siren(BaseModel):
-    """UniFi Protect Siren device."""
-
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    """Model representing a UniFi Protect siren."""
 
     id: str
+    model_key: str | None = Field(default=None, alias="modelKey")
+    state: str | None = None
     name: str | None = None
-    model_key: str = Field(default="siren", alias="modelKey")
-    state: str = "CONNECTED"
-    type: str = "siren"
-    guid: str | None = None
-    mac: str = ""
-    volume: int = 100
-    led_settings: SirenLedSettings | None = Field(default=None, alias="ledSettings")
-    status: SirenStatus | None = None
+    mac: str | None = None
+    volume: int | None = None
+    led_settings: dict[str, Any] | None = Field(default=None, alias="ledSettings")
+    siren_status: dict[str, Any] | str | None = Field(default=None, alias="sirenStatus")
+    connection_type: str | None = Field(default=None, alias="connectionType")
+    wireless_connection_state: dict[str, Any] | None = Field(
+        default=None, alias="wirelessConnectionState"
+    )
+
+    model_config = {"populate_by_name": True, "extra": "allow"}
+
+    @property
+    def display_name(self) -> str:
+        """Get the display name for the siren."""
+        return self.name or self.mac or self.id
+
+
+SirenLedSettings = dict[str, Any]
+SirenStatus = dict[str, Any]

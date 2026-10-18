@@ -1,17 +1,30 @@
-"""Inventory device models for UniFi InnerSpace."""
+"""Inventory models for UniFi InnerSpace API."""
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import Field
+
+from .project import InnerSpaceBaseModel
 
 
-class InventoryDevice(BaseModel):
-    """InnerSpace unplaced hardware device."""
+class InnerSpaceInventoryDevice(InnerSpaceBaseModel):
+    """Device inventory entry returned by ``GET /v1/inventory``."""
 
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
-
-    id: str
-    name: str
-    model: str
+    id: str = Field(min_length=1)
+    name: str = ""
     mac: str | None = None
-    serial: str | None = None
+    model: str | None = None
+    type: str | None = None
+    placed: bool = False
+    floor_plan_id: str | None = Field(default=None, alias="floorPlanId")
+    x: float | None = None
+    y: float | None = None
+    mount_type: str | None = Field(default=None, alias="mountType")
+
+
+InventoryDevice = InnerSpaceInventoryDevice
+
+__all__ = [
+    "InnerSpaceInventoryDevice",
+    "InventoryDevice",
+]

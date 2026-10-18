@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+from .access.auth import AccessTokenAuth
+
 
 class ApiKeyType(Enum):
     """Type of API key for UniFi services."""
@@ -55,3 +57,11 @@ class LocalAuth:
 
         """
         return {"X-API-Key": self.api_key}
+
+
+__all__ = [
+    "AccessTokenAuth",
+    "ApiKeyAuth",
+    "ApiKeyType",
+    "LocalAuth",
+]

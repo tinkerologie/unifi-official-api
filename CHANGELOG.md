@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **v2.0.0 Architecture & Endpoint Uplift (Issue #41)**:
+  - Full Python ≥ 3.14 compatibility with strict static typing across all 173 source modules (`mypy src/ --strict`).
+  - Protect API expansion: cameras (with backward-compatible snapshot endpoint), alarm hubs, bridges, chimes, door locks, fobs, lights, link stations, live views, NVR, POS, relays, sensors, sirens, speakers, users, ULP users, viewers, talkback transcode/streaming, and WebSocket subscriptions.
+  - Network API expansion: firewall policies, static routes, LAGs, NAT rules, port forwards, traffic rules, vouchers, and VPN clients.
+  - Innerspace, Carrier Fabric, Mobility, and Site Manager client and endpoint additions.
+  - Strict ≥ 95% per-file branch coverage enforcement (`script/check_coverage_per_file.py`) with 3,248 tests passing at 99.75% total branch coverage and zero `# pragma: no cover` additions.
+
+### Fixed
+- Fixed release workflow tag validation f-string syntax in `.github/workflows/release.yml`.
+- Updated `.pre-commit-config.yaml` pyupgrade hook to `--py312-plus`.
+
 ### Security
 - Requires aiohttp 3.14.3 or later (was capped below 3.14.0), fixing the aiohttp advisories that affected every version the old range allowed. The lock file also moves to multidict 7.1.0, urllib3 2.8.0 and virtualenv 21.14.7, clearing their advisories. Home Assistant core already ships aiohttp 3.14.5.
 - The test suite works with aiohttp 3.14 through a small shim for aioresponses 0.7.9, whose response builder does not pass aiohttp 3.14's new `stream_writer` argument (pnuckowski/aioresponses#288). The Dependabot rule that ignored aiohttp 3.14 is removed.

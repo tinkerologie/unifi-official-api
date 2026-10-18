@@ -2,45 +2,42 @@
 
 from __future__ import annotations
 
+import builtins
 from typing import TYPE_CHECKING, Any
 
-from ..models.switch import InnerSpaceSwitch
+from unifi_official_api.innerspace.models import InnerSpaceSwitch
 
 if TYPE_CHECKING:
-    from ..client import UniFiInnerSpaceClient
+    from unifi_official_api.innerspace.client import UniFiInnerSpaceClient
 
 
 class SwitchesEndpoint:
-    """Endpoint for retrieving UniFi InnerSpace placed switches."""
+    """Endpoint for ``GET /v1/switches``."""
 
     def __init__(self, client: UniFiInnerSpaceClient) -> None:
-        """
-        Initialize the switches endpoint.
-
-        Args:
-            client: The UniFi InnerSpace client.
-        """
         self._client = client
 
-    async def get_all(self, site_id: str | None = None) -> list[InnerSpaceSwitch]:
-        """
-        List placed switches.
-
-        Args:
-            site_id: Optional site ID filter.
-
-        Returns:
-            List of placed switches.
-        """
-        path = self._client.build_api_path("/switches")
+    async def list(
+        self,
+        site_id: str | None = None,
+    ) -> builtins.list[InnerSpaceSwitch]:
+        """List switches placed on floor plans in InnerSpace."""
         params: dict[str, Any] = {}
-        if site_id:
+        if site_id is not None:
             params["siteId"] = site_id
-        response = await self._client._get(path, params=params if params else None)
-        if response is None:
-            return []
-        if isinstance(response, dict):
-            sws = response.get("switches", response.get("data", []))
-            if isinstance(sws, list):
-                return [InnerSpaceSwitch.model_validate(item) for item in sws]
-        return []
+        return await self._client._list_collection(
+            "/switches",
+            ("switches",),
+            InnerSpaceSwitch,
+            params=params if params else None,
+        )
+
+    async def get_all(
+        self,
+        site_id: str | None = None,
+    ) -> builtins.list[InnerSpaceSwitch]:
+        """List switches placed on floor plans in InnerSpace."""
+        return await self.list(site_id=site_id)
+
+
+__all__ = ["SwitchesEndpoint"]

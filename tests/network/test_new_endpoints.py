@@ -125,7 +125,9 @@ class TestVouchersEndpoint:
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
                 with pytest.raises(ValueError, match="Failed"):
-                    await client.vouchers.create("site-1", count=1)
+                    await client.vouchers.create(
+                        "site-1", name="Test", time_limit_minutes=60, count=1
+                    )
 
     async def test_vouchers_delete(self, auth: ApiKeyAuth) -> None:
         """Test deleting a voucher."""
@@ -448,6 +450,7 @@ class TestTrafficEndpoint:
                     "site-1",
                     name="New List",
                     list_type=TrafficMatchingType.IP_ADDRESS,
+                    items=[{"type": "IP_ADDRESS", "value": "1.2.3.4"}],
                 )
                 assert traffic_list.id == "list-new"
 
@@ -464,7 +467,10 @@ class TestTrafficEndpoint:
             ) as client:
                 with pytest.raises(ValueError, match="Failed"):
                     await client.traffic.create_list(
-                        "site-1", name="Test", list_type=TrafficMatchingType.IP_ADDRESS
+                        "site-1",
+                        name="Test",
+                        list_type=TrafficMatchingType.IP_ADDRESS,
+                        items=[{"type": "IP_ADDRESS", "value": "1.2.3.4"}],
                     )
 
     async def test_traffic_update_list(self, auth: ApiKeyAuth) -> None:
@@ -522,14 +528,14 @@ class TestTrafficEndpoint:
         """Test getting DPI categories."""
         with aioresponses() as m:
             m.get(
-                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/dpi/categories",
-                payload={"data": [{"id": "cat-1", "name": "Streaming"}]},
+                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/dpi/categories",
+                payload={"data": [{"id": 1, "name": "Streaming"}]},
             )
 
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                categories = await client.traffic.get_dpi_categories("site-1")
+                categories = await client.traffic.get_dpi_categories()
                 assert len(categories) == 1
                 assert categories[0].name == "Streaming"
 
@@ -537,28 +543,28 @@ class TestTrafficEndpoint:
         """Test getting DPI categories with empty response."""
         with aioresponses() as m:
             m.get(
-                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/dpi/categories",
+                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/dpi/categories",
                 payload={"data": []},
             )
 
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                categories = await client.traffic.get_dpi_categories("site-1")
+                categories = await client.traffic.get_dpi_categories()
                 assert categories == []
 
     async def test_traffic_get_dpi_applications(self, auth: ApiKeyAuth) -> None:
         """Test getting DPI applications."""
         with aioresponses() as m:
             m.get(
-                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/dpi/applications",
-                payload={"data": [{"id": "app-1", "name": "Netflix"}]},
+                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/dpi/applications",
+                payload={"data": [{"id": 1, "name": "Netflix"}]},
             )
 
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                apps = await client.traffic.get_dpi_applications("site-1")
+                apps = await client.traffic.get_dpi_applications()
                 assert len(apps) == 1
                 assert apps[0].name == "Netflix"
 
@@ -566,28 +572,28 @@ class TestTrafficEndpoint:
         """Test getting DPI applications with empty response."""
         with aioresponses() as m:
             m.get(
-                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/dpi/applications",
+                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/dpi/applications",
                 payload={"data": []},
             )
 
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                apps = await client.traffic.get_dpi_applications("site-1")
+                apps = await client.traffic.get_dpi_applications()
                 assert apps == []
 
     async def test_traffic_get_countries(self, auth: ApiKeyAuth) -> None:
         """Test getting countries."""
         with aioresponses() as m:
             m.get(
-                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/geo/countries",
+                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/countries",
                 payload={"data": [{"code": "US", "name": "United States"}]},
             )
 
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                countries = await client.traffic.get_countries("site-1")
+                countries = await client.traffic.get_countries()
                 assert len(countries) == 1
                 assert countries[0].code == "US"
 
@@ -595,14 +601,14 @@ class TestTrafficEndpoint:
         """Test getting countries with empty response."""
         with aioresponses() as m:
             m.get(
-                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/geo/countries",
+                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/countries",
                 payload={"data": []},
             )
 
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                countries = await client.traffic.get_countries("site-1")
+                countries = await client.traffic.get_countries()
                 assert countries == []
 
 
@@ -655,7 +661,7 @@ class TestResourcesEndpoint:
         with aioresponses() as m:
             m.get(
                 re.compile(
-                    r".*/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/vpn/tunnels.*"
+                    r".*/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/vpn/site-to-site-tunnels.*"
                 ),
                 payload={"data": [{"id": "vpn-1", "name": "Site-to-Site VPN", "status": "UP"}]},
             )
@@ -672,7 +678,7 @@ class TestResourcesEndpoint:
         with aioresponses() as m:
             m.get(
                 re.compile(
-                    r".*/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/vpn/tunnels.*"
+                    r".*/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/vpn/site-to-site-tunnels.*"
                 ),
                 payload={"data": []},
             )
@@ -883,7 +889,9 @@ class TestAdditionalCoverage:
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                vouchers = await client.vouchers.create("site-1", count=1)
+                vouchers = await client.vouchers.create(
+                    "site-1", name="Test", time_limit_minutes=60, count=1
+                )
                 assert len(vouchers) == 1
 
     async def test_acl_with_filters(self, auth: ApiKeyAuth) -> None:
@@ -928,9 +936,9 @@ class TestAdditionalCoverage:
                 payload={
                     "data": {
                         "id": "list-1",
-                        "type": "IP_ADDRESS",
+                        "type": "PORTS",
                         "name": "Block",
-                        "entries": ["1.2.3.4"],
+                        "entries": ["80"],
                     }
                 },
             )
@@ -941,9 +949,8 @@ class TestAdditionalCoverage:
                 lst = await client.traffic.create_list(
                     "site-1",
                     name="Block",
-                    list_type=TrafficMatchingType.IP_ADDRESS,
-                    entries=["1.2.3.4"],
-                    description="Block list",
+                    list_type=TrafficMatchingType.PORTS,
+                    entries=["80"],
                 )
                 assert lst.id == "list-1"
 
@@ -1040,18 +1047,11 @@ class TestDeviceActions:
         return ApiKeyAuth(api_key="test-api-key")
 
     async def test_device_locate(self, auth: ApiKeyAuth) -> None:
-        """Test device locate mode."""
-        with aioresponses() as m:
-            m.post(
-                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/devices/dev-1/locate",
-                status=204,
-            )
-
-            async with UniFiNetworkClient(
-                auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
-            ) as client:
-                result = await client.devices.locate("site-1", "dev-1", enabled=True)
-                assert result is True
+        """Test that locate is not exposed on devices endpoint per OpenAPI spec."""
+        async with UniFiNetworkClient(
+            auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
+        ) as client:
+            assert not hasattr(client.devices, "locate")
 
     async def test_device_get_pending_adoption(self, auth: ApiKeyAuth) -> None:
         """Test getting devices pending adoption."""
@@ -1262,14 +1262,14 @@ class TestDeviceActions:
         """Test device execute action."""
         with aioresponses() as m:
             m.post(
-                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/devices/dev-1/provision",
+                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/devices/dev-1/actions",
                 status=204,
             )
 
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                result = await client.devices.execute_action("site-1", "dev-1", "provision")
+                result = await client.devices.execute_action("site-1", "dev-1", "RESTART")
                 assert result is True
 
     async def test_device_execute_action_invalid(self, auth: ApiKeyAuth) -> None:
@@ -1292,9 +1292,9 @@ class TestClientActions:
     async def test_client_forget(self, auth: ApiKeyAuth) -> None:
         """Test client forget."""
         with aioresponses() as m:
-            m.delete(
-                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/clients/aa:bb:cc:dd:ee:ff",
-                status=204,
+            m.post(
+                "https://api.ui.com/v1/connector/consoles/test-console-id/network/api/s/site-1/cmd/stamgr",
+                payload={"meta": {"rc": "ok"}, "data": []},
             )
 
             async with UniFiNetworkClient(
@@ -1307,8 +1307,8 @@ class TestClientActions:
         """Test client execute action."""
         with aioresponses() as m:
             m.post(
-                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/clients/aa:bb:cc:dd:ee:ff/block",
-                status=204,
+                "https://api.ui.com/v1/connector/consoles/test-console-id/network/api/s/site-1/cmd/stamgr",
+                payload={"meta": {"rc": "ok"}, "data": []},
             )
 
             async with UniFiNetworkClient(
@@ -1356,7 +1356,7 @@ class TestResourcesAdditional:
         with aioresponses() as m:
             m.get(
                 re.compile(
-                    r".*/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/vpn/tunnels.*"
+                    r".*/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/vpn/site-to-site-tunnels.*"
                 ),
                 payload={"data": {"id": "vpn-1", "name": "VPN1"}},
             )
@@ -1381,14 +1381,14 @@ class TestTrafficAdditional:
         """Test DPI categories when data is a single dict."""
         with aioresponses() as m:
             m.get(
-                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/dpi/categories",
+                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/dpi/categories",
                 payload={"data": {"id": "cat-1", "name": "Test"}},
             )
 
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                categories = await client.traffic.get_dpi_categories("site-1")
+                categories = await client.traffic.get_dpi_categories()
                 # Returns empty since not a list
                 assert categories == []
 
@@ -1396,14 +1396,14 @@ class TestTrafficAdditional:
         """Test DPI applications when data is a single dict."""
         with aioresponses() as m:
             m.get(
-                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/dpi/applications",
+                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/dpi/applications",
                 payload={"data": {"id": "app-1", "name": "Test"}},
             )
 
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                apps = await client.traffic.get_dpi_applications("site-1")
+                apps = await client.traffic.get_dpi_applications()
                 # Returns empty since not a list
                 assert apps == []
 
@@ -1411,14 +1411,14 @@ class TestTrafficAdditional:
         """Test countries when data is a single dict."""
         with aioresponses() as m:
             m.get(
-                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/geo/countries",
+                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/countries",
                 payload={"data": {"code": "US", "name": "USA"}},
             )
 
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                countries = await client.traffic.get_countries("site-1")
+                countries = await client.traffic.get_countries()
                 # Returns empty since not a list
                 assert countries == []
 
@@ -1674,8 +1674,8 @@ class TestFirewallEndpoint:
                     "data": {
                         "id": "rule-new",
                         "name": "New Rule",
-                        "action": "drop",
-                        "protocol": "tcp",
+                        "action": {"type": "BLOCK"},
+                        "protocol": "all",
                     }
                 },
             )
@@ -1687,7 +1687,9 @@ class TestFirewallEndpoint:
                     "site-1",
                     name="New Rule",
                     action="drop",
-                    protocol="tcp",
+                    protocol="all",
+                    source_zone_id="zone-src",
+                    destination_zone_id="zone-dst",
                 )
                 assert rule.id == "rule-new"
 
@@ -1703,7 +1705,14 @@ class TestFirewallEndpoint:
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
                 with pytest.raises(ValueError, match="Failed"):
-                    await client.firewall.create_rule("site-1", name="Test")
+                    await client.firewall.create_rule(
+                        "site-1",
+                        name="Test",
+                        action="drop",
+                        protocol="all",
+                        source_zone_id="zone-src",
+                        destination_zone_id="zone-dst",
+                    )
 
     async def test_firewall_update_rule(self, auth: ApiKeyAuth) -> None:
         """Test updating a firewall rule."""
@@ -2083,29 +2092,18 @@ class TestFirewallPatchAndOrdering:
         return ApiKeyAuth(api_key="test-api-key")
 
     async def test_patch_rule(self, auth: ApiKeyAuth) -> None:
-        """Test patching a firewall rule (delegates to update_rule: GET + PUT)."""
+        """Test patching a firewall rule (loggingEnabled)."""
         rule_url = "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/firewall/policies/rule-1"
         with aioresponses() as m:
-            m.get(
+            m.patch(
                 rule_url,
                 payload={
                     "data": {
                         "id": "rule-1",
                         "name": "Test Rule",
                         "enabled": True,
-                        "action": "drop",
-                        "protocol": "all",
-                    }
-                },
-            )
-            m.put(
-                rule_url,
-                payload={
-                    "data": {
-                        "id": "rule-1",
-                        "name": "Test Rule",
-                        "enabled": False,
-                        "action": "drop",
+                        "loggingEnabled": True,
+                        "action": {"type": "BLOCK"},
                         "protocol": "all",
                     }
                 },
@@ -2114,16 +2112,16 @@ class TestFirewallPatchAndOrdering:
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                rule = await client.firewall.patch_rule("site-1", "rule-1", enabled=False)
+                rule = await client.firewall.patch_rule("site-1", "rule-1", logging_enabled=True)
                 assert rule.id == "rule-1"
-                assert rule.enabled is False
+                assert rule.logging_enabled is True
 
     async def test_get_policy_ordering(self, auth: ApiKeyAuth) -> None:
         """Test getting firewall policy ordering."""
         with aioresponses() as m:
             m.get(
                 re.compile(
-                    r".*/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/firewall/policy-orderings.*"
+                    r".*/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/firewall/policies/ordering.*"
                 ),
                 payload={
                     "data": {
@@ -2140,8 +2138,8 @@ class TestFirewallPatchAndOrdering:
             ) as client:
                 ordering = await client.firewall.get_policy_ordering(
                     "site-1",
-                    access_zone_id="zone-a",
-                    infrastructure_zone_id="zone-b",
+                    source_firewall_zone_id="zone-a",
+                    destination_firewall_zone_id="zone-b",
                 )
                 assert ordering.ordered_firewall_policy_ids.before_system_defined == [
                     "policy-1",
@@ -2154,7 +2152,7 @@ class TestFirewallPatchAndOrdering:
         with aioresponses() as m:
             m.put(
                 re.compile(
-                    r".*/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/firewall/policy-orderings.*"
+                    r".*/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/firewall/policies/ordering.*"
                 ),
                 payload={
                     "data": {
@@ -2171,9 +2169,12 @@ class TestFirewallPatchAndOrdering:
             ) as client:
                 ordering = await client.firewall.update_policy_ordering(
                     "site-1",
-                    access_zone_id="zone-a",
-                    infrastructure_zone_id="zone-b",
-                    ordered_policy_ids=["policy-2", "policy-1"],
+                    source_firewall_zone_id="zone-a",
+                    destination_firewall_zone_id="zone-b",
+                    ordered_firewall_policy_ids={
+                        "beforeSystemDefined": ["policy-2", "policy-1"],
+                        "afterSystemDefined": [],
+                    },
                 )
                 assert ordering.ordered_firewall_policy_ids.before_system_defined == [
                     "policy-2",

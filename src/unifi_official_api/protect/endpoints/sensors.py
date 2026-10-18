@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
+
+from pydantic import ValidationError
 
 from ..models import Sensor
 
 if TYPE_CHECKING:
     from ..client import UniFiProtectClient
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class SensorsEndpoint:
@@ -22,6 +27,11 @@ class SensorsEndpoint:
 
         """
         self._client = client
+        # False when the most recent get_all() silently dropped an item on a
+        # ValidationError. Callers need to tell a complete listing from a short
+        # one: a device absent because its payload would not parse is still
+        # adopted, and must not be treated as removed.
+        self.last_result_complete: bool = True
 
     async def get_all(self, site_id: str | None = None) -> list[Sensor]:
         """
@@ -35,15 +45,28 @@ class SensorsEndpoint:
 
         """
         path = self._client.build_api_path("/sensors", site_id)
+        self.last_result_complete = True
         response = await self._client._get(path)
 
         if response is None:
             return []
 
         data = response.get("data", response) if isinstance(response, dict) else response
-        if isinstance(data, list):
-            return [Sensor.model_validate(item) for item in data]
-        return []
+        if not isinstance(data, list):
+            return []
+
+        sensors: list[Sensor] = []
+        for item in data:
+            try:
+                sensors.append(Sensor.model_validate(item))
+            except ValidationError as err:
+                self.last_result_complete = False
+                _LOGGER.warning(
+                    "Skipping sensor that failed to parse (id=%s): %s",
+                    item.get("id") if isinstance(item, dict) else "?",
+                    err,
+                )
+        return sensors
 
     async def get(self, sensor_id: str, site_id: str | None = None) -> Sensor:
         """
@@ -135,4 +158,4 @@ class SensorsEndpoint:
         """
         if not 0 <= sensitivity <= 100:
             raise ValueError("Sensitivity must be between 0 and 100")
-        return await self.update(sensor_id, site_id, motionSensitivity=sensitivity)
+        return await self.update(sensor_id, site_id, motionSettings={"sensitivity": sensitivity})
