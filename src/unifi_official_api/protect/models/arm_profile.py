@@ -39,7 +39,7 @@ class ArmProfile(BaseModel):
     created_at: Any | None = Field(default=None, alias="createdAt")
     updated_at: Any | None = Field(default=None, alias="updatedAt")
     arm_auto_away_enabled: bool | None = Field(default=None, alias="armAutoAwayEnabled")
-    bypass_Next_schedule: bool | None = Field(default=None, alias="bypassNextSchedule")
+    bypass_next_schedule: bool | None = Field(default=None, alias="bypassNextSchedule")
     entry_delay: int | None = Field(default=None, alias="entryDelay")
     exit_delay: int | None = Field(default=None, alias="exitDelay")
     automations: list[str | dict[str, Any]] | dict[str, Any] | None = None

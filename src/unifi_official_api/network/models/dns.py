@@ -61,7 +61,7 @@ class DNSPolicy(BaseModel):
     ipv6_address: str | None = Field(default=None, alias="ipv6Address")
     target_domain: str | None = Field(default=None, alias="targetDomain")
     mail_server_domain: str | None = Field(default=None, alias="mailServerDomain")
-    Text: str | None = Field(default=None, alias="text")
+    text: str | None = Field(default=None, alias="text")
     server_domain: str | None = Field(default=None, alias="serverDomain")
     ip_address: str | None = Field(default=None, alias="ipAddress")
     ttl_seconds: int | None = Field(default=None, alias="ttlSeconds")
@@ -89,7 +89,7 @@ class DNSPolicy(BaseModel):
             or self.ipv6_address
             or self.target_domain
             or self.mail_server_domain
-            or self.Text
+            or self.text
             or self.server_domain
             or self.ip_address
         )

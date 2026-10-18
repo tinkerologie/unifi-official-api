@@ -289,6 +289,24 @@ def test_dns_model_accepts_unknown_type() -> None:
     assert dns.type == "HTTPS_RECORD"
 
 
+def test_dns_model_text_field() -> None:
+    """DNS model should parse lowercase 'text' field and surface in value property."""
+    dns = DNSPolicy.model_validate(
+        {"id": "d-2", "type": "TXT_RECORD", "text": "v=spf1 include:_spf.google.com ~all"}
+    )
+    assert dns.text == "v=spf1 include:_spf.google.com ~all"
+    assert dns.value == "v=spf1 include:_spf.google.com ~all"
+
+
+def test_arm_profile_bypass_next_schedule() -> None:
+    """ArmProfile model should support snake_case bypass_next_schedule and alias bypassNextSchedule."""
+    profile = ArmProfile.model_validate({"id": "arm-1", "bypassNextSchedule": True})
+    assert profile.bypass_next_schedule is True
+
+    profile2 = ArmProfile(id="arm-2", bypass_next_schedule=False)
+    assert profile2.bypass_next_schedule is False
+
+
 def test_resources_model_accepts_unknown_statuses() -> None:
     """WAN and VPN tunnel models should accept unknown status strings."""
     wan = WANInterface.model_validate({"id": "wan-1", "name": "WAN", "status": "DEGRADED"})
