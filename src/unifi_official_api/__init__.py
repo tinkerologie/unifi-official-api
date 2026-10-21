@@ -2,7 +2,7 @@
 
 This library provides async Python clients for the official UniFi APIs:
 - UniFi Network API: Manage network devices, clients, WiFi, and more
-- UniFi Protect API: Manage cameras, sensors, lights, and NVR settings
+- UniFi Protect API: Manage cameras, sensors, lights, and read NVR information
 - UniFi Access API: Manage doors, emergency modes, users, and webhooks
 - UniFi InnerSpace API: Floor plans, CAD imports, and WiFi heatmaps
 - UniFi Mobility API: LTE/5G mobile routers, failover, and data usage

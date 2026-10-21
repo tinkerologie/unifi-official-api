@@ -31,7 +31,6 @@ from .endpoints import (
     BridgesEndpoint,
     CamerasEndpoint,
     ChimesEndpoint,
-    EventsEndpoint,
     FobsEndpoint,
     LightsEndpoint,
     LinkStationsEndpoint,
@@ -54,7 +53,7 @@ class UniFiProtectClient(BaseUniFiClient):
     Async client for the UniFi Protect API.
 
     This client provides access to the official UniFi Protect API for managing
-    cameras, sensors, lights, chimes, viewers, and NVR settings.
+    cameras, sensors, lights, chimes, viewers, and NVR information.
 
     Supports two connection types:
     - LOCAL: Direct connection to a UniFi console (e.g., UDM-Pro at 192.168.1.1)
@@ -172,7 +171,6 @@ class UniFiProtectClient(BaseUniFiClient):
         self._pos = POSEndpoint(self)
         self._nvr = NVREndpoint(self)
         self._liveviews = LiveViewsEndpoint(self)
-        self._events = EventsEndpoint(self)
         self._viewers = ViewersEndpoint(self)
         self._application = ApplicationEndpoint(self)
         self._websocket = ProtectWebSocket(self)
@@ -308,11 +306,6 @@ class UniFiProtectClient(BaseUniFiClient):
         return self._liveviews
 
     @property
-    def events(self) -> EventsEndpoint:
-        """Access event management endpoints."""
-        return self._events
-
-    @property
     def viewers(self) -> ViewersEndpoint:
         """Access viewer management endpoints."""
         return self._viewers
@@ -344,22 +337,6 @@ class UniFiProtectClient(BaseUniFiClient):
         response = await self._get(self.build_api_path("/cameras"))
         return response is not None
 
-    async def get_sites(self) -> list[dict[str, Any]]:
-        """
-        Get list of available sites.
-
-        Returns:
-            List of site information dictionaries.
-
-        """
-        response = await self._get(self.build_api_path("/sites"))
-        if response is None:
-            return []
-        data = response.get("data", response) if isinstance(response, dict) else response
-        if isinstance(data, list):
-            return data
-        return []
-
     async def get_host_id(self) -> str:
         """
         Get the host ID for WebSocket subscriptions.
@@ -377,7 +354,7 @@ class UniFiProtectClient(BaseUniFiClient):
             ```python
             # Get host_id for WebSocket subscriptions
             host_id = await client.get_host_id()
-            site_id = "your-site-id"  # Or get from client.get_sites()
+            site_id = "default"
 
             async with client.websocket.subscribe_events(host_id, site_id) as events:
                 async for event in events:

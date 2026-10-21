@@ -7,15 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Removed
+### Added
 
-- **Breaking:** `TalkbackStream` no longer takes the unused third positional argument; everything after `media_source` is keyword-only, so `TalkbackStream(session, url, hass)` raises `TypeError` (#47). Migration: `TalkbackStream(session, url, loop=hass.loop)` or `TalkbackStream(session, url, executor=hass.async_add_executor_job)`.
-- **Breaking:** the `TalkbackStream.media_url` compatibility alias is removed (#47). Migration: read `media_source`.
+- A test vendors the Protect 7.3.70 OpenAPI spec and fails when any public Protect method sends an operation the spec does not document, or when a `build_api_path` call site is not exercised (#44).
 
 ### Changed
 
 - `TalkbackStream` documents its `loop` and `executor` keywords: the worker runs in a dedicated daemon thread unless `executor` (an awaitable-returning callable such as `hass.async_add_executor_job`) is given (#47).
 - `pre-commit run --all-files` passes again on Python 3.14: every hook is updated to its current release, mypy checks the whole package like CI, pyupgrade targets 3.13 so it keeps `from __future__ import annotations`, and `tests/fixtures/` is no longer checked as test modules.
+
+### Removed
+
+- **Breaking:** `TalkbackStream` no longer takes the unused third positional argument; everything after `media_source` is keyword-only, so `TalkbackStream(session, url, hass)` raises `TypeError` (#47). Migration: `TalkbackStream(session, url, loop=hass.loop)` or `TalkbackStream(session, url, executor=hass.async_add_executor_job)`.
+- **Breaking:** the `TalkbackStream.media_url` compatibility alias is removed (#47). Migration: read `media_source`.
+- **Breaking:** Protect methods that called operations missing from the pinned Protect 7.3.70 OpenAPI spec are removed; a console answered them with 404 (#44):
+  - `CamerasEndpoint.restart()` (`POST /cameras/{id}/restart`). The official API cannot restart a camera; drop the call.
+  - `CamerasEndpoint.ptz_move()` (`POST /cameras/{id}/ptz/move`). Use `ptz_goto_preset()`, `ptz_patrol_start()` or `ptz_patrol_stop()`.
+  - `NVREndpoint.update()` and `NVREndpoint.set_recording_retention()` (`PATCH /nvr`). The spec only reads the NVR; keep using `nvr.get()`.
+  - `NVREndpoint.restart()` (`POST /nvr/restart`). Drop the call.
+  - `LiveViewsEndpoint.delete()` (`DELETE /liveviews/{id}`). The spec has no live view delete; drop the call.
+  - `UniFiProtectClient.get_sites()` (`GET /sites`). Protect paths are not site-scoped; pass `"default"` as the WebSocket `site_id` for local consoles.
+  - `UniFiProtectClient.events` and `EventsEndpoint` with all its methods (`get_all`, `get`, `get_thumbnail`, `get_heatmap`, `list_motion_events`, `list_smart_detect_events`; `/events/...`). Use `client.websocket.subscribe_events()`, which reads `GET /v1/subscribe/events`. The `Event`, `EventType` and `SmartDetectType` models stay.
 
 ### Fixed
 
