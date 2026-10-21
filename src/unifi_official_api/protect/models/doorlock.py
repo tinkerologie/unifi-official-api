@@ -6,6 +6,8 @@ resource; door locks are surfaced through the ``doorlock`` WebSocket
 parse those WebSocket payloads.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from pydantic import BaseModel, Field

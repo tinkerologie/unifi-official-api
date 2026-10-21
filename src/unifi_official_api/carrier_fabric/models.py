@@ -1,5 +1,7 @@
 """Pydantic models for the UniFi Carrier Fabric API."""
 
+from __future__ import annotations
+
 from typing import Any
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator

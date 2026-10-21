@@ -1,5 +1,7 @@
 """Endpoint groups for the UniFi Access developer API."""
 
+from __future__ import annotations
+
 from .devices import DevicesEndpoint
 from .doors import GATE_COMMANDS, DoorsEndpoint, GateCommand
 from .emergency import EmergencyEndpoint

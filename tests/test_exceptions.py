@@ -1,5 +1,7 @@
 """Tests for exceptions module."""
 
+from __future__ import annotations
+
 from unifi_official_api import (
     UniFiAuthenticationError,
     UniFiConnectionError,

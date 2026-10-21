@@ -1,6 +1,8 @@
 # Copyright 2026 UniFi Insights contributors
 """Tests for UniFi API client shared plumbing."""
 
+from __future__ import annotations
+
 from datetime import UTC, datetime
 from typing import Any, Self
 from unittest.mock import MagicMock, patch

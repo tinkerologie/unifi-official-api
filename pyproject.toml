@@ -133,6 +133,9 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["unifi_official_api"]
+# Keeps annotations as strings, so inspect.signature() and mock autospec never
+# evaluate a type imported only under TYPE_CHECKING (tests/test_introspection.py).
+required-imports = ["from __future__ import annotations"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = [

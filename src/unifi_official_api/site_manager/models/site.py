@@ -1,5 +1,7 @@
 """Site models for UniFi Site Manager."""
 
+from __future__ import annotations
+
 from pydantic import BaseModel, ConfigDict, Field
 
 

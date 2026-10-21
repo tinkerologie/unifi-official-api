@@ -1,5 +1,7 @@
 """Tests for UniFi Network models."""
 
+from __future__ import annotations
+
 from unifi_official_api.network import (
     Client,
     ClientType,

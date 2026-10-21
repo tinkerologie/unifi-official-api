@@ -1,6 +1,8 @@
 # Copyright (c) 2026 Ruaan Deysel
 """Endpoints for UniFi Carrier Fabric API."""
 
+from __future__ import annotations
+
 import enum
 import logging
 import uuid

@@ -1,5 +1,7 @@
 """Door endpoints for the UniFi Access developer API."""
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any, Literal
 
 from ...exceptions import UniFiValidationError

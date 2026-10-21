@@ -1,5 +1,7 @@
 """Tests for UniFi Protect models."""
 
+from __future__ import annotations
+
 from datetime import UTC, datetime
 
 from unifi_official_api.protect import (

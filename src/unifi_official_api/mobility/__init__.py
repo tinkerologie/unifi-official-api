@@ -1,5 +1,7 @@
 """UniFi Mobility API module."""
 
+from __future__ import annotations
+
 from .client import UniFiMobilityClient, is_valid_mobility_id
 from .models import (
     AdminPermission,

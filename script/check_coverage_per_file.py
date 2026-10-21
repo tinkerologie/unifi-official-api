@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Check per-file test coverage against a threshold from Cobertura XML."""
 
+from __future__ import annotations
+
 import argparse
 import sys
 import xml.etree.ElementTree as ET

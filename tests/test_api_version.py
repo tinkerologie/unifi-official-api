@@ -1,6 +1,8 @@
 # Copyright 2026 UniFi Insights contributors
 """Tests for the UniFi Official API version and pinned specification versions."""
 
+from __future__ import annotations
+
 from unifi_official_api._version import __version__ as version_from_module
 from unifi_official_api.const import (
     ACCESS_DOC_VERSION,

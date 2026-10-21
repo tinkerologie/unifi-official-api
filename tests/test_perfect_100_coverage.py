@@ -1,5 +1,7 @@
 """Tests covering all remaining edge cases to achieve 100% coverage across the codebase."""
 
+from __future__ import annotations
+
 from unittest.mock import AsyncMock
 
 import aiohttp

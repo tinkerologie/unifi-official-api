@@ -9,7 +9,7 @@ applyTo: "src/**/*.py, tests/**/*.py"
 ## Language and Style
 
 - Target Python 3.14+ (`requires-python` in `pyproject.toml`).
-- Do not add `from __future__ import annotations`: Python 3.14 evaluates annotations lazily, and the pyupgrade pre-commit hook (`--py314-plus`) removes the import.
+- Start every module with `from __future__ import annotations`. Python 3.14 evaluates annotations lazily, but without the import, `inspect.signature()` (and `unittest.mock.create_autospec` / `patch(autospec=True)`) evaluates them, and types imported only under `TYPE_CHECKING` raise `NameError`. `tests/test_introspection.py` checks every public signature; pyupgrade runs with `--py313-plus` so it keeps the import.
 - Keep full type hints on public and internal functions unless intentionally private/simple.
 - Follow Ruff and MyPy strictness expectations in `pyproject.toml`.
 

@@ -1,6 +1,8 @@
 # Copyright 2026 UniFi Insights contributors
 """Tests for the UniFi Access client: transport, auth, errors and logging."""
 
+from __future__ import annotations
+
 import json
 import logging
 from typing import TYPE_CHECKING, Any

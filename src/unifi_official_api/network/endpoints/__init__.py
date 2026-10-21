@@ -1,5 +1,7 @@
 """Endpoint modules for UniFi Network API."""
 
+from __future__ import annotations
+
 from .acl import ACLEndpoint
 from .clients import ClientsEndpoint
 from .devices import DevicesEndpoint

@@ -1,5 +1,7 @@
 """UniFi Network API module."""
 
+from __future__ import annotations
+
 from .client import UniFiNetworkClient
 from .models import (
     DEFAULT_SITE_REPORT_ATTRS,

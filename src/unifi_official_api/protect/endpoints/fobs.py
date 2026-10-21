@@ -1,5 +1,7 @@
 """Fob endpoint for UniFi Protect API."""
 
+from __future__ import annotations
+
 from ..models.fob import Fob
 from ._base import ProtectDeviceEndpoint
 

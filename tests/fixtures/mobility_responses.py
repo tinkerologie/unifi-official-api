@@ -1,6 +1,8 @@
 # Copyright 2026 UniFi Insights contributors
 """UniFi Mobility API records taken from the published v1.0.0 spec examples."""
 
+from __future__ import annotations
+
 import copy
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock

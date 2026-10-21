@@ -1,6 +1,8 @@
 # Copyright (c) 2026 Ruaan Deysel
 """Tests for the UniFi Carrier Fabric API client and models."""
 
+from __future__ import annotations
+
 import json
 import logging
 import uuid

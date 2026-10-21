@@ -1,5 +1,7 @@
 """Hosts endpoint for UniFi Site Manager API."""
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
 
 from ..models.host import Host, HostListResponse

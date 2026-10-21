@@ -1,5 +1,7 @@
 """Cloud Connector proxy endpoint for UniFi Site Manager API."""
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:

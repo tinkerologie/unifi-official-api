@@ -1,5 +1,7 @@
 """Error mapping for the UniFi Access developer API."""
 
+from __future__ import annotations
+
 import json
 import re
 from http import HTTPStatus

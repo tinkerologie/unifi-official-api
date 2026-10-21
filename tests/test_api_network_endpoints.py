@@ -1,6 +1,8 @@
 # Copyright 2026 UniFi Insights contributors
 """Tests for UniFi Network endpoint methods pinning requests against the spec."""
 
+from __future__ import annotations
+
 import json
 import logging
 from typing import Any, Self

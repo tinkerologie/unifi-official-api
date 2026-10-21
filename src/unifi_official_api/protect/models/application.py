@@ -1,5 +1,7 @@
 """Application and POS models for UniFi Protect API."""
 
+from __future__ import annotations
+
 from .files import ApplicationInfo
 from .pos import (
     POSLineItem,

@@ -1,5 +1,7 @@
 """Client for the UniFi Access developer API on the console's own port."""
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any, Final
 
 from yarl import URL

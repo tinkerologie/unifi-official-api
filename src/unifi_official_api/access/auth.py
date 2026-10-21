@@ -1,5 +1,7 @@
 """Bearer token authentication for the UniFi Access developer API."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 

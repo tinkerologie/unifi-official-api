@@ -1,5 +1,7 @@
 """User models for UniFi Protect API."""
 
+from __future__ import annotations
+
 from pydantic import BaseModel, Field
 
 from .ulp_user import ULPUser, UlpUser, UlpUserStatus
