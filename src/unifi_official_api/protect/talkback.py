@@ -225,13 +225,28 @@ def _transcode_and_stream(
 
 
 class TalkbackStream:
-    """Talkback audio stream runner."""
+    """
+    Talkback audio stream runner.
+
+    Everything after ``media_source`` is keyword-only.
+
+    Args:
+        session: The negotiated talkback session to stream to.
+        media_source: The media URL or file path to transcode and stream.
+        loop: The event loop that owns the completion future and receives
+            the worker's completion callbacks. Defaults to the loop running
+            when ``start()`` is called.
+        executor: Optional callable that runs the blocking worker, called as
+            ``executor(func, *args)`` and returning an awaitable, for example
+            Home Assistant's ``HomeAssistant.async_add_executor_job``. When
+            omitted, the worker runs in a dedicated daemon thread.
+
+    """
 
     def __init__(
         self,
         session: TalkbackSession,
         media_source: str,
-        _context: Any = None,
         *,
         loop: asyncio.AbstractEventLoop | None = None,
         executor: Callable[..., Awaitable[Any]] | None = None,
@@ -239,8 +254,6 @@ class TalkbackStream:
         """Initialize the talkback stream."""
         self.session = session
         self.media_source = media_source
-        self.media_url = media_source  # Compatibility alias
-        self._context = _context
         self._loop = loop
         self._executor = executor
         self._stop_event = threading.Event()

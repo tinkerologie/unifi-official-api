@@ -26,12 +26,6 @@ from unifi_official_api.protect.talkback import (
 )
 
 
-@pytest.fixture
-def hass() -> Any:
-    """Fixture providing mock context for talkback stream tests."""
-    return MagicMock()
-
-
 def _make_session(
     url: str = "rtp://192.168.1.10:7004",
     codec: str = "opus",
@@ -415,10 +409,10 @@ def test_transcode_and_stream_close_exceptions_suppressed() -> None:
 
 
 @pytest.mark.asyncio
-async def test_talkback_stream_lifecycle(hass: Any) -> None:
+async def test_talkback_stream_lifecycle() -> None:
     """Test TalkbackStream start, running, stop, and complete."""
     session = _make_session()
-    stream = TalkbackStream(session, "media.mp3", hass)
+    stream = TalkbackStream(session, "media.mp3")
 
     assert not stream.running
 
@@ -440,10 +434,10 @@ async def test_talkback_stream_lifecycle(hass: Any) -> None:
 
 
 @pytest.mark.asyncio
-async def test_talkback_stream_worker_error_propagation(hass: Any) -> None:
+async def test_talkback_stream_worker_error_propagation() -> None:
     """Test worker error propagation through wait_until_complete."""
     session = _make_session()
-    stream = TalkbackStream(session, "media.mp3", hass)
+    stream = TalkbackStream(session, "media.mp3")
 
     with patch(
         "unifi_official_api.protect.talkback._transcode_and_stream",
@@ -459,10 +453,10 @@ async def test_talkback_stream_worker_error_propagation(hass: Any) -> None:
 
 
 @pytest.mark.asyncio
-async def test_talkback_stream_wait_until_complete_stored_error(hass: Any) -> None:
+async def test_talkback_stream_wait_until_complete_stored_error() -> None:
     """Test wait_until_complete re-raises stored _error if worker task is None."""
     session = _make_session()
-    stream = TalkbackStream(session, "media.mp3", hass)
+    stream = TalkbackStream(session, "media.mp3")
     stream._error = TalkbackError("Pre-existing error")
 
     with pytest.raises(TalkbackError, match="Pre-existing error"):
@@ -612,28 +606,28 @@ def test_transcode_and_stream_generic_runtime_error_during_mux() -> None:
 
 
 @pytest.mark.asyncio
-async def test_talkback_stream_stop_before_start(hass: Any) -> None:
+async def test_talkback_stream_stop_before_start() -> None:
     """Test stop() when stream has not been started."""
     session = _make_session()
-    stream = TalkbackStream(session, "media.mp3", hass)
+    stream = TalkbackStream(session, "media.mp3")
     await stream.stop()
     assert not stream.running
 
 
 @pytest.mark.asyncio
-async def test_talkback_stream_wait_until_complete_unstarted(hass: Any) -> None:
+async def test_talkback_stream_wait_until_complete_unstarted() -> None:
     """Test wait_until_complete() when stream has not been started and no error."""
     session = _make_session()
-    stream = TalkbackStream(session, "media.mp3", hass)
+    stream = TalkbackStream(session, "media.mp3")
     await stream.wait_until_complete()
 
 
 @pytest.mark.parametrize("outcome", ["success", "error"])
 @pytest.mark.asyncio
-async def test_talkback_stream_worker_skips_cancelled_future(outcome: str, hass: Any) -> None:
+async def test_talkback_stream_worker_skips_cancelled_future(outcome: str) -> None:
     """Test worker does not resolve a future cancelled by its waiter."""
     session = _make_session()
-    stream = TalkbackStream(session, "media.mp3", hass)
+    stream = TalkbackStream(session, "media.mp3")
     mux_entered = threading.Event()
     release_mux = threading.Event()
     mux_error = RuntimeError("mux failed")
@@ -705,10 +699,10 @@ async def test_talkback_stream_worker_skips_cancelled_future(outcome: str, hass:
 
 
 @pytest.mark.asyncio
-async def test_talkback_stream_stop_with_cancelled_future(hass: Any) -> None:
+async def test_talkback_stream_stop_with_cancelled_future() -> None:
     """Test stop() when _worker_future was directly cancelled."""
     session = _make_session()
-    stream = TalkbackStream(session, "media.mp3", hass)
+    stream = TalkbackStream(session, "media.mp3")
     worker_started = threading.Event()
     release_worker = threading.Event()
 
@@ -749,12 +743,10 @@ async def test_talkback_stream_stop_with_cancelled_future(hass: Any) -> None:
 
 
 @pytest.mark.asyncio
-async def test_talkback_stream_cancelled_waiter_leaves_worker_running(
-    hass: Any,
-) -> None:
+async def test_talkback_stream_cancelled_waiter_leaves_worker_running() -> None:
     """Test reproducing ticket: cancelled waiter leaves worker alive until stop."""
     session = _make_session()
-    stream = TalkbackStream(session, "media.mp3", hass)
+    stream = TalkbackStream(session, "media.mp3")
     worker_started = threading.Event()
     release_worker = threading.Event()
 
@@ -802,10 +794,10 @@ async def test_talkback_stream_cancelled_waiter_leaves_worker_running(
 
 @pytest.mark.parametrize("outcome", ["success", "error"])
 @pytest.mark.asyncio
-async def test_talkback_stream_resolve_callback_race(outcome: str, hass: Any) -> None:
+async def test_talkback_stream_resolve_callback_race(outcome: str) -> None:
     """Test race where future is cancelled before resolve callback runs on loop."""
     session = _make_session()
-    stream = TalkbackStream(session, "media.mp3", hass)
+    stream = TalkbackStream(session, "media.mp3")
     worker_finished = threading.Event()
     worker_error = RuntimeError("transcode crashed")
 
@@ -868,10 +860,10 @@ async def test_talkback_stream_resolve_callback_race(outcome: str, hass: Any) ->
 
 
 @pytest.mark.asyncio
-async def test_talkback_stream_stop_after_completed_worker_error(hass: Any) -> None:
+async def test_talkback_stream_stop_after_completed_worker_error() -> None:
     """Test stop() after worker error completes future; wait_until_complete raises."""
     session = _make_session()
-    stream = TalkbackStream(session, "media.mp3", hass)
+    stream = TalkbackStream(session, "media.mp3")
     worker_error = RuntimeError("transcode crashed")
 
     def _worker(
@@ -910,10 +902,10 @@ async def test_talkback_stream_stop_after_completed_worker_error(hass: Any) -> N
 
 
 @pytest.mark.asyncio
-async def test_talkback_stream_pending_stop_caller_cancellation(hass: Any) -> None:
+async def test_talkback_stream_pending_stop_caller_cancellation() -> None:
     """Test caller cancellation during stop propagates while shield protects future."""
     session = _make_session()
-    stream = TalkbackStream(session, "media.mp3", hass)
+    stream = TalkbackStream(session, "media.mp3")
     worker_started = threading.Event()
     worker_unblock = threading.Event()
 
@@ -988,3 +980,52 @@ async def test_talkback_stream_custom_executor_failure() -> None:
     with pytest.raises(RuntimeError, match="executor error"):
         await stream.wait_until_complete()
     assert stream.running is False
+
+
+def test_talkback_stream_rejects_third_positional_argument() -> None:
+    """A legacy third positional context argument raises TypeError."""
+    with pytest.raises(TypeError, match="positional"):
+        TalkbackStream(_make_session(), "media.mp3", MagicMock())  # type: ignore[call-arg]
+
+
+def test_talkback_stream_rejects_media_url_keyword() -> None:
+    """The removed media_url name is neither a keyword nor an attribute."""
+    with pytest.raises(TypeError, match="media_url"):
+        TalkbackStream(_make_session(), media_url="media.mp3")  # type: ignore[call-arg]
+    stream = TalkbackStream(_make_session(), "media.mp3")
+    assert stream.media_source == "media.mp3"
+    assert not hasattr(stream, "media_url")
+
+
+@pytest.mark.asyncio
+async def test_talkback_stream_explicit_loop_runs_in_daemon_thread() -> None:
+    """With loop= and no executor, the worker runs in a daemon thread on that loop."""
+    session = _make_session()
+    loop = asyncio.get_running_loop()
+    stream = TalkbackStream(session, "media.mp3", loop=loop)
+
+    with patch("unifi_official_api.protect.talkback._transcode_and_stream") as mock_worker:
+        await stream.start()
+        assert stream._worker_future is not None
+        assert stream._worker_future.get_loop() is loop
+        assert stream._thread is not None
+        assert stream._thread.daemon
+        await stream.wait_until_complete()
+
+    mock_worker.assert_called_once_with(session, "media.mp3", stream._stop_event)
+
+
+@pytest.mark.asyncio
+async def test_talkback_stream_executor_receives_worker_and_arguments() -> None:
+    """The executor is called as executor(func, *args) and no thread is started."""
+    session = _make_session()
+    calls: list[tuple[Any, ...]] = []
+
+    async def fake_executor(func: Any, *args: Any) -> None:
+        calls.append((func, *args))
+
+    stream = TalkbackStream(session, "media.mp3", executor=fake_executor)
+    await stream.start()
+    await stream.wait_until_complete()
+    assert calls == [(_transcode_and_stream, session, "media.mp3", stream._stop_event)]
+    assert stream._thread is None

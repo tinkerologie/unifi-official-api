@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **Breaking:** `TalkbackStream` no longer takes the unused third positional argument; everything after `media_source` is keyword-only, so `TalkbackStream(session, url, hass)` raises `TypeError` (#47). Migration: `TalkbackStream(session, url, loop=hass.loop)` or `TalkbackStream(session, url, executor=hass.async_add_executor_job)`.
+- **Breaking:** the `TalkbackStream.media_url` compatibility alias is removed (#47). Migration: read `media_source`.
+
+### Changed
+
+- `TalkbackStream` documents its `loop` and `executor` keywords: the worker runs in a dedicated daemon thread unless `executor` (an awaitable-returning callable such as `hass.async_add_executor_job`) is given (#47).
+
 ## [2.0.0] - 2026-10-18
 
 ### Added
