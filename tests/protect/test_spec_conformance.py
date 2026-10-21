@@ -109,14 +109,21 @@ SPEC_OPERATIONS = _spec_operations()
 
 
 def _spec_template(operation: Operation) -> str | None:
-    """Return the spec path template documenting ``operation``, or None."""
-    for _pattern, template, methods in SPEC_OPERATIONS:
-        if template == operation.path:
-            return template if operation.method in methods else None
-    for pattern, template, methods in SPEC_OPERATIONS:
-        if pattern.match(operation.path) and operation.method in methods:
-            return template
-    return None
+    """
+    Return the spec path template documenting ``operation``, or None.
+
+    A path matching several templates belongs to the one with the fewest
+    parameters, so ``/arm-profiles/enable`` is never read as ``/arm-profiles/{id}``.
+    """
+    matches = [
+        (template.count("{"), template, methods)
+        for pattern, template, methods in SPEC_OPERATIONS
+        if pattern.match(operation.path)
+    ]
+    if not matches:
+        return None
+    _parameters, template, methods = min(matches)
+    return template if operation.method in methods else None
 
 
 class Recorder:
@@ -305,6 +312,8 @@ async def test_unsupported_methods_send_nothing(name: str) -> None:
         (Operation("get", "/v1/cameras/id-camera/snapshot"), "/v1/cameras/{id}/snapshot"),
         (Operation("post", "/v1/arm-profiles/enable"), "/v1/arm-profiles/enable"),
         (Operation("patch", "/v1/arm-profiles/enable"), None),
+        (Operation("delete", "/v1/arm-profiles/settings"), None),
+        (Operation("delete", "/v1/arm-profiles/id-profile"), "/v1/arm-profiles/{id}"),
         (Operation("post", "/v1/cameras/id-camera/restart"), None),
         (Operation("patch", "/v1/nvrs"), None),
         (Operation("get", "/v1/cameras/id-camera/snapshot/extra"), None),
