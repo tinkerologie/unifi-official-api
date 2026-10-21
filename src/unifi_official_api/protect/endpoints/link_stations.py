@@ -1,5 +1,7 @@
 """Link station endpoint for UniFi Protect API."""
 
+from __future__ import annotations
+
 from ..models.bridge import LinkStation
 from ._base import ProtectDeviceEndpoint
 

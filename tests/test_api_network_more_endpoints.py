@@ -1,6 +1,8 @@
 # Copyright 2026 UniFi Insights contributors
 """Tests for UniFi Network endpoint methods and models (strand A2)."""
 
+from __future__ import annotations
+
 import json
 from typing import Any, Self
 

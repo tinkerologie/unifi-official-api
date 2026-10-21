@@ -6,6 +6,8 @@ resource; viewports are surfaced through the ``viewport`` WebSocket
 parse those WebSocket payloads.
 """
 
+from __future__ import annotations
+
 from pydantic import BaseModel, Field
 
 

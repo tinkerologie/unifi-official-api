@@ -1,5 +1,7 @@
 """Project endpoint for UniFi InnerSpace API."""
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
 
 from ...exceptions import UniFiResponseError

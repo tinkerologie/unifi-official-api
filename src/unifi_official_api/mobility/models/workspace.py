@@ -1,5 +1,7 @@
 """Workspace and Admin models for UniFi Mobility."""
 
+from __future__ import annotations
+
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field

@@ -1,5 +1,7 @@
 """Device models for UniFi Mobility."""
 
+from __future__ import annotations
+
 from pydantic import BaseModel, ConfigDict, Field
 
 

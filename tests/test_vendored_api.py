@@ -1,6 +1,8 @@
 # Copyright 2026 UniFi Insights contributors
 """Tests for the vendored UniFi API package."""
 
+from __future__ import annotations
+
 import copy
 import json
 import logging

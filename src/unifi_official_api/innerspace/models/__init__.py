@@ -1,5 +1,7 @@
 """Models for UniFi InnerSpace API."""
 
+from __future__ import annotations
+
 from .access_point import InnerSpaceAccessPoint, InnerSpaceMountType
 from .application import ApplicationInfo
 from .floor_plan import FloorPlan, InnerSpaceFloorPlan

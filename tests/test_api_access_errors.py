@@ -1,6 +1,8 @@
 # Copyright 2026 UniFi Insights contributors
 """Envelope error mapping: HTTP 200 codes become the same exceptions as HTTP errors."""
 
+from __future__ import annotations
+
 import json
 from typing import Any
 

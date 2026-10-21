@@ -1,5 +1,7 @@
 """Siren endpoint for UniFi Protect API."""
 
+from __future__ import annotations
+
 from typing import Final
 
 from ..models import Siren

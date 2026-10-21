@@ -1,6 +1,8 @@
 # Copyright 2026
 """Tests for vendored UniFi Protect API client endpoints and plumbing."""
 
+from __future__ import annotations
+
 import json
 from typing import Any, NamedTuple
 from unittest.mock import AsyncMock, MagicMock

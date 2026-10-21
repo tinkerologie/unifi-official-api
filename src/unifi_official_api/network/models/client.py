@@ -1,5 +1,7 @@
 """Client models for UniFi Network Integration v1 API."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from enum import StrEnum
 from typing import Any

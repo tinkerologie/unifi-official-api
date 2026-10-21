@@ -1,6 +1,8 @@
 # Copyright 2026 UniFi Insights contributors
 """Tests for the UniFi Site Manager API client."""
 
+from __future__ import annotations
+
 import logging
 from datetime import UTC, datetime
 from typing import Any, Self

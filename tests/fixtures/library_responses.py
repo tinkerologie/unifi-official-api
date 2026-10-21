@@ -2,6 +2,8 @@
 """Sample library response data for testing."""
 
 # Network API responses
+from __future__ import annotations
+
 SAMPLE_SITE = {
     "id": "default",
     "name": "Default",

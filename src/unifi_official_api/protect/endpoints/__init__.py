@@ -1,5 +1,7 @@
 """Endpoint modules for UniFi Protect API."""
 
+from __future__ import annotations
+
 from ._base import ProtectDeviceEndpoint
 from .alarm_hubs import AlarmHubsEndpoint
 from .alarm_manager import AlarmManagerEndpoint

@@ -1,5 +1,7 @@
 """Clients endpoint for UniFi Mobility API."""
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 from ..models.client import MobilityDeviceClient

@@ -1,5 +1,7 @@
 """UniFi InnerSpace API module."""
 
+from __future__ import annotations
+
 from .client import (
     MAX_ASSET_SEGMENT_LENGTH,
     UniFiInnerSpaceClient,

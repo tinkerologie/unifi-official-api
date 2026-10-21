@@ -15,7 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `TalkbackStream` documents its `loop` and `executor` keywords: the worker runs in a dedicated daemon thread unless `executor` (an awaitable-returning callable such as `hass.async_add_executor_job`) is given (#47).
-- `pre-commit run --all-files` passes again on Python 3.14: every hook is updated to its current release, mypy checks the whole package like CI, pyupgrade targets 3.14 (dropping the now redundant `from __future__ import annotations`), and `tests/fixtures/` is no longer checked as test modules.
+- `pre-commit run --all-files` passes again on Python 3.14: every hook is updated to its current release, mypy checks the whole package like CI, pyupgrade targets 3.13 so it keeps `from __future__ import annotations`, and `tests/fixtures/` is no longer checked as test modules.
+
+### Fixed
+
+- Every public function and method can be introspected again: `inspect.signature()`, `unittest.mock.create_autospec` and `patch(..., autospec=True)` raised `NameError` for annotations naming a type imported only under `TYPE_CHECKING` (such as the endpoints' client parameter), because modules no longer kept their annotations as strings. All modules use `from __future__ import annotations` again, ruff requires it, and `tests/test_introspection.py` checks every public signature. `CamerasEndpoint` already had this problem in 2.0.0.
 
 ## [2.0.0] - 2026-10-18
 

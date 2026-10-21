@@ -1,5 +1,7 @@
 """Exceptions for the UniFi Official API library."""
 
+from __future__ import annotations
+
 from typing import Any
 
 

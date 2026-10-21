@@ -1,5 +1,7 @@
 """UniFi Protect API module."""
 
+from __future__ import annotations
+
 from .client import UniFiProtectClient
 from .models import (
     NVR,

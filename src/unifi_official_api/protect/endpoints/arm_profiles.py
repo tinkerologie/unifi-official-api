@@ -1,5 +1,7 @@
 """Arm profile endpoint for UniFi Protect API."""
 
+from __future__ import annotations
+
 import contextlib
 import json
 import logging

@@ -1,5 +1,7 @@
 """Site models for UniFi Network API."""
 
+from __future__ import annotations
+
 from enum import StrEnum
 from typing import Self
 

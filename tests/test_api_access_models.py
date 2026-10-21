@@ -1,6 +1,8 @@
 # Copyright 2026 UniFi Insights contributors
 """Tolerant model and parser tests for UniFi Access payloads."""
 
+from __future__ import annotations
+
 import json
 import traceback
 

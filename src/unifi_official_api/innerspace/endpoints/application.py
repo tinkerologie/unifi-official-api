@@ -1,5 +1,7 @@
 """Application endpoint for UniFi InnerSpace API."""
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 from unifi_official_api.innerspace.models.application import ApplicationInfo

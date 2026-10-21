@@ -1,5 +1,7 @@
 """Policy-Based Route (Traffic Route) models for UniFi Network API."""
 
+from __future__ import annotations
+
 from typing import Any
 
 from pydantic import BaseModel, Field

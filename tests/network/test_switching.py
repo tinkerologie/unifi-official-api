@@ -1,5 +1,7 @@
 """Tests for UniFi Network switching endpoints."""
 
+from __future__ import annotations
+
 import pytest
 from aioresponses import aioresponses
 

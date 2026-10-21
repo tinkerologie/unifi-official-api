@@ -13,6 +13,8 @@ Stop is cooperative:
     I/O timeout expires.
 """
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import logging

@@ -1,5 +1,7 @@
 """Tolerant models for UniFi Access developer API payloads."""
 
+from __future__ import annotations
+
 from .common import AccessRecord, parse_record, parse_records
 from .devices import AccessDevice
 from .doors import AccessDoor, DoorLockRelayStatus, DoorPositionStatus

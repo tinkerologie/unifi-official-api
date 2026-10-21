@@ -1,5 +1,7 @@
 """Notification WebSocket for the UniFi Access developer API."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging

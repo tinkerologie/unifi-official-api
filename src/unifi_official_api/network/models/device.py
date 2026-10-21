@@ -1,5 +1,7 @@
 """Device models for UniFi Network API."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Self

@@ -1,6 +1,8 @@
 # Copyright 2026 UniFi Insights contributors
 """Regression tests for PIN and credential redaction, and base ``_put`` log_body."""
 
+from __future__ import annotations
+
 import json
 import logging
 from typing import Any

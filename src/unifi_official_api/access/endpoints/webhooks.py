@@ -1,5 +1,7 @@
 """Webhook endpoint registration for the UniFi Access developer API."""
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
 
 from ...exceptions import UniFiValidationError

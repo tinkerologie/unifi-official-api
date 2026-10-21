@@ -1,5 +1,7 @@
 """Tests for authentication module."""
 
+from __future__ import annotations
+
 import pytest
 
 from unifi_official_api import ApiKeyAuth, ApiKeyType, LocalAuth

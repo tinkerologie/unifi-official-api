@@ -1,5 +1,7 @@
 """Application info model for UniFi InnerSpace API."""
 
+from __future__ import annotations
+
 from pydantic import Field
 
 from .project import InnerSpaceBaseModel

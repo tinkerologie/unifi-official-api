@@ -1,6 +1,8 @@
 # Copyright 2026 UniFi Insights contributors
 """Tests for UniFi Access endpoint groups: payloads, envelopes and validation."""
 
+from __future__ import annotations
+
 import json
 import traceback
 from typing import Any
