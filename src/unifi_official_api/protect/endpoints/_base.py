@@ -165,9 +165,12 @@ class ProtectDeviceEndpoint(Generic[_ModelT]):
 
 def _resource_record(response: Any) -> dict[str, Any] | None:
     """Return the single resource in a response, or None when it holds none with an ``id``."""
-    if not isinstance(response, dict):
+    if isinstance(response, list):
+        data: Any = response
+    elif isinstance(response, dict):
+        data = response.get("data", response)
+    else:
         return None
-    data = response.get("data", response)
     if isinstance(data, list) and data:
         data = data[0]
     if isinstance(data, dict) and data.get("id"):

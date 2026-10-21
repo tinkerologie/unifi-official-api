@@ -217,19 +217,19 @@ async def test_protect_device_endpoint_get_all_branches() -> None:
 
 
 async def test_protect_device_endpoint_get_parses_dict_and_list_payloads() -> None:
-    """get() parses a wrapped object and the first item of a wrapped list."""
+    """get() parses a wrapped object, a wrapped list and a bare list's first item."""
     session = _Session(
         [
             {"data": {"id": "d-1", "name": "dict-first"}},
             {"data": [{"id": "d-1", "name": "first"}]},
+            [{"id": "d-1", "name": "bare"}],
         ]
     )
     ep = _DummyEndpoint(_client(session))
     assert (await ep.get("d-1")).name == "dict-first"
     assert (await ep.get("d-1")).name == "first"
-    _assert_requests(
-        session, [("GET", "dummies/d-1", None, None), ("GET", "dummies/d-1", None, None)]
-    )
+    assert (await ep.get("d-1")).name == "bare"
+    _assert_requests(session, [("GET", "dummies/d-1", None, None)] * 3)
 
 
 @pytest.mark.parametrize(
@@ -243,6 +243,8 @@ async def test_protect_device_endpoint_get_parses_dict_and_list_payloads() -> No
         {"data": "not-a-dict"},
         {"data": {"name": "no id"}},
         {"data": {"id": ""}},
+        [],
+        ["not-a-dict"],
     ],
 )
 async def test_protect_device_endpoint_get_without_resource_raises_not_found(body: Any) -> None:
