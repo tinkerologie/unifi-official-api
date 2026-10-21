@@ -95,7 +95,6 @@ class UniFiNotFoundError(UniFiResponseError):
         response_body: str | None = None,
         *,
         api_error_code: str | None = None,
-        **kwargs: Any,  # noqa: ARG002
     ) -> None:
         """Initialize not found error with default status 404."""
         super().__init__(

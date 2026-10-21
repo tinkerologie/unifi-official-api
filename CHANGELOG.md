@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `TalkbackStream` documents its `loop` and `executor` keywords: the worker runs in a dedicated daemon thread unless `executor` (an awaitable-returning callable such as `hass.async_add_executor_job`) is given (#47).
 - `pre-commit run --all-files` passes again on Python 3.14: every hook is updated to its current release, mypy checks the whole package like CI, pyupgrade targets 3.13 so it keeps `from __future__ import annotations`, and `tests/fixtures/` is no longer checked as test modules.
 - **Breaking:** `CamerasEndpoint.get_snapshot()` no longer accepts `width` and `height`; it ignored them, because the Protect API cannot resize snapshots. Remove the arguments and resize the returned image yourself if needed (#45).
+- **Breaking:** `get()` on the shared Protect device endpoints raises `UniFiNotFoundError` (status 200) when the response holds no resource with an `id`, and `UniFiResponseError` (status 200, field names only) when the resource fails validation, instead of `ValueError` or a raw pydantic `ValidationError` (#46). Migration: catch `UniFiNotFoundError` / `UniFiError` instead of `ValueError`.
+- `get()` and `update()` on the shared Protect device endpoints also read a response that is a bare JSON list, not only a `data`-wrapped one (#46).
+- `update()` on the shared Protect device endpoints no longer raises "Failed to update" after a successful `PATCH` whose body holds no resource with an `id` or fails validation: the write has been applied, so the resource is re-fetched with `get()` and returned. A body with a valid resource is returned as is (#46). Migration: none; errors from the re-fetch are `UniFiError` subclasses.
 
 ### Removed
 
@@ -31,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `LiveViewsEndpoint.delete()` (`DELETE /liveviews/{id}`). The spec has no live view delete; drop the call.
   - `UniFiProtectClient.get_sites()` (`GET /sites`). Protect paths are not site-scoped; pass `"default"` as the WebSocket `site_id` for local consoles.
   - `UniFiProtectClient.events` and `EventsEndpoint` with all its methods (`get_all`, `get`, `get_thumbnail`, `get_heatmap`, `list_motion_events`, `list_smart_detect_events`; `/events/...`). Use `client.websocket.subscribe_events()`, which reads `GET /v1/subscribe/events`. The `Event`, `EventType` and `SmartDetectType` models stay.
+- **Breaking:** `update()` on the shared Protect device endpoints (`bridges`, `fobs`, `link_stations`, `relays`, `sirens`, `speakers`) no longer accepts a dict of settings in the `site_id` position; `site_id` is `str | None` and anything else raises `TypeError` (#46). Migration: pass settings as keyword arguments, `update("br-1", name="x")` instead of `update("br-1", {"name": "x"})`.
+- **Breaking:** `UniFiNotFoundError()` no longer accepts and drops unknown keyword arguments, so a misspelling such as `respones_body=` raises `TypeError` (#46). Migration: pass only `status_code`, `response_body` and `api_error_code`.
 
 ### Fixed
 
