@@ -18,10 +18,13 @@ reached, so a new method or call site cannot slip past the guard.
 from __future__ import annotations
 
 import ast
+import functools
+import importlib.util
 import inspect
 import json
 import re
 import sys
+import textwrap
 from collections.abc import Callable, Iterator
 from contextlib import AbstractAsyncContextManager
 from pathlib import Path
@@ -97,15 +100,13 @@ def _load_spec() -> dict[str, Any]:
     return spec
 
 
+@functools.cache
 def _spec_operations() -> list[tuple[re.Pattern[str], str, frozenset[str]]]:
     operations = []
     for template, item in _load_spec()["paths"].items():
         pattern = re.compile("^" + re.sub(r"\\\{[^}]+\\\}", "[^/]+", re.escape(template)) + "$")
         operations.append((pattern, template, frozenset(k for k in item if k in HTTP_METHODS)))
     return operations
-
-
-SPEC_OPERATIONS = _spec_operations()
 
 
 def _spec_template(operation: Operation) -> str | None:
@@ -117,7 +118,7 @@ def _spec_template(operation: Operation) -> str | None:
     """
     matches = [
         (template.count("{"), template, methods)
-        for pattern, template, methods in SPEC_OPERATIONS
+        for pattern, template, methods in _spec_operations()
         if pattern.match(operation.path)
     ]
     if not matches:
@@ -126,21 +127,41 @@ def _spec_template(operation: Operation) -> str | None:
     return template if operation.method in methods else None
 
 
+class CallSite(NamedTuple):
+    """
+    A ``build_api_path`` call, by module and line.
+
+    The line is the one holding the builder's name, which is the line the
+    interpreter reports for the call even when the call spans several lines.
+    """
+
+    module: str
+    line: int
+
+
+def _recording_builder(
+    build: Callable[..., str], call_sites: set[CallSite], package_dir: Path
+) -> Callable[..., str]:
+    """Wrap ``build`` so each call adds its caller's call site to ``call_sites``."""
+
+    def builder(*args: Any, **kwargs: Any) -> str:
+        frame = sys._getframe(1)
+        module = Path(frame.f_code.co_filename).relative_to(package_dir).as_posix()
+        call_sites.add(CallSite(module, frame.f_lineno))
+        return build(*args, **kwargs)
+
+    return builder
+
+
 class Recorder:
     """Recording transport installed on a client."""
 
     def __init__(self, client: UniFiProtectClient) -> None:
         self.operations: list[Operation] = []
-        self.call_sites: set[tuple[str, str]] = set()
+        self.call_sites: set[CallSite] = set()
         self.staged: list[Any] = []
         self._prefix = client.build_api_path("/")
-        build = client.build_api_path
-
-        def build_api_path(endpoint: str, site_id: str | None = None) -> str:
-            code = sys._getframe(1).f_code
-            module = Path(code.co_filename).relative_to(PACKAGE_DIR).as_posix()
-            self.call_sites.add((module, code.co_qualname))
-            return build(endpoint, site_id)
+        build_api_path = _recording_builder(client.build_api_path, self.call_sites, PACKAGE_DIR)
 
         async def request(method: str, path: str, **_kwargs: Any) -> Any:
             return self._record(method, path)
@@ -234,33 +255,26 @@ async def _exercise(client: UniFiProtectClient) -> tuple[Recorder, dict[str, lis
     return recorder, sent
 
 
-def _ast_call_sites() -> set[tuple[str, str]]:
-    """Return (module, qualified function) for every build_api_path call in the package."""
-    sites: set[tuple[str, str]] = set()
-
-    def visit(node: ast.AST, module: str, scope: tuple[str, ...]) -> None:
-        for child in ast.iter_child_nodes(node):
-            if isinstance(child, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
-                visit(child, module, (*scope, child.name))
-                continue
+def _ast_call_sites(package_dir: Path) -> set[CallSite]:
+    """Return the call site of every build_api_path call in the package."""
+    sites: set[CallSite] = set()
+    for path in sorted(package_dir.rglob("*.py")):
+        module = path.relative_to(package_dir).as_posix()
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if (
-                isinstance(child, ast.Call)
-                and isinstance(child.func, ast.Attribute)
-                and child.func.attr == "build_api_path"
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "build_api_path"
             ):
-                sites.add((module, ".".join(scope)))
-            visit(child, module, scope)
-
-    for path in sorted(PACKAGE_DIR.rglob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        visit(tree, path.relative_to(PACKAGE_DIR).as_posix(), ())
+                assert node.func.end_lineno is not None
+                sites.add(CallSite(module, node.func.end_lineno))
     return sites
 
 
 def test_vendored_spec_is_the_pinned_version() -> None:
     """The vendored spec file matches PROTECT_SPEC_VERSION and has operations."""
     assert SPEC_PATH.is_file(), f"Vendor the Protect {PROTECT_SPEC_VERSION} spec at {SPEC_PATH}"
-    assert len(SPEC_OPERATIONS) > 1
+    assert len(_spec_operations()) > 1
 
 
 @pytest.mark.parametrize("connection_type", [ConnectionType.LOCAL, ConnectionType.REMOTE])
@@ -280,7 +294,8 @@ async def test_guard_reaches_every_build_api_path_call_site() -> None:
     """The exercise run reaches every build_api_path call site in the package."""
     recorder, _sent = await _exercise(_make_client(ConnectionType.LOCAL))
 
-    assert recorder.call_sites == _ast_call_sites()
+    assert sorted(_ast_call_sites(PACKAGE_DIR) - recorder.call_sites) == []
+    assert recorder.call_sites == _ast_call_sites(PACKAGE_DIR)
 
 
 async def test_multi_request_methods_send_their_write() -> None:
@@ -291,6 +306,55 @@ async def test_multi_request_methods_send_their_write() -> None:
         Operation("get", "/v1/chimes/id-chime-id"),
         Operation("patch", "/v1/chimes/id-chime-id"),
     ]
+
+
+def test_call_site_check_counts_each_call_in_a_function(tmp_path: Path) -> None:
+    """A function with two builder calls, one never run, leaves that call unreached."""
+    module_path = tmp_path / "endpoint.py"
+    module_path.write_text(
+        textwrap.dedent(
+            """
+            class Endpoint:
+                def __init__(self, client):
+                    self._client = client
+
+                def update(self, write):
+                    read_path = self._client.build_api_path(
+                        "/read",
+                    )
+                    if write:
+                        return (self._client
+                                .build_api_path("/write"))
+                    return read_path
+            """
+        ),
+        encoding="utf-8",
+    )
+    spec = importlib.util.spec_from_file_location("endpoint", module_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    class Client:
+        build_api_path = staticmethod(lambda endpoint: endpoint)
+
+    client = Client()
+    reached: set[CallSite] = set()
+    client.build_api_path = _recording_builder(client.build_api_path, reached, tmp_path)
+    endpoint = module.Endpoint(client)
+
+    assert endpoint.update(write=False) == "/read"
+    assert _ast_call_sites(tmp_path) - reached == {CallSite("endpoint.py", 12)}
+    assert endpoint.update(write=True) == "/write"
+    assert (
+        reached
+        == _ast_call_sites(tmp_path)
+        == {
+            CallSite("endpoint.py", 7),
+            CallSite("endpoint.py", 12),
+        }
+    )
 
 
 @pytest.mark.parametrize("name", sorted(UNSUPPORTED))
