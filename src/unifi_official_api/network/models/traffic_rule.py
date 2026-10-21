@@ -1,7 +1,5 @@
 """Traffic rule data model for UniFi Network API."""
 
-from __future__ import annotations
-
 from pydantic import BaseModel, ConfigDict, Field
 
 

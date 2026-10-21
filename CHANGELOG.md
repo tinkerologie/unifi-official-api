@@ -15,10 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `TalkbackStream` documents its `loop` and `executor` keywords: the worker runs in a dedicated daemon thread unless `executor` (an awaitable-returning callable such as `hass.async_add_executor_job`) is given (#47).
+- `pre-commit run --all-files` passes again on Python 3.14: every hook is updated to its current release, mypy checks the whole package like CI, pyupgrade targets 3.14 (dropping the now redundant `from __future__ import annotations`), and `tests/fixtures/` is no longer checked as test modules.
 
 ## [2.0.0] - 2026-10-18
 
 ### Added
+
 - **v2.0.0 Architecture & Endpoint Uplift (Issue #41)**:
   - Full Python ≥ 3.14 compatibility with strict static typing across all 173 source modules (`mypy src/ --strict`).
   - Protect API expansion: cameras (with backward-compatible snapshot endpoint), alarm hubs, bridges, chimes, door locks, fobs, lights, link stations, live views, NVR, POS, relays, sensors, sirens, speakers, users, ULP users, viewers, talkback transcode/streaming, and WebSocket subscriptions.
@@ -27,14 +29,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Strict ≥ 95% per-file branch coverage enforcement (`script/check_coverage_per_file.py`) with 3,263 tests passing at 100.00% total branch and statement coverage across all 173 source files with zero `# pragma: no cover` additions.
 
 ### Fixed
+
 - Fixed release workflow tag validation f-string syntax in `.github/workflows/release.yml`.
 - Updated `.pre-commit-config.yaml` pyupgrade hook to `--py312-plus`.
 
 ### Security
+
 - Requires aiohttp 3.14.3 or later (was capped below 3.14.0), fixing the aiohttp advisories that affected every version the old range allowed. The lock file also moves to multidict 7.1.0, urllib3 2.8.0 and virtualenv 21.14.7, clearing their advisories. Home Assistant core already ships aiohttp 3.14.5.
 - The test suite works with aiohttp 3.14 through a small shim for aioresponses 0.7.9, whose response builder does not pass aiohttp 3.14's new `stream_writer` argument (pnuckowski/aioresponses#288). The Dependabot rule that ignored aiohttp 3.14 is removed.
 
 ### Changed
+
 - Pull requests get path labels and at most one type label, `bug` or `enhancement`, from the shared tinkerologie PR labeler. Dependabot pull requests whose largest update is a patch or minor version merge automatically once the checks and commit statuses on their head commit have finished without a failure (a Codecov check that is still pending is not waited for; a Codecov failure blocks); majors, and pull requests with open review threads, stay for review.
 - Dependabot updates `uv.lock` (the `uv` ecosystem instead of `pip`), so version and security updates reach the lock file.
 - Release workflows hardened (least-privilege job permissions, no expressions in shell scripts, no persisted checkout credentials, no dependency caches); scheduled workflows run on Australia/Brisbane time. Relicensed from MIT to the Apache License 2.0; NOTICE retains the MIT notice for earlier releases.

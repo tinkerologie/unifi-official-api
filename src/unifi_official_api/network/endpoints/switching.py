@@ -1,7 +1,5 @@
 """Switching endpoint for UniFi Network API."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any
 
 from ..models.switching import (

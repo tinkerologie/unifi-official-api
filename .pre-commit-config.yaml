@@ -2,10 +2,13 @@
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
 
+default_language_version:
+  python: python3.14
+
 repos:
   # General file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
@@ -23,14 +26,14 @@ repos:
         args: [--fix=lf]
       - id: name-tests-test
         args: [--pytest-test-first]
-        exclude: ^tests/(conftest|__init__)\.py$
+        exclude: ^tests/(fixtures/.*|conftest\.py|__init__\.py)$
 
   # Python code formatting with ruff
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.4
+    rev: v0.17.1
     hooks:
       # Linter
-      - id: ruff
+      - id: ruff-check
         args: [--fix, --exit-non-zero-on-fix]
         types_or: [python, pyi]
       # Formatter
@@ -39,36 +42,38 @@ repos:
 
   # Type checking with mypy
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.14.1
+    rev: v2.4.0
     hooks:
+      # Checks the whole package like CI (`mypy src --strict`), not just
+      # the staged files, with the runtime dependencies from pyproject.toml.
       - id: mypy
-        args: [--strict]
+        args: [--strict, src]
+        pass_filenames: false
+        files: ^(src/.*\.py|pyproject\.toml)$
         additional_dependencies:
-          - aiohttp>=3.9.0
+          - aiohttp>=3.14.3
           - pydantic>=2.0.0
           - yarl>=1.9.0
-          - pytest>=8.0.0
-          - types-aiofiles
-        exclude: ^tests/
 
   # Security checks with bandit
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.8.0
+    rev: 1.9.4
     hooks:
       - id: bandit
-        args: [-c, pyproject.toml, -r, src/]
+        args: [-c, pyproject.toml]
+        files: ^src/
         additional_dependencies: ["bandit[toml]"]
 
   # Markdown linting
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.43.0
+    rev: v0.49.1
     hooks:
       - id: markdownlint
         args: [--fix]
 
   # Check for common spelling mistakes
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.3.0
+    rev: v2.4.3
     hooks:
       - id: codespell
         args: [--ignore-words-list=crate,nd,sav,ser]
@@ -76,10 +81,10 @@ repos:
 
   # Check for outdated Python syntax
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.19.1
+    rev: v3.22.0
     hooks:
       - id: pyupgrade
-        args: [--py312-plus]
+        args: [--py314-plus]
 
 # CI configuration
 ci:

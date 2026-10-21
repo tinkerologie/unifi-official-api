@@ -8,8 +8,6 @@ These cover the fixes for:
 - #49: classic ``/rest/wlanconf`` (secrets) and ``/stat/sta`` (per-SSID counts).
 """
 
-from __future__ import annotations
-
 import json
 from typing import Any, Self
 from unittest.mock import AsyncMock

@@ -1,7 +1,5 @@
 """LiveView models for UniFi Protect API."""
 
-from __future__ import annotations
-
 from pydantic import BaseModel, Field
 
 

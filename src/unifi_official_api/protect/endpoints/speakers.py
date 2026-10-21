@@ -1,7 +1,5 @@
 """Speaker endpoint for UniFi Protect API."""
 
-from __future__ import annotations
-
 from ..models import Speaker
 from ._base import ProtectDeviceEndpoint
 

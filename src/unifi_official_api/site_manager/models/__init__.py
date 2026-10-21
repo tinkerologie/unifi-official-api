@@ -1,7 +1,5 @@
 """Pydantic models for UniFi Site Manager API."""
 
-from __future__ import annotations
-
 from .device import DeviceListResponse, SiteManagerDevice, SiteManagerHostDevices
 from .host import Host, HostListResponse, HostReportedState, HostUserData
 from .isp_metric import ISPMetric, ISPMetricQuery, ISPMetricQueryResult

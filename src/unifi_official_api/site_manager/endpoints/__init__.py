@@ -1,7 +1,5 @@
 """Endpoint modules for UniFi Site Manager API."""
 
-from __future__ import annotations
-
 from .connector import ConnectorEndpoint
 from .devices import DevicesEndpoint
 from .hosts import HostsEndpoint

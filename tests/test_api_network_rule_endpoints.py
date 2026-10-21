@@ -1,8 +1,6 @@
 # Copyright 2026 UniFi Insights contributors
 """Tests for port forward and traffic rule API endpoints."""
 
-from __future__ import annotations
-
 import inspect
 import json
 import logging

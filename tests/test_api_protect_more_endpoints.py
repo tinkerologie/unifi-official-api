@@ -1,8 +1,6 @@
 # Copyright 2026 UniFi Insights contributors
 """Additional tests for Protect endpoints and models pinned against the spec."""
 
-from __future__ import annotations
-
 import json
 from datetime import UTC, datetime
 from typing import Any, Self

@@ -1,7 +1,5 @@
 """Comprehensive edge-case and branch coverage tests."""
 
-from __future__ import annotations
-
 from unittest.mock import patch
 
 import aiohttp

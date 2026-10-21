@@ -1,7 +1,5 @@
 """User endpoints for the UniFi Access developer API: PIN codes and status."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Literal
 
 from ...exceptions import UniFiValidationError

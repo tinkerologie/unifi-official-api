@@ -1,7 +1,5 @@
 """Device endpoints for the UniFi Access developer API."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 from ..models import AccessDevice, parse_records

@@ -14,8 +14,6 @@ Sources:
 Values in records are synthetic unless noted.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 LIVE_PORT_FORWARD_KEYS: frozenset[str] = frozenset(

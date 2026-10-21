@@ -1,7 +1,5 @@
 """Models for UniFi Protect API."""
 
-from __future__ import annotations
-
 from .alarm import AlarmHub, ArmProfile, ArmProfileSettings, ArmSchedule
 from .application import (
     ApplicationInfo,

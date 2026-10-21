@@ -1,8 +1,6 @@
 # Copyright 2026 UniFi Insights contributors
 """Carrier Fabric client contracts through the recording HTTP transport."""
 
-from __future__ import annotations
-
 import json
 import logging
 from typing import Any, Self

@@ -1,7 +1,5 @@
 """Floor plan models for UniFi InnerSpace API."""
 
-from __future__ import annotations
-
 from typing import Any
 
 from pydantic import Field

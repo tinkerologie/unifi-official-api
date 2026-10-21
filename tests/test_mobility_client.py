@@ -1,8 +1,6 @@
 # Copyright 2026 UniFi Insights contributors
 """Tests for the UniFi Mobility API client."""
 
-from __future__ import annotations
-
 import logging
 from typing import TYPE_CHECKING, Any, Self
 from unittest.mock import AsyncMock, MagicMock

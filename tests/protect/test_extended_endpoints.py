@@ -1,7 +1,5 @@
 """Tests for newly added UniFi Protect endpoints."""
 
-from __future__ import annotations
-
 import pytest
 from aioresponses import aioresponses
 

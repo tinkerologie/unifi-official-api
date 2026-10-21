@@ -157,7 +157,7 @@ asyncio.run(main())
 ## API Coverage Summary
 
 | Client / API | Endpoints / Resources Covered |
-|--------------|-------------------------------|
+| -------------- | ------------------------------- |
 | **UniFiNetworkClient** | Sites, Devices, Clients, Networks, WiFi/SSIDs, Firewall & Zones, Vouchers, ACL Rules, Switching (LAGs, MC-LAG domains, Switch Stacks), Traffic Matching, Resources (WAN, VPN, RADIUS) |
 | **UniFiProtectClient** | Cameras (Streams, Snapshots, PTZ, Talkback), Sirens, Key Fobs, Relays, Speakers, Bridges, Link Stations, Alarm Hubs, Alarm Manager Webhooks, Arm Profiles, Local & Identity Users, POS Transaction Ingestion, Sensors, Lights, Chimes, NVR, LiveViews, Viewers, Real-time WebSockets |
 | **UniFiInnerSpaceClient** | Full Project Data (Shapes, Walls, Attenuation), Floor Plans, Placed Access Points, Placed Switches, Unplaced Inventory, Blueprint Image Assets |

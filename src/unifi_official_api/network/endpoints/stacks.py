@@ -1,7 +1,5 @@
 """Switch stack endpoint for UniFi Network API."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 from ..models.stack import SwitchStack

@@ -1,7 +1,5 @@
 """UniFi Site Manager API module."""
 
-from __future__ import annotations
-
 from .client import UniFiSiteManagerClient
 from .models import (
     DeviceListResponse,
