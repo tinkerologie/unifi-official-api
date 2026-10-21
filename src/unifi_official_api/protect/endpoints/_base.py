@@ -128,9 +128,12 @@ class ProtectDeviceEndpoint(Generic[_ModelT]):
         """
         Update a resource via ``PATCH``.
 
-        A console may acknowledge a successful ``PATCH`` with an empty or
-        partial body. The write has still been applied, so instead of
-        failing, the resource is re-fetched with :meth:`get` and returned.
+        A console may acknowledge a successful ``PATCH`` with a body that
+        holds no resource with an ``id``, or one that fails validation. The
+        write has still been applied, so instead of failing, the resource is
+        re-fetched with :meth:`get` and returned. A body that holds a valid
+        resource is returned as is, even when the console left out optional
+        fields.
 
         Args:
             resource_id: The resource ID.
@@ -138,8 +141,8 @@ class ProtectDeviceEndpoint(Generic[_ModelT]):
             **kwargs: Settings to update.
 
         Returns:
-            The updated model, from the ``PATCH`` response when it holds the
-            full resource, otherwise from a follow-up ``get()``.
+            The updated model: from the ``PATCH`` response when it holds a
+            valid resource with an ``id``, otherwise from a follow-up ``get()``.
 
         Raises:
             TypeError: If ``site_id`` is neither a string nor ``None``.
