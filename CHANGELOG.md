@@ -16,10 +16,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `TalkbackStream` documents its `loop` and `executor` keywords: the worker runs in a dedicated daemon thread unless `executor` (an awaitable-returning callable such as `hass.async_add_executor_job`) is given (#47).
 - `pre-commit run --all-files` passes again on Python 3.14: every hook is updated to its current release, mypy checks the whole package like CI, pyupgrade targets 3.13 so it keeps `from __future__ import annotations`, and `tests/fixtures/` is no longer checked as test modules.
 
-### Fixed
-
-- Every public function and method can be introspected again: `inspect.signature()`, `unittest.mock.create_autospec` and `patch(..., autospec=True)` raised `NameError` for annotations naming a type imported only under `TYPE_CHECKING` (such as the endpoints' client parameter), because modules no longer kept their annotations as strings. All modules use `from __future__ import annotations` again, ruff requires it, and `tests/test_introspection.py` checks every public signature. `CamerasEndpoint` already had this problem in 2.0.0.
-
 ### Removed
 
 - **Breaking:** `TalkbackStream` no longer takes the unused third positional argument; everything after `media_source` is keyword-only, so `TalkbackStream(session, url, hass)` raises `TypeError` (#47). Migration: `TalkbackStream(session, url, loop=hass.loop)` or `TalkbackStream(session, url, executor=hass.async_add_executor_job)`.
@@ -32,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `LiveViewsEndpoint.delete()` (`DELETE /liveviews/{id}`). The spec has no live view delete; drop the call.
   - `UniFiProtectClient.get_sites()` (`GET /sites`). Protect paths are not site-scoped; pass `"default"` as the WebSocket `site_id` for local consoles.
   - `UniFiProtectClient.events` and `EventsEndpoint` with all its methods (`get_all`, `get`, `get_thumbnail`, `get_heatmap`, `list_motion_events`, `list_smart_detect_events`; `/events/...`). Use `client.websocket.subscribe_events()`, which reads `GET /v1/subscribe/events`. The `Event`, `EventType` and `SmartDetectType` models stay.
+
+### Fixed
+
+- Every public function and method can be introspected again: `inspect.signature()`, `unittest.mock.create_autospec` and `patch(..., autospec=True)` raised `NameError` for annotations naming a type imported only under `TYPE_CHECKING` (such as the endpoints' client parameter), because modules no longer kept their annotations as strings. All modules use `from __future__ import annotations` again, ruff requires it, and `tests/test_introspection.py` checks every public signature. `CamerasEndpoint` already had this problem in 2.0.0.
 
 ## [2.0.0] - 2026-10-18
 
