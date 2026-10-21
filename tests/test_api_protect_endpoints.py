@@ -391,6 +391,49 @@ async def test_cameras_get_snapshot_high_quality() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("channel", ["main", "package"])
+async def test_cameras_get_snapshot_channel(channel: str) -> None:
+    """Verify channel is sent as the spec's channel query parameter."""
+    client, session, _ = make_client(raw_bytes=b"snapshot-package")
+
+    await client.cameras.get_snapshot("cam-1", channel=channel)  # type: ignore[arg-type]
+    assert session.get.call_args[1].get("params") == {"channel": channel}
+
+
+@pytest.mark.asyncio
+async def test_cameras_get_snapshot_channel_with_high_quality() -> None:
+    """Verify channel and highQuality are sent together."""
+    client, session, _ = make_client(raw_bytes=b"snapshot-package")
+
+    await client.cameras.get_snapshot("cam-1", high_quality=True, channel="package")
+    assert session.get.call_args[1].get("params") == {
+        "highQuality": "true",
+        "channel": "package",
+    }
+
+
+@pytest.mark.asyncio
+async def test_cameras_get_snapshot_invalid_channel() -> None:
+    """Verify a channel outside the spec's enum raises before any request."""
+    client, session, _ = make_client(raw_bytes=b"unused")
+
+    with pytest.raises(ValueError, match="'main' or 'package'"):
+        await client.cameras.get_snapshot("cam-1", channel="sub")  # type: ignore[arg-type]
+    session.get.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("size", [{"width": 640}, {"height": 360}])
+async def test_cameras_get_snapshot_rejects_size(size: dict[str, int]) -> None:
+    """Verify width and height are no longer accepted (the spec cannot resize)."""
+    client, session, _ = make_client(raw_bytes=b"unused")
+
+    with pytest.raises(TypeError, match="unexpected keyword argument"):
+        await client.cameras.get_snapshot("cam-1", **size)  # type: ignore[arg-type]
+    session.get.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_cameras_get_snapshot_error_mapping() -> None:
     """Verify get_snapshot 500 error raises UniFiConnectionError."""
     client, _, _ = make_client(status=500, raw_bytes=b"Camera offline")

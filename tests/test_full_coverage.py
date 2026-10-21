@@ -1377,19 +1377,6 @@ class TestProtectEndpointsCoverage:
                 with pytest.raises(ValueError):
                     await client.cameras.update("c1", name="X")
 
-    async def test_cameras_snapshot_with_size(self, auth: LocalAuth) -> None:
-        with aioresponses() as m:
-            m.get(
-                re.compile(r".*/cameras/c1/snapshot.*"),
-                body=b"\x89PNG",
-                content_type="image/png",
-            )
-            async with UniFiProtectClient(
-                auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-            ) as client:
-                data = await client.cameras.get_snapshot("c1", width=640, height=480)
-                assert data == b"\x89PNG"
-
     async def test_cameras_set_mic_volume_invalid(self, auth: LocalAuth) -> None:
         async with UniFiProtectClient(
             auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
