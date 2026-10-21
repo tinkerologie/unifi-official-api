@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ...validation import created_record, require_record, written_record
 from ..models.acl import ACLAction, ACLRule, ACLRuleOrdering, ACLRuleType
 
 if TYPE_CHECKING:
@@ -71,17 +72,15 @@ class ACLEndpoint:
         Returns:
             The ACL rule.
 
+        Raises:
+            UniFiNotFoundError: If the response holds no ACL rule.
+            UniFiResponseError: If the ACL rule in the response fails validation.
+
         """
         path = self._client.build_api_path(f"/sites/{site_id}/acl-rules/{rule_id}")
-        response = await self._client._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return ACLRule.model_validate(data)
-            if isinstance(data, list) and len(data) > 0:
-                return ACLRule.model_validate(data[0])
-        raise ValueError(f"ACL rule {rule_id} not found")
+        return require_record(
+            await self._client._get(path), ACLRule, f"ACL rule {rule_id}", id_key=None
+        )
 
     async def create(
         self,
@@ -111,6 +110,10 @@ class ACLEndpoint:
         Returns:
             The created ACL rule.
 
+        Raises:
+            UniFiResponseError: If the console accepted the request but the response
+                holds no valid ACL rule. The ACL rule may have been created.
+
         """
         path = self._client.build_api_path(f"/sites/{site_id}/acl-rules")
         data: dict[str, Any] = {
@@ -125,12 +128,7 @@ class ACLEndpoint:
         data.update(kwargs)
 
         response = await self._client._post(path, json_data=data)
-
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict):
-                return ACLRule.model_validate(result)
-        raise ValueError("Failed to create ACL rule")
+        return created_record(response, ACLRule, "ACL rule", id_key=None)
 
     async def update(
         self,
@@ -149,15 +147,18 @@ class ACLEndpoint:
         Returns:
             The updated ACL rule.
 
+        Raises:
+            UniFiNotFoundError: If the follow-up ``get()`` finds no ACL rule.
+            UniFiResponseError: If the follow-up ``get()`` response fails validation.
+
         """
         path = self._client.build_api_path(f"/sites/{site_id}/acl-rules/{rule_id}")
-        response = await self._client._put(path, json_data=kwargs)
-
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict):
-                return ACLRule.model_validate(result)
-        raise ValueError("Failed to update ACL rule")
+        written = written_record(
+            await self._client._put(path, json_data=kwargs), ACLRule, id_key=None
+        )
+        if written is not None:
+            return written
+        return await self.get(site_id, rule_id)
 
     async def delete(self, site_id: str, rule_id: str) -> bool:
         """
@@ -188,17 +189,14 @@ class ACLEndpoint:
             The ACL rule ordering.
 
         Raises:
-            ValueError: If the ordering cannot be retrieved.
+            UniFiNotFoundError: If the response holds no ACL rule ordering.
+            UniFiResponseError: If the ACL rule ordering in the response fails validation.
 
         """
         path = self._client.build_api_path(f"/sites/{site_id}/acl-rules/ordering")
-        response = await self._client._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return ACLRuleOrdering.model_validate(data)
-        raise ValueError("Failed to get ACL rule ordering")
+        return require_record(
+            await self._client._get(path), ACLRuleOrdering, "ACL rule ordering", id_key=None
+        )
 
     async def update_ordering(
         self,
@@ -217,17 +215,17 @@ class ACLEndpoint:
             The updated ACL rule ordering.
 
         Raises:
-            ValueError: If the reordering fails.
+            UniFiNotFoundError: If the follow-up ``get_ordering()`` finds no ACL rule ordering.
+            UniFiResponseError: If the follow-up ``get_ordering()`` response fails validation.
 
         """
         path = self._client.build_api_path(f"/sites/{site_id}/acl-rules/ordering")
         data: dict[str, Any] = {
             "orderedAclRuleIds": ordered_rule_ids,
         }
-        response = await self._client._put(path, json_data=data)
-
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict):
-                return ACLRuleOrdering.model_validate(result)
-        raise ValueError("Failed to update ACL rule ordering")
+        written = written_record(
+            await self._client._put(path, json_data=data), ACLRuleOrdering, id_key=None
+        )
+        if written is not None:
+            return written
+        return await self.get_ordering(site_id)

@@ -9,7 +9,7 @@ from ...const import (
     ENDPOINT_NETWORKCONF,
     ENDPOINT_VPN_CONNECTIONS,
 )
-from ...exceptions import UniFiResponseError
+from ...exceptions import UniFiNotFoundError, UniFiResponseError
 from ..models.vpn_client import VpnClient
 
 if TYPE_CHECKING:
@@ -159,7 +159,8 @@ class VpnClientsEndpoint:
             The VpnClient model.
 
         Raises:
-            ValueError: If the VPN client is not found.
+            UniFiNotFoundError: If neither the client read nor the client listing holds
+                the VPN client.
 
         """
         path = self._client.build_legacy_api_path(site_name, f"{ENDPOINT_NETWORKCONF}/{client_id}")
@@ -177,7 +178,7 @@ class VpnClientsEndpoint:
                 return client
 
         msg = f"VPN Client {client_id} not found"
-        raise ValueError(msg)
+        raise UniFiNotFoundError(msg, status_code=200)
 
     async def update_vpn_client(
         self,
@@ -200,7 +201,8 @@ class VpnClientsEndpoint:
             The updated VpnClient model.
 
         Raises:
-            ValueError: If the VPN client is not found.
+            UniFiNotFoundError: If neither the client read nor the client listing holds
+                the VPN client.
 
         """
         path = self._client.build_legacy_api_path(site_name, f"{ENDPOINT_NETWORKCONF}/{client_id}")
@@ -228,7 +230,7 @@ class VpnClientsEndpoint:
 
         if current_payload is None:
             msg = f"VPN Client {client_id} not found"
-            raise ValueError(msg)
+            raise UniFiNotFoundError(msg, status_code=200)
 
         current_payload = dict(current_payload)
         if enabled is not None:

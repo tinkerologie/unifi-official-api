@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
 
+from ...validation import require_record, written_record
 from ..models import AlarmHub
 
 if TYPE_CHECKING:
@@ -89,29 +90,17 @@ class AlarmHubsEndpoint:
             The alarm hub.
 
         Raises:
-            ValueError: If the alarm hub is not found.
+            UniFiNotFoundError: If the response holds no alarm hub with an ``id``.
+            UniFiResponseError: If the alarm hub in the response fails validation.
 
         """
         path = self._client.build_api_path(f"/alarm-hubs/{alarm_hub_id}", site_id)
-        response = await self._client._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict) and data.get("id"):
-                return AlarmHub.model_validate(data)
-            if (
-                isinstance(data, list)
-                and len(data) > 0
-                and isinstance(data[0], dict)
-                and data[0].get("id")
-            ):
-                return AlarmHub.model_validate(data[0])
-        raise ValueError(f"Alarm hub {alarm_hub_id} not found")
+        return require_record(await self._client._get(path), AlarmHub, f"Alarm hub {alarm_hub_id}")
 
     async def update(
         self,
         alarm_hub_id: str,
-        site_id: str | dict[str, Any] | None = None,
+        site_id: str | None = None,
         **kwargs: Any,
     ) -> AlarmHub:
         """
@@ -126,24 +115,22 @@ class AlarmHubsEndpoint:
             The updated alarm hub.
 
         Raises:
-            ValueError: If the update fails.
+            TypeError: If ``site_id`` is neither a string nor ``None``.
+            UniFiNotFoundError: If the follow-up ``get()`` finds no alarm hub.
+            UniFiResponseError: If the follow-up ``get()`` response fails validation.
 
         """
-        if isinstance(site_id, dict):
-            payload = {**site_id, **kwargs}
-            resolved_site_id: str | None = None
-        else:
-            payload = kwargs
-            resolved_site_id = site_id
-
-        path = self._client.build_api_path(f"/alarm-hubs/{alarm_hub_id}", resolved_site_id)
-        response = await self._client._patch(path, json_data=payload)
-
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict) and result.get("id"):
-                return AlarmHub.model_validate(result)
-        raise ValueError("Failed to update alarm hub")
+        if site_id is not None and not isinstance(site_id, str):
+            msg = (
+                f"site_id must be a str or None, not {type(site_id).__name__}; "
+                "pass settings as keyword arguments"
+            )
+            raise TypeError(msg)
+        path = self._client.build_api_path(f"/alarm-hubs/{alarm_hub_id}", site_id)
+        written = written_record(await self._client._patch(path, json_data=kwargs), AlarmHub)
+        if written is not None:
+            return written
+        return await self.get(alarm_hub_id, site_id)
 
     async def trigger_output(
         self,

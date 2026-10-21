@@ -27,6 +27,7 @@ from unifi_official_api.const import (
 from unifi_official_api.exceptions import (
     UniFiAuthenticationError,
     UniFiConnectionError,
+    UniFiNotFoundError,
     UniFiTimeoutError,
 )
 from unifi_official_api.network import UniFiNetworkClient
@@ -318,9 +319,9 @@ async def test_network_client_get_application_info() -> None:
     assert isinstance(info, ApplicationInfo)
     assert info.application_version == "10.6.106"
 
-    msg = "Unable to retrieve application info"
-    with pytest.raises(ValueError, match=msg):
+    with pytest.raises(UniFiNotFoundError) as exc_info:
         await client.get_application_info()
+    assert exc_info.value.status_code == 200
 
 
 async def test_base_client_context_manager_and_auth_errors() -> None:

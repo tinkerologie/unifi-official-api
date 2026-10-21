@@ -5,9 +5,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Final
 
-from pydantic import ValidationError
-
-from ...validation import sanitized_validation_fields
+from ...exceptions import UniFiResponseError
+from ...validation import parse_record, require_record
 from ..models.voucher import Voucher
 
 _LOGGER = logging.getLogger(__name__)
@@ -21,11 +20,7 @@ if TYPE_CHECKING:
 
 def _validate_voucher(item: Any) -> Voucher:
     """Validate voucher model while sanitizing validation errors."""
-    try:
-        return Voucher.model_validate(item)
-    except ValidationError as err:
-        msg = f"Invalid voucher data (fields: {sanitized_validation_fields(err)})"
-        raise ValueError(msg) from None
+    return parse_record(Voucher, item, "Voucher")
 
 
 class VouchersEndpoint:
@@ -145,18 +140,16 @@ class VouchersEndpoint:
         Returns:
             The voucher.
 
+        Raises:
+            UniFiNotFoundError: If the response holds no voucher.
+            UniFiResponseError: If the voucher in the response fails validation; the
+                message names the failing fields only.
+
         """
         path = self._client.build_api_path(f"/sites/{site_id}/hotspot/vouchers/{voucher_id}")
         response = await self._client._get(path, expected_unsupported=True, log_body=False)
 
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return _validate_voucher(data)
-            if isinstance(data, list) and len(data) > 0:
-                return _validate_voucher(data[0])
-        msg = f"Voucher {voucher_id} not found"
-        raise ValueError(msg)
+        return require_record(response, Voucher, f"Voucher {voucher_id}", id_key=None)
 
     async def create(
         self,
@@ -186,6 +179,11 @@ class VouchersEndpoint:
         Returns:
             List of created vouchers.
 
+        Raises:
+            UniFiResponseError: If the console accepted the request but the response
+                holds no vouchers, which may still have been created, or a voucher
+                fails validation; the message names the failing fields only.
+
         """
         path = self._client.build_api_path(f"/sites/{site_id}/hotspot/vouchers")
         data: dict[str, Any] = {
@@ -211,10 +209,10 @@ class VouchersEndpoint:
                 result = result["vouchers"]
             if isinstance(result, list) and len(result) > 0:
                 return [_validate_voucher(item) for item in result]
-            if isinstance(result, dict):
+            if isinstance(result, dict) and result:
                 return [_validate_voucher(result)]
-        msg = "Failed to create vouchers"
-        raise ValueError(msg)
+        msg = "Voucher create response holds no vouchers; they may have been created"
+        raise UniFiResponseError(msg, status_code=200)
 
     async def delete(self, site_id: str, voucher_id: str) -> bool:
         """

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from ...const import ENDPOINT_NETWORKCONF
+from ...validation import created_record, require_record, written_record
 from ..models import Network
 
 if TYPE_CHECKING:
@@ -75,17 +76,15 @@ class NetworksEndpoint:
         Returns:
             The network.
 
+        Raises:
+            UniFiNotFoundError: If the response holds no network.
+            UniFiResponseError: If the network in the response fails validation.
+
         """
         path = self._client.build_api_path(f"/sites/{site_id}/networks/{network_id}")
-        response = await self._client._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return Network.model_validate(data)
-            if isinstance(data, list) and len(data) > 0:
-                return Network.model_validate(data[0])
-        raise ValueError(f"Network {network_id} not found")
+        return require_record(
+            await self._client._get(path), Network, f"Network {network_id}", id_key=None
+        )
 
     async def create(
         self,
@@ -113,6 +112,11 @@ class NetworksEndpoint:
         Returns:
             The created network.
 
+        Raises:
+            ValueError: If ``subnet`` or ``dhcp_enabled`` is given; no request is made.
+            UniFiResponseError: If the console accepted the request but the response
+                holds no valid network. The network may have been created.
+
         """
         path = self._client.build_api_path(f"/sites/{site_id}/networks")
         if subnet is not None or dhcp_enabled is not None:
@@ -128,11 +132,7 @@ class NetworksEndpoint:
         data.update(kwargs)
 
         response = await self._client._post(path, json_data=data)
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict):
-                return Network.model_validate(result)
-        raise ValueError("Failed to create network")
+        return created_record(response, Network, "Network", id_key=None)
 
     async def update(
         self,
@@ -155,15 +155,18 @@ class NetworksEndpoint:
         Returns:
             The updated network.
 
+        Raises:
+            UniFiNotFoundError: If the follow-up ``get()`` finds no network.
+            UniFiResponseError: If the follow-up ``get()`` response fails validation.
+
         """
         path = self._client.build_api_path(f"/sites/{site_id}/networks/{network_id}")
-        response = await self._client._put(path, json_data=kwargs)
-
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict):
-                return Network.model_validate(result)
-        raise ValueError("Failed to update network")
+        written = written_record(
+            await self._client._put(path, json_data=kwargs), Network, id_key=None
+        )
+        if written is not None:
+            return written
+        return await self.get(site_id, network_id)
 
     async def delete(self, site_id: str, network_id: str) -> bool:
         """

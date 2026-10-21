@@ -6,7 +6,8 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
 
-from ...exceptions import UniFiValidationError
+from ...exceptions import UniFiNotFoundError, UniFiValidationError
+from ...validation import created_record, require_record, response_record, written_record
 from ..models import FirewallRule, FirewallZone
 from ..models.firewall import (
     FirewallPolicyOrdering,
@@ -82,17 +83,15 @@ class FirewallEndpoint:
         Returns:
             The firewall zone.
 
+        Raises:
+            UniFiNotFoundError: If the response holds no firewall zone.
+            UniFiResponseError: If the firewall zone in the response fails validation.
+
         """
         path = self._client.build_api_path(f"/sites/{site_id}/firewall/zones/{zone_id}")
-        response = await self._client._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return FirewallZone.model_validate(data)
-            if isinstance(data, list) and len(data) > 0:
-                return FirewallZone.model_validate(data[0])
-        raise ValueError(f"Firewall zone {zone_id} not found")
+        return require_record(
+            await self._client._get(path), FirewallZone, f"Firewall zone {zone_id}", id_key=None
+        )
 
     async def create_zone(
         self,
@@ -112,17 +111,17 @@ class FirewallEndpoint:
         Returns:
             The created firewall zone.
 
+        Raises:
+            UniFiResponseError: If the console accepted the request but the response
+                holds no valid firewall zone. The firewall zone may have been created.
+
         """
         path = self._client.build_api_path(f"/sites/{site_id}/firewall/zones")
         data: dict[str, Any] = {"name": name}
         data.update(kwargs)
 
         response = await self._client._post(path, json_data=data)
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict):
-                return FirewallZone.model_validate(result)
-        raise ValueError("Failed to create firewall zone")
+        return created_record(response, FirewallZone, "Firewall zone", id_key=None)
 
     async def update_zone(
         self,
@@ -141,15 +140,18 @@ class FirewallEndpoint:
         Returns:
             The updated firewall zone.
 
+        Raises:
+            UniFiNotFoundError: If the follow-up ``get_zone()`` finds no firewall zone.
+            UniFiResponseError: If the follow-up ``get_zone()`` response fails validation.
+
         """
         path = self._client.build_api_path(f"/sites/{site_id}/firewall/zones/{zone_id}")
-        response = await self._client._put(path, json_data=kwargs)
-
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict):
-                return FirewallZone.model_validate(result)
-        raise ValueError("Failed to update firewall zone")
+        written = written_record(
+            await self._client._put(path, json_data=kwargs), FirewallZone, id_key=None
+        )
+        if written is not None:
+            return written
+        return await self.get_zone(site_id, zone_id)
 
     async def delete_zone(self, site_id: str, zone_id: str) -> bool:
         """
@@ -288,17 +290,15 @@ class FirewallEndpoint:
         Returns:
             The firewall rule.
 
+        Raises:
+            UniFiNotFoundError: If the response holds no firewall rule.
+            UniFiResponseError: If the firewall rule in the response fails validation.
+
         """
         path = self._client.build_api_path(f"/sites/{site_id}/firewall/policies/{rule_id}")
-        response = await self._client._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return FirewallRule.model_validate(data)
-            if isinstance(data, list) and len(data) > 0:
-                return FirewallRule.model_validate(data[0])
-        raise ValueError(f"Firewall rule {rule_id} not found")
+        return require_record(
+            await self._client._get(path), FirewallRule, f"Firewall rule {rule_id}", id_key=None
+        )
 
     async def create_rule(
         self,
@@ -326,6 +326,11 @@ class FirewallEndpoint:
 
         Returns:
             The created firewall rule.
+
+        Raises:
+            ValueError: If the action, protocol or zones are invalid; no request is made.
+            UniFiResponseError: If the console accepted the request but the response
+                holds no valid firewall rule. The rule may have been created.
 
         """
         path = self._client.build_api_path(f"/sites/{site_id}/firewall/policies")
@@ -371,29 +376,15 @@ class FirewallEndpoint:
                 raise ValueError(msg)
 
         response = await self._client._post(path, json_data=data)
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict):
-                return FirewallRule.model_validate(result)
-        raise ValueError("Failed to create firewall rule")
+        return created_record(response, FirewallRule, "Firewall rule", id_key=None)
 
     @staticmethod
     def _extract_rule_payload(
         response: dict[str, Any] | list[Any] | None,
     ) -> dict[str, Any] | None:
         """Extract a firewall rule payload from API responses."""
-        if response is None:
-            return None
-
-        data = response.get("data", response) if isinstance(response, dict) else response
-
-        if isinstance(data, dict):
-            return dict(data)
-
-        if isinstance(data, list) and data and isinstance(data[0], dict):
-            return dict(data[0])
-
-        return None
+        record = response_record(response, id_key=None)
+        return dict(record) if record is not None else None
 
     async def update_rule(
         self,
@@ -416,11 +407,15 @@ class FirewallEndpoint:
         Returns:
             The updated firewall rule.
 
+        Raises:
+            UniFiNotFoundError: If the current rule read holds no rule.
+
         """
         path = self._client.build_api_path(f"/sites/{site_id}/firewall/policies/{rule_id}")
         current_payload = self._extract_rule_payload(await self._client._get(path))
         if current_payload is None:
-            raise ValueError(f"Firewall rule {rule_id} not found")
+            msg = f"Firewall rule {rule_id} not found"
+            raise UniFiNotFoundError(msg, status_code=200)
 
         # Strip read-only fields that the PUT endpoint rejects.
         for key in ("id", "index", "metadata"):
@@ -470,16 +465,20 @@ class FirewallEndpoint:
         Returns:
             The updated firewall rule.
 
+        Raises:
+            UniFiNotFoundError: If the follow-up ``get_rule()`` finds no firewall rule.
+            UniFiResponseError: If the follow-up ``get_rule()`` response fails validation.
+
         """
         data = {"loggingEnabled": logging_enabled}
 
         path = self._client.build_api_path(f"/sites/{site_id}/firewall/policies/{rule_id}")
-        response = await self._client._patch(path, json_data=data)
-        result = self._extract_rule_payload(response)
-        if isinstance(result, dict):
-            return FirewallRule.model_validate(result)
-        msg = "Failed to patch firewall rule"
-        raise ValueError(msg)
+        written = written_record(
+            await self._client._patch(path, json_data=data), FirewallRule, id_key=None
+        )
+        if written is not None:
+            return written
+        return await self.get_rule(site_id, rule_id)
 
     async def get_policy_ordering(
         self,
@@ -499,20 +498,22 @@ class FirewallEndpoint:
         Returns:
             The policy ordering configuration.
 
+        Raises:
+            UniFiNotFoundError: If the response holds no policy ordering.
+            UniFiResponseError: If the policy ordering in the response fails validation.
+
         """
         params = {
             "sourceFirewallZoneId": source_firewall_zone_id,
             "destinationFirewallZoneId": destination_firewall_zone_id,
         }
         path = self._client.build_api_path(f"/sites/{site_id}/firewall/policies/ordering")
-        response = await self._client._get(path, params=params)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return FirewallPolicyOrdering.model_validate(data)
-        msg = "Failed to get firewall policy ordering"
-        raise ValueError(msg)
+        return require_record(
+            await self._client._get(path, params=params),
+            FirewallPolicyOrdering,
+            "Firewall policy ordering",
+            id_key=None,
+        )
 
     async def update_policy_ordering(
         self,
@@ -533,6 +534,12 @@ class FirewallEndpoint:
 
         Returns:
             The updated policy ordering configuration.
+
+        Raises:
+            ValueError: If a dict ordering lacks either list; no request is made.
+            UniFiNotFoundError: If the follow-up ``get_policy_ordering()`` finds no ordering.
+            UniFiResponseError: If the follow-up ``get_policy_ordering()`` response fails
+                validation.
 
         """
         params = {
@@ -565,11 +572,15 @@ class FirewallEndpoint:
             "orderedFirewallPolicyIds": payload,
         }
         path = self._client.build_api_path(f"/sites/{site_id}/firewall/policies/ordering")
-        response = await self._client._put(path, json_data=data, params=params)
-
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict):
-                return FirewallPolicyOrdering.model_validate(result)
-        msg = "Failed to update firewall policy ordering"
-        raise ValueError(msg)
+        written = written_record(
+            await self._client._put(path, json_data=data, params=params),
+            FirewallPolicyOrdering,
+            id_key=None,
+        )
+        if written is not None:
+            return written
+        return await self.get_policy_ordering(
+            site_id,
+            source_firewall_zone_id=source_firewall_zone_id,
+            destination_firewall_zone_id=destination_firewall_zone_id,
+        )

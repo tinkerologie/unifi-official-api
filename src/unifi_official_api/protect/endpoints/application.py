@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 import aiohttp
 
+from ...validation import created_record, require_record
 from ..models.files import ApplicationInfo, DeviceFile, FileType
 from ..models.pos import PosTransactionRequest, PosTransactionResponse
 
@@ -33,23 +34,14 @@ class ApplicationEndpoint:
             ApplicationInfo object with version details.
 
         Raises:
-            ValueError: If response is invalid.
+            UniFiNotFoundError: If the response holds no application info.
+            UniFiResponseError: If the application info fails validation.
 
         """
         path = self._client.build_api_path("/meta/info", site_id)
-        response = await self._client._get(path)
-
-        if response is None:
-            raise ValueError("Failed to get application info")
-
-        data = (
-            response.get("data", response)
-            if isinstance(response, dict) and "data" in response
-            else response
+        return require_record(
+            await self._client._get(path), ApplicationInfo, "Application info", id_key=None
         )
-        if not isinstance(data, dict) or not data:
-            raise ValueError("Failed to get application info")
-        return ApplicationInfo.model_validate(data)
 
     async def get_files(
         self,
@@ -103,7 +95,9 @@ class ApplicationEndpoint:
             Created DeviceFile object.
 
         Raises:
-            ValueError: If upload fails or file data is missing.
+            ValueError: If no file data is given; no request is made.
+            UniFiResponseError: If the console accepted the upload but the response
+                holds no valid file record.
 
         """
         raw_bytes = file_data if file_data is not None else data
@@ -129,17 +123,7 @@ class ApplicationEndpoint:
             body_factory=_build_form,
         )
 
-        if response is None:
-            raise ValueError(f"Failed to upload file {filename}")
-
-        resp_data = (
-            response.get("data", response)
-            if isinstance(response, dict) and "data" in response
-            else response
-        )
-        if not isinstance(resp_data, dict) or not resp_data:
-            raise ValueError(f"Failed to upload file {filename}")
-        return DeviceFile.model_validate(resp_data)
+        return created_record(response, DeviceFile, f"File {filename}", id_key=None)
 
     async def trigger_alarm_webhook(
         self,

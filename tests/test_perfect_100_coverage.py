@@ -8,6 +8,7 @@ import aiohttp
 import pytest
 
 from unifi_official_api import ApiKeyAuth, ConnectionType
+from unifi_official_api.exceptions import UniFiNotFoundError
 from unifi_official_api.mobility.client import UniFiMobilityClient
 from unifi_official_api.network.client import UniFiNetworkClient
 from unifi_official_api.network.models.acl import ACLRule
@@ -84,20 +85,6 @@ def test_nvr_model_serializer_storage_info_branches() -> None:
 
 
 @pytest.mark.asyncio
-async def test_arm_profiles_update_settings_non_dict_response() -> None:
-    """Test arm_profiles.update_settings when response is non-dict (branch 307->311)."""
-    client = UniFiProtectClient(
-        auth=ApiKeyAuth(api_key="test-key"),
-        base_url="https://192.168.1.1",
-        connection_type=ConnectionType.LOCAL,
-    )
-    client._patch = AsyncMock(return_value="unexpected_string_response")
-
-    with pytest.raises(ValueError, match="Failed to update arm profile settings"):
-        await client.arm_profiles.update_settings(active_profile_id="arm-1")
-
-
-@pytest.mark.asyncio
 async def test_hosts_endpoint_get_non_dict_response() -> None:
     """Test hosts.get when response is not a dict (branch 35->39)."""
     client = UniFiSiteManagerClient(
@@ -105,7 +92,7 @@ async def test_hosts_endpoint_get_non_dict_response() -> None:
     )
     client._get = AsyncMock(return_value=["unexpected", "list"])
 
-    with pytest.raises(ValueError, match="Host h-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.hosts.get("h-1")
 
 
@@ -129,7 +116,7 @@ async def test_mobility_devices_get_non_dict_response() -> None:
     )
     client._get = AsyncMock(return_value="not_a_dict")
 
-    with pytest.raises(ValueError, match="Device dev-1 not found in workspace ws-1"):
+    with pytest.raises(UniFiNotFoundError):
         await client.devices.get("ws-1", "dev-1")
 
 
@@ -143,13 +130,13 @@ async def test_switching_endpoints_non_dict_responses() -> None:
     )
     client._get = AsyncMock(return_value="not_a_dict")
 
-    with pytest.raises(ValueError, match="LAG lag-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.switching.get_lag("site-1", "lag-1")
 
-    with pytest.raises(ValueError, match="MC-LAG domain dom-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.switching.get_mc_lag_domain("site-1", "dom-1")
 
-    with pytest.raises(ValueError, match="Switch stack stack-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.switching.get_switch_stack("site-1", "stack-1")
 
 

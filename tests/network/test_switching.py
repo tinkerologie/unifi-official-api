@@ -6,6 +6,7 @@ import pytest
 from aioresponses import aioresponses
 
 from unifi_official_api import ConnectionType, LocalAuth
+from unifi_official_api.exceptions import UniFiNotFoundError
 from unifi_official_api.network import UniFiNetworkClient
 from unifi_official_api.network.models.switching import (
     Lag,
@@ -90,7 +91,7 @@ class TestSwitchingEndpoint:
             assert lag.id == "lag-1"
             assert len(lag.members) == 1
 
-            with pytest.raises(ValueError, match="LAG bad-id not found"):
+            with pytest.raises(UniFiNotFoundError):
                 await client.switching.get_lag("default", "bad-id")
 
     async def test_get_mc_lag_domains(
@@ -148,7 +149,7 @@ class TestSwitchingEndpoint:
             assert isinstance(domain, McLagDomain)
             assert domain.id == "mclag-1"
 
-            with pytest.raises(ValueError, match="MC-LAG domain bad-id not found"):
+            with pytest.raises(UniFiNotFoundError):
                 await client.switching.get_mc_lag_domain("default", "bad-id")
 
     async def test_get_switch_stacks(
@@ -206,5 +207,5 @@ class TestSwitchingEndpoint:
             assert isinstance(stack, SwitchStack)
             assert stack.id == "stack-1"
 
-            with pytest.raises(ValueError, match="Switch stack bad-id not found"):
+            with pytest.raises(UniFiNotFoundError):
                 await client.switching.get_switch_stack("default", "bad-id")

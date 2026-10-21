@@ -7,7 +7,8 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
 
-from ...exceptions import UniFiUnsupportedError
+from ...exceptions import UniFiResponseError, UniFiUnsupportedError, UniFiValidationError
+from ...validation import require_record, written_record
 from ..models import Chime
 
 if TYPE_CHECKING:
@@ -90,17 +91,13 @@ class ChimesEndpoint:
         Returns:
             The chime.
 
+        Raises:
+            UniFiNotFoundError: If the response holds no chime with an ``id``.
+            UniFiResponseError: If the chime in the response fails validation.
+
         """
         path = self._client.build_api_path(f"/chimes/{chime_id}", site_id)
-        response = await self._client._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return Chime.model_validate(data)
-            if isinstance(data, list) and len(data) > 0:
-                return Chime.model_validate(data[0])
-        raise ValueError(f"Chime {chime_id} not found")
+        return require_record(await self._client._get(path), Chime, f"Chime {chime_id}")
 
     async def update(
         self,
@@ -119,15 +116,16 @@ class ChimesEndpoint:
         Returns:
             The updated chime.
 
+        Raises:
+            UniFiNotFoundError: If the follow-up ``get()`` finds no chime.
+            UniFiResponseError: If the follow-up ``get()`` response fails validation.
+
         """
         path = self._client.build_api_path(f"/chimes/{chime_id}", site_id)
-        response = await self._client._patch(path, json_data=kwargs)
-
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict):
-                return Chime.model_validate(result)
-        raise ValueError("Failed to update chime")
+        written = written_record(await self._client._patch(path, json_data=kwargs), Chime)
+        if written is not None:
+            return written
+        return await self.get(chime_id, site_id)
 
     async def _update_ring_settings(
         self,
@@ -144,19 +142,23 @@ class ChimesEndpoint:
         ``changes`` applied to each entry.
 
         Raises:
-            ValueError: If the chime has no paired doorbell, or an entry lacks
-                a field that isn't being changed.
+            UniFiValidationError: If the chime has no paired doorbell to apply the
+                settings to; no write is made.
+            UniFiResponseError: If an entry lacks a field that isn't being changed.
+            UniFiNotFoundError: If the chime read finds no chime.
 
         """
         chime = await self.get(chime_id, site_id)
         entries = (chime.model_extra or {}).get("ringSettings")
         if not entries:
-            raise ValueError(f"Chime {chime_id} has no paired doorbell to apply ring settings to")
+            msg = f"Chime {chime_id} has no paired doorbell to apply ring settings to"
+            raise UniFiValidationError(msg)
         kept = [key for key in _RING_SETTINGS_FIELDS if key not in changes]
         if not isinstance(entries, list) or not all(
             isinstance(entry, dict) and all(key in entry for key in kept) for entry in entries
         ):
-            raise ValueError(f"Chime {chime_id} has incomplete ring settings")
+            msg = f"Chime {chime_id} response has incomplete ring settings"
+            raise UniFiResponseError(msg, status_code=200)
         ring_settings = [{key: entry[key] for key in kept} | changes for entry in entries]
         return await self.update(chime_id, site_id, ringSettings=ring_settings)
 
@@ -178,8 +180,9 @@ class ChimesEndpoint:
             The updated chime.
 
         Raises:
-            ValueError: If the volume is out of range, the chime has no paired
-                doorbell to set it for, or an entry lacks a required field.
+            ValueError: If the volume is out of range; no request is made.
+            UniFiValidationError: If the chime has no paired doorbell to apply it to.
+            UniFiResponseError: If an entry lacks a field that isn't being changed.
 
         """
         if not 0 <= volume <= 100:
@@ -204,8 +207,9 @@ class ChimesEndpoint:
             The updated chime.
 
         Raises:
-            ValueError: If the count is out of range, the chime has no paired
-                doorbell to set it for, or an entry lacks a required field.
+            ValueError: If the count is out of range; no request is made.
+            UniFiValidationError: If the chime has no paired doorbell to apply it to.
+            UniFiResponseError: If an entry lacks a field that isn't being changed.
 
         """
         if not 1 <= repeat_times <= 10:
@@ -225,8 +229,9 @@ class ChimesEndpoint:
         and the console validates whether a ringtone exists.
 
         Raises:
-            ValueError: If the ID is empty, the chime has no paired doorbell,
-                or an entry lacks another required ring settings field.
+            ValueError: If the ID is empty; no request is made.
+            UniFiValidationError: If the chime has no paired doorbell to apply it to.
+            UniFiResponseError: If an entry lacks a field that isn't being changed.
 
         """
         if not isinstance(ringtone_id, str) or not ringtone_id.strip():

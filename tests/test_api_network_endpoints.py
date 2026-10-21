@@ -277,7 +277,7 @@ async def test_firewall_update_rule_not_found_and_error_mapping() -> None:
     """firewall.update_rule raises ValueError when rule not found, maps HTTP errors."""
     session_not_found = _Session([None])
     client_nf = _client(session_not_found)
-    with pytest.raises(ValueError, match="Firewall rule missing-42 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client_nf.firewall.update_rule("default", "missing-42", enabled=True)
 
     session_err = _Session(
@@ -654,7 +654,7 @@ async def test_routes_update_route_not_found_raises() -> None:
     session = _Session([{"data": []}])
     client = _client(session)
 
-    with pytest.raises(ValueError, match="Policy-Based Route missing-rt not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.routes.update_route("default", "missing-rt", enabled=True)
 
 
@@ -787,7 +787,7 @@ async def test_vouchers_create_failure_raises() -> None:
     session = _Session([{"data": []}])
     client = _client(session)
 
-    with pytest.raises(ValueError, match="Failed to create vouchers"):
+    with pytest.raises(UniFiResponseError):
         await client.vouchers.create("default", name="Pass", time_limit_minutes=60)
 
 
@@ -907,7 +907,7 @@ async def test_vpn_clients_update_vpn_client_not_found_raises() -> None:
     session = _Session([{"data": []}, {"data": []}])
     client = _client(session)
 
-    with pytest.raises(ValueError, match="VPN Client missing-vpn not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.vpn_clients.update_vpn_client("default", "missing-vpn", enabled=True)
 
 
@@ -998,7 +998,7 @@ async def test_wifi_update_not_found_raises() -> None:
     session = _Session([None])
     client = _client(session)
 
-    with pytest.raises(ValueError, match="WiFi network missing-wifi not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.wifi.update("default", "missing-wifi", enabled=False)
 
 
@@ -1435,7 +1435,7 @@ async def test_vouchers_create_single_voucher_and_non_dict_error() -> None:
     assert res[0].id == "v-single"
     assert res[0].code == "99999-00000"
 
-    with pytest.raises(ValueError, match="Failed to create vouchers"):
+    with pytest.raises(UniFiResponseError):
         await client.vouchers.create("default", name="FailPass", time_limit_minutes=60)
 
 

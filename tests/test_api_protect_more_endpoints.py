@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from datetime import UTC, datetime
 from typing import Any, Self
@@ -20,6 +21,7 @@ from unifi_official_api.exceptions import (
     UniFiGlobalAlarmManagerError,
     UniFiNotFoundError,
     UniFiResponseError,
+    UniFiValidationError,
 )
 from unifi_official_api.protect import (
     NVR,
@@ -374,6 +376,8 @@ async def test_alarm_hubs_endpoints() -> None:
             SAMPLE_HUB,
             # update failure
             None,
+            # re-fetch finds nothing
+            {"data": []},
             # trigger_output with kwargs
             None,
             # trigger_output without kwargs
@@ -408,7 +412,7 @@ async def test_alarm_hubs_endpoints() -> None:
     hub2 = await client.alarm_hubs.get("hub-1")
     assert hub2.id == "hub-1"
 
-    with pytest.raises(ValueError, match="Alarm hub hub-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.alarm_hubs.get("hub-1")
 
     # update
@@ -417,22 +421,22 @@ async def test_alarm_hubs_endpoints() -> None:
     assert session.requests[7]["method"] == "PATCH"
     assert session.requests[7]["json"] == {"name": "New Name"}
 
-    with pytest.raises(ValueError, match="Failed to update alarm hub"):
+    with pytest.raises(UniFiNotFoundError):
         await client.alarm_hubs.update("hub-1")
 
     # trigger_output
     assert (
         await client.alarm_hubs.trigger_output("hub-1", "out-1", enable=True, duration=5000) is True
     )
-    assert session.requests[9]["method"] == "POST"
+    assert session.requests[10]["method"] == "POST"
     assert (
-        session.requests[9]["url"]
+        session.requests[10]["url"]
         == "https://192.168.1.1/proxy/protect/integration/v1/alarm-hubs/hub-1/outputs/out-1/trigger"
     )
-    assert session.requests[9]["json"] == {"enable": True, "duration": 5000}
+    assert session.requests[10]["json"] == {"enable": True, "duration": 5000}
 
     assert await client.alarm_hubs.trigger_output("hub-1", "out-1") is True
-    assert session.requests[10]["json"] is None
+    assert session.requests[11]["json"] is None
 
     _assert_requests(
         session,
@@ -446,6 +450,7 @@ async def test_alarm_hubs_endpoints() -> None:
             ("GET", "alarm-hubs/hub-1", None, None),
             ("PATCH", "alarm-hubs/hub-1", None, {"name": "New Name"}),
             ("PATCH", "alarm-hubs/hub-1", None, {}),
+            ("GET", "alarm-hubs/hub-1", None, None),
             (
                 "POST",
                 "alarm-hubs/hub-1/outputs/out-1/trigger",
@@ -513,10 +518,10 @@ async def test_application_endpoints() -> None:
         session.requests[0]["url"] == "https://192.168.1.1/proxy/protect/integration/v1/meta/info"
     )
 
-    with pytest.raises(ValueError, match="Failed to get application info"):
+    with pytest.raises(UniFiNotFoundError):
         await client.application.get_info()
 
-    with pytest.raises(ValueError, match="Failed to get application info"):
+    with pytest.raises(UniFiNotFoundError):
         await client.application.get_info()
 
     # get_files
@@ -534,10 +539,10 @@ async def test_application_endpoints() -> None:
     assert await client.application.get_files() == []
 
     # upload_file
-    with pytest.raises(ValueError, match="Failed to upload file"):
+    with pytest.raises(UniFiResponseError):
         await client.application.upload_file(b"fake", filename="bad.gif")
 
-    with pytest.raises(ValueError, match="Failed to upload file"):
+    with pytest.raises(UniFiResponseError):
         await client.application.upload_file(b"fake", filename="bad.gif")
 
     # trigger_alarm_webhook
@@ -641,6 +646,8 @@ async def test_arm_profiles_endpoints() -> None:
             SAMPLE_ARM_PROFILE,
             # update failure
             None,
+            # re-fetch finds nothing
+            {"data": []},
             # delete success
             None,
             # enable success with kwargs
@@ -701,7 +708,7 @@ async def test_arm_profiles_endpoints() -> None:
         "activationDelay": 0,
     }
 
-    with pytest.raises(ValueError, match="Failed to create arm profile"):
+    with pytest.raises(UniFiResponseError):
         await client.arm_profiles.create(
             name="Fail",
             automations=[],
@@ -720,49 +727,49 @@ async def test_arm_profiles_endpoints() -> None:
     )
     assert session.requests[8]["json"] == {"name": "Away"}
 
-    with pytest.raises(ValueError, match="Failed to update arm profile"):
+    with pytest.raises(UniFiNotFoundError):
         await client.arm_profiles.update("prof-1", name="Fail")
 
     # delete
     assert await client.arm_profiles.delete("prof-1") is True
-    assert session.requests[10]["method"] == "DELETE"
+    assert session.requests[11]["method"] == "DELETE"
     assert (
-        session.requests[10]["url"]
+        session.requests[11]["url"]
         == "https://192.168.1.1/proxy/protect/integration/v1/arm-profiles/prof-1"
     )
 
     # enable
     assert await client.arm_profiles.enable() is True
-    assert session.requests[11]["method"] == "POST"
+    assert session.requests[12]["method"] == "POST"
     assert (
-        session.requests[11]["url"]
+        session.requests[12]["url"]
         == "https://192.168.1.1/proxy/protect/integration/v1/arm-profiles/enable"
     )
-    assert session.requests[11]["json"] is None
+    assert session.requests[12]["json"] is None
 
     with pytest.raises(UniFiGlobalAlarmManagerError):
         await client.arm_profiles.enable()
 
     # disable
     assert await client.arm_profiles.disable() is True
-    assert session.requests[13]["method"] == "POST"
+    assert session.requests[14]["method"] == "POST"
     assert (
-        session.requests[13]["url"]
+        session.requests[14]["url"]
         == "https://192.168.1.1/proxy/protect/integration/v1/arm-profiles/disable"
     )
-    assert session.requests[13]["json"] is None
+    assert session.requests[14]["json"] is None
 
     with pytest.raises(UniFiGlobalAlarmManagerError):
         await client.arm_profiles.disable()
 
     # update_settings
     assert await client.arm_profiles.update_settings(armProfileId="prof-1") is True
-    assert session.requests[15]["method"] == "PATCH"
+    assert session.requests[16]["method"] == "PATCH"
     assert (
-        session.requests[15]["url"]
+        session.requests[16]["url"]
         == "https://192.168.1.1/proxy/protect/integration/v1/arm-profiles/settings"
     )
-    assert session.requests[15]["json"] == {"armProfileId": "prof-1"}
+    assert session.requests[16]["json"] == {"armProfileId": "prof-1"}
 
     _assert_requests(
         session,
@@ -799,6 +806,7 @@ async def test_arm_profiles_endpoints() -> None:
             ),
             ("PATCH", "arm-profiles/prof-1", None, {"name": "Away"}),
             ("PATCH", "arm-profiles/prof-1", None, {"name": "Fail"}),
+            ("GET", "arm-profiles", None, None),
             ("DELETE", "arm-profiles/prof-1", None, None),
             ("POST", "arm-profiles/enable", None, None),
             ("POST", "arm-profiles/enable", None, None),
@@ -838,6 +846,8 @@ async def test_cameras_more_endpoints() -> None:
             {"data": []},
             # update failure
             None,
+            # re-fetch finds nothing
+            {"data": []},
             # get_snapshot high_quality=False
             resp_snapshot,
             # get_snapshot high_quality=True
@@ -858,6 +868,8 @@ async def test_cameras_more_endpoints() -> None:
             SAMPLE_CAMERA,
             # disable_mic_permanently failure
             None,
+            # re-fetch finds nothing
+            {"data": []},
             # set_video_mode (calls update)
             SAMPLE_CAMERA,
         ]
@@ -876,81 +888,81 @@ async def test_cameras_more_endpoints() -> None:
     cam2 = await client.cameras.get("cam-1")
     assert cam2.id == "cam-1"
 
-    with pytest.raises(ValueError, match="Camera cam-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.cameras.get("cam-1")
 
-    with pytest.raises(ValueError, match="Failed to update camera"):
+    with pytest.raises(UniFiNotFoundError):
         await client.cameras.update("cam-1")
 
     # get_snapshot
     data1 = await client.cameras.get_snapshot("cam-1", high_quality=False)
     assert data1 == fake_jpeg
-    assert session.requests[4]["method"] == "GET"
+    assert session.requests[5]["method"] == "GET"
     assert (
-        session.requests[4]["url"]
+        session.requests[5]["url"]
         == "https://192.168.1.1/proxy/protect/integration/v1/cameras/cam-1/snapshot"
     )
-    assert session.requests[4]["params"] is None
+    assert session.requests[5]["params"] is None
 
     data2 = await client.cameras.get_snapshot("cam-1", high_quality=True)
     assert data2 == fake_jpeg
-    assert session.requests[5]["params"] == {"highQuality": "true"}
+    assert session.requests[6]["params"] == {"highQuality": "true"}
 
     # get_rtsps_stream
     stream = await client.cameras.get_rtsps_stream("cam-1")
     assert isinstance(stream, RTSPSStream)
     assert stream.high == SAMPLE_RTSPS["high"]
-    assert session.requests[6]["method"] == "GET"
+    assert session.requests[7]["method"] == "GET"
     assert (
-        session.requests[6]["url"]
+        session.requests[7]["url"]
         == "https://192.168.1.1/proxy/protect/integration/v1/cameras/cam-1/rtsps-stream"
     )
 
-    with pytest.raises(ValueError, match="RTSPS stream not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.cameras.get_rtsps_stream("cam-1")
 
     # delete_rtsps_stream
     assert await client.cameras.delete_rtsps_stream("cam-1") is True
-    assert session.requests[8]["method"] == "DELETE"
+    assert session.requests[9]["method"] == "DELETE"
     assert (
-        session.requests[8]["url"]
+        session.requests[9]["url"]
         == "https://192.168.1.1/proxy/protect/integration/v1/cameras/cam-1/rtsps-stream"
     )
-    assert session.requests[8]["params"] == {"qualities": ["high"]}
+    assert session.requests[9]["params"] == {"qualities": ["high"]}
 
     assert await client.cameras.delete_rtsps_stream("cam-1", qualities=["medium", "low"]) is True
-    assert session.requests[9]["params"] == {"qualities": ["medium", "low"]}
+    assert session.requests[10]["params"] == {"qualities": ["medium", "low"]}
 
     # create_talkback_session
     tb = await client.cameras.create_talkback_session("cam-1")
     assert isinstance(tb, TalkbackSession)
     assert tb.url == SAMPLE_TALKBACK["url"]
-    assert session.requests[10]["method"] == "POST"
+    assert session.requests[11]["method"] == "POST"
     assert (
-        session.requests[10]["url"]
+        session.requests[11]["url"]
         == "https://192.168.1.1/proxy/protect/integration/v1/cameras/cam-1/talkback-session"
     )
 
-    with pytest.raises(ValueError, match="Failed to create talkback session"):
+    with pytest.raises(UniFiResponseError):
         await client.cameras.create_talkback_session("cam-1")
 
     # disable_mic_permanently
     dis = await client.cameras.disable_mic_permanently("cam-1")
     assert dis.id == "cam-1"
-    assert session.requests[12]["method"] == "POST"
+    assert session.requests[13]["method"] == "POST"
     assert (
-        session.requests[12]["url"]
+        session.requests[13]["url"]
         == "https://192.168.1.1/proxy/protect/integration/v1/cameras/cam-1/disable-mic-permanently"
     )
 
-    with pytest.raises(ValueError, match="Failed to disable microphone"):
+    with pytest.raises(UniFiNotFoundError):
         await client.cameras.disable_mic_permanently("cam-1")
 
     # set_video_mode
     vm = await client.cameras.set_video_mode("cam-1", "highFps")
     assert vm.id == "cam-1"
-    assert session.requests[14]["method"] == "PATCH"
-    assert session.requests[14]["json"] == {"videoMode": "highFps"}
+    assert session.requests[16]["method"] == "PATCH"
+    assert session.requests[16]["json"] == {"videoMode": "highFps"}
 
     _assert_requests(
         session,
@@ -959,6 +971,7 @@ async def test_cameras_more_endpoints() -> None:
             ("GET", "cameras/cam-1", None, None),
             ("GET", "cameras/cam-1", None, None),
             ("PATCH", "cameras/cam-1", None, {}),
+            ("GET", "cameras/cam-1", None, None),
             ("GET", "cameras/cam-1/snapshot", None, None),
             ("GET", "cameras/cam-1/snapshot", {"highQuality": "true"}, None),
             ("GET", "cameras/cam-1/rtsps-stream", None, None),
@@ -974,6 +987,7 @@ async def test_cameras_more_endpoints() -> None:
             ("POST", "cameras/cam-1/talkback-session", None, None),
             ("POST", "cameras/cam-1/disable-mic-permanently", None, None),
             ("POST", "cameras/cam-1/disable-mic-permanently", None, None),
+            ("GET", "cameras/cam-1", None, None),
             ("PATCH", "cameras/cam-1", None, {"videoMode": "highFps"}),
         ],
     )
@@ -1005,6 +1019,8 @@ async def test_chimes_endpoints() -> None:
             {"data": []},
             # update failure
             None,
+            # re-fetch finds nothing
+            {"data": []},
             # set_volume: get chime + patch chime
             SAMPLE_CHIME,
             SAMPLE_CHIME,
@@ -1027,10 +1043,10 @@ async def test_chimes_endpoints() -> None:
     ch2 = await client.chimes.get("chime-1")
     assert ch2.id == "chime-1"
 
-    with pytest.raises(ValueError, match="Chime chime-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.chimes.get("chime-1")
 
-    with pytest.raises(ValueError, match="Failed to update chime"):
+    with pytest.raises(UniFiNotFoundError):
         await client.chimes.update("chime-1")
 
     # set_volume validations
@@ -1041,8 +1057,8 @@ async def test_chimes_endpoints() -> None:
 
     vch = await client.chimes.set_volume("chime-1", 80)
     assert vch.id == "chime-1"
-    assert session.requests[5]["method"] == "PATCH"
-    assert session.requests[5]["json"] == {
+    assert session.requests[6]["method"] == "PATCH"
+    assert session.requests[6]["json"] == {
         "ringSettings": [
             {
                 "cameraId": "door-1",
@@ -1061,8 +1077,8 @@ async def test_chimes_endpoints() -> None:
 
     rch = await client.chimes.set_repeat_times("chime-1", 3)
     assert rch.id == "chime-1"
-    assert session.requests[7]["method"] == "PATCH"
-    assert session.requests[7]["json"] == {
+    assert session.requests[8]["method"] == "PATCH"
+    assert session.requests[8]["json"] == {
         "ringSettings": [
             {
                 "cameraId": "door-1",
@@ -1080,6 +1096,7 @@ async def test_chimes_endpoints() -> None:
             ("GET", "chimes/chime-1", None, None),
             ("GET", "chimes/chime-1", None, None),
             ("PATCH", "chimes/chime-1", None, {}),
+            ("GET", "chimes/chime-1", None, None),
             ("GET", "chimes/chime-1", None, None),
             (
                 "PATCH",
@@ -1129,10 +1146,10 @@ async def test_chimes_update_ring_settings_errors() -> None:
     session = _Session([chime_no_rings, chime_bad_rings])
     client = _client(session)
 
-    with pytest.raises(ValueError, match="has no paired doorbell"):
+    with pytest.raises(UniFiValidationError, match="no paired doorbell"):
         await client.chimes.set_volume("chime-1", 50)
 
-    with pytest.raises(ValueError, match="has incomplete ring settings"):
+    with pytest.raises(UniFiResponseError):
         await client.chimes.set_volume("chime-1", 50)
 
     _assert_requests(
@@ -1200,6 +1217,8 @@ async def test_lights_endpoints() -> None:
             {"data": []},
             # update failure
             None,
+            # re-fetch finds nothing
+            {"data": []},
             # turn_on
             SAMPLE_LIGHT,
             # turn_off
@@ -1226,31 +1245,31 @@ async def test_lights_endpoints() -> None:
     l2 = await client.lights.get("light-1")
     assert l2.id == "light-1"
 
-    with pytest.raises(ValueError, match="Light light-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.lights.get("light-1")
 
-    with pytest.raises(ValueError, match="Failed to update light"):
+    with pytest.raises(UniFiNotFoundError):
         await client.lights.update("light-1")
 
     # turn_on
     on_l = await client.lights.turn_on("light-1")
     assert on_l.id == "light-1"
-    assert session.requests[4]["method"] == "PATCH"
-    assert session.requests[4]["json"] == {"lightModeSettings": {"mode": "always"}}
+    assert session.requests[5]["method"] == "PATCH"
+    assert session.requests[5]["json"] == {"lightModeSettings": {"mode": "always"}}
 
     # turn_off
     off_l = await client.lights.turn_off("light-1")
     assert off_l.id == "light-1"
-    assert session.requests[5]["json"] == {"lightModeSettings": {"mode": "off"}}
+    assert session.requests[6]["json"] == {"lightModeSettings": {"mode": "off"}}
 
     # set_mode
     sm_l1 = await client.lights.set_mode("light-1", "on")
     assert sm_l1.id == "light-1"
-    assert session.requests[6]["json"] == {"lightModeSettings": {"mode": "always"}}
+    assert session.requests[7]["json"] == {"lightModeSettings": {"mode": "always"}}
 
     sm_l2 = await client.lights.set_mode("light-1", LightMode.MOTION)
     assert sm_l2.id == "light-1"
-    assert session.requests[7]["json"] == {"lightModeSettings": {"mode": "motion"}}
+    assert session.requests[8]["json"] == {"lightModeSettings": {"mode": "motion"}}
 
     # set_brightness validations
     with pytest.raises(ValueError, match="led_level must be between 1 and 6"):
@@ -1263,7 +1282,7 @@ async def test_lights_endpoints() -> None:
 
     br_l = await client.lights.set_brightness("light-1", 4)
     assert br_l.id == "light-1"
-    assert session.requests[8]["json"] == {"lightDeviceSettings": {"ledLevel": 4}}
+    assert session.requests[9]["json"] == {"lightDeviceSettings": {"ledLevel": 4}}
 
     _assert_requests(
         session,
@@ -1272,6 +1291,7 @@ async def test_lights_endpoints() -> None:
             ("GET", "lights/light-1", None, None),
             ("GET", "lights/light-1", None, None),
             ("PATCH", "lights/light-1", None, {}),
+            ("GET", "lights/light-1", None, None),
             (
                 "PATCH",
                 "lights/light-1",
@@ -1332,6 +1352,8 @@ async def test_liveviews_endpoints() -> None:
             SAMPLE_LIVEVIEW,
             # update failure
             None,
+            # re-fetch finds nothing
+            {"data": []},
         ]
     )
     client = _client(session)
@@ -1351,10 +1373,10 @@ async def test_liveviews_endpoints() -> None:
     lv2 = await client.liveviews.get("lv-1")
     assert lv2.id == "lv-1"
 
-    with pytest.raises(ValueError, match="LiveView lv-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.liveviews.get("lv-1")
 
-    with pytest.raises(ValueError, match="Failed to create live view"):
+    with pytest.raises(UniFiResponseError):
         await client.liveviews.create(**{**SAMPLE_LIVEVIEW, "name": "Fail"})
 
     up_lv = await client.liveviews.update("lv-1", **{**SAMPLE_LIVEVIEW, "name": "New View"})
@@ -1366,7 +1388,7 @@ async def test_liveviews_endpoints() -> None:
     )
     assert session.requests[6]["json"] == {**SAMPLE_LIVEVIEW, "name": "New View"}
 
-    with pytest.raises(ValueError, match="Failed to update live view"):
+    with pytest.raises(UniFiNotFoundError):
         await client.liveviews.update("lv-1", **SAMPLE_LIVEVIEW)
 
     _assert_requests(
@@ -1380,6 +1402,7 @@ async def test_liveviews_endpoints() -> None:
             ("POST", "liveviews", None, {**SAMPLE_LIVEVIEW, "name": "Fail"}),
             ("PATCH", "liveviews/lv-1", None, {**SAMPLE_LIVEVIEW, "name": "New View"}),
             ("PATCH", "liveviews/lv-1", None, SAMPLE_LIVEVIEW),
+            ("GET", "liveviews/lv-1", None, None),
         ],
     )
 
@@ -1408,10 +1431,10 @@ async def test_nvr_endpoint_branches() -> None:
     n1 = await client.nvr.get()
     assert n1.id == "nvr-1"
 
-    with pytest.raises(ValueError, match="NVR not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.nvr.get()
 
-    with pytest.raises(ValueError, match="NVR not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.nvr.get()
 
     _assert_requests(
@@ -1449,6 +1472,8 @@ async def test_sensors_endpoints() -> None:
             {"data": []},
             # update failure
             None,
+            # re-fetch finds nothing
+            {"data": []},
         ]
     )
     client = _client(session)
@@ -1470,10 +1495,10 @@ async def test_sensors_endpoints() -> None:
     s2 = await client.sensors.get("sensor-1")
     assert s2.id == "sensor-1"
 
-    with pytest.raises(ValueError, match="Sensor sensor-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.sensors.get("sensor-1")
 
-    with pytest.raises(ValueError, match="Failed to update sensor"):
+    with pytest.raises(UniFiNotFoundError):
         await client.sensors.update("sensor-1")
 
     # set_motion_sensitivity
@@ -1492,6 +1517,7 @@ async def test_sensors_endpoints() -> None:
             ("GET", "sensors/sensor-1", None, None),
             ("GET", "sensors/sensor-1", None, None),
             ("PATCH", "sensors/sensor-1", None, {}),
+            ("GET", "sensors/sensor-1", None, None),
         ],
     )
 
@@ -1641,7 +1667,7 @@ async def test_ulp_users_endpoints() -> None:
         == "https://192.168.1.1/proxy/protect/integration/v1/ulp-users/ulp-1"
     )
 
-    with pytest.raises(ValueError, match="ULP user ulp-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.ulp_users.get("ulp-1")
 
     _assert_requests(
@@ -1687,6 +1713,8 @@ async def test_viewers_endpoints() -> None:
             {"data": []},
             # update failure
             None,
+            # re-fetch finds nothing
+            {"data": []},
             # set_liveview
             SAMPLE_VIEWER,
         ]
@@ -1710,21 +1738,21 @@ async def test_viewers_endpoints() -> None:
     v2 = await client.viewers.get("viewer-1")
     assert v2.id == "viewer-1"
 
-    with pytest.raises(ValueError, match="Viewer viewer-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.viewers.get("viewer-1")
 
-    with pytest.raises(ValueError, match="Failed to update viewer"):
+    with pytest.raises(UniFiNotFoundError):
         await client.viewers.update("viewer-1")
 
     # set_liveview
     slv = await client.viewers.set_liveview("viewer-1", "lv-1")
     assert slv.id == "viewer-1"
-    assert session.requests[7]["method"] == "PATCH"
+    assert session.requests[8]["method"] == "PATCH"
     assert (
-        session.requests[7]["url"]
+        session.requests[8]["url"]
         == "https://192.168.1.1/proxy/protect/integration/v1/viewers/viewer-1"
     )
-    assert session.requests[7]["json"] == {"liveview": "lv-1"}
+    assert session.requests[8]["json"] == {"liveview": "lv-1"}
 
     _assert_requests(
         session,
@@ -1736,6 +1764,7 @@ async def test_viewers_endpoints() -> None:
             ("GET", "viewers/viewer-1", None, None),
             ("GET", "viewers/viewer-1", None, None),
             ("PATCH", "viewers/viewer-1", None, {}),
+            ("GET", "viewers/viewer-1", None, None),
             ("PATCH", "viewers/viewer-1", None, {"liveview": "lv-1"}),
         ],
     )
@@ -1990,113 +2019,444 @@ async def test_sensor_motion_sensitivity_spec_mismatch() -> None:
     )
 
 
+SECRET = "do-not-leak-7f3a"
+
+# (endpoint, method, args, path, id_key) for every single-record read.
+_PROTECT_READS = [
+    ("alarm_hubs", "get", ("hub-1",), "alarm-hubs/hub-1", True),
+    ("cameras", "get", ("cam-1",), "cameras/cam-1", True),
+    ("chimes", "get", ("chime-1",), "chimes/chime-1", True),
+    ("lights", "get", ("light-1",), "lights/light-1", True),
+    ("liveviews", "get", ("lv-1",), "liveviews/lv-1", True),
+    ("nvr", "get", (), "nvrs", True),
+    ("sensors", "get", ("sensor-1",), "sensors/sensor-1", True),
+    ("users", "get", ("user-1",), "users/user-1", True),
+    ("ulp_users", "get", ("ulp-1",), "ulp-users/ulp-1", True),
+    ("viewers", "get", ("viewer-1",), "viewers/viewer-1", True),
+    ("cameras", "get_rtsps_stream", ("cam-1",), "cameras/cam-1/rtsps-stream", False),
+    ("application", "get_info", (), "meta/info", False),
+]
+
+
+def _read_cases(bodies: list[Any], *, needs_id: bool) -> list[Any]:
+    return [
+        pytest.param(endpoint, method, args, path, body, id=f"{endpoint}.{method}-{i}")
+        for endpoint, method, args, path, id_key in _PROTECT_READS
+        if id_key or not needs_id
+        for i, body in enumerate(bodies)
+    ]
+
+
 @pytest.mark.parametrize(
-    ("endpoint", "method", "args", "kwargs", "response", "verb", "path"),
+    ("endpoint", "method", "args", "path", "response"),
     [
-        ("alarm_hubs", "get", ("hub-1",), {}, None, "GET", "alarm-hubs/hub-1"),
-        ("cameras", "get", ("cam-1",), {}, None, "GET", "cameras/cam-1"),
-        ("chimes", "get", ("chime-1",), {}, None, "GET", "chimes/chime-1"),
-        ("lights", "get", ("light-1",), {}, None, "GET", "lights/light-1"),
-        ("liveviews", "get", ("lv-1",), {}, None, "GET", "liveviews/lv-1"),
-        ("sensors", "get", ("sensor-1",), {}, None, "GET", "sensors/sensor-1"),
-        ("viewers", "get", ("viewer-1",), {}, None, "GET", "viewers/viewer-1"),
-        (
-            "alarm_hubs",
-            "update",
-            ("hub-1",),
-            {"name": "New name"},
-            {"data": []},
-            "PATCH",
-            "alarm-hubs/hub-1",
-        ),
-        (
-            "arm_profiles",
-            "update",
-            ("prof-1",),
-            {"name": "Away"},
-            {"data": []},
-            "PATCH",
-            "arm-profiles/prof-1",
-        ),
-        (
-            "liveviews",
-            "update",
-            ("lv-1",),
-            SAMPLE_LIVEVIEW,
-            {"data": []},
-            "PATCH",
-            "liveviews/lv-1",
-        ),
-        (
-            "sensors",
-            "update",
-            ("sensor-1",),
-            {"name": "Door"},
-            {"data": []},
-            "PATCH",
-            "sensors/sensor-1",
-        ),
-        (
-            "arm_profiles",
-            "create",
-            (),
-            {
-                "name": "Home",
-                "automations": [],
-                "schedules": [],
-                "recordEverything": False,
-                "activationDelay": 0,
-            },
-            {"data": []},
-            "POST",
-            "arm-profiles",
-        ),
-        (
-            "cameras",
-            "get_rtsps_stream",
-            ("cam-1",),
-            {},
-            {"data": []},
-            "GET",
-            "cameras/cam-1/rtsps-stream",
-        ),
-        (
-            "cameras",
-            "create_talkback_session",
-            ("cam-1",),
-            {},
-            {"data": []},
-            "POST",
-            "cameras/cam-1/talkback-session",
-        ),
-        (
-            "cameras",
-            "disable_mic_permanently",
-            ("cam-1",),
-            {},
-            {"data": []},
-            "POST",
-            "cameras/cam-1/disable-mic-permanently",
-        ),
+        *_read_cases([None, {}, [], {"data": []}, {"data": {}}, {"data": "str"}], needs_id=False),
+        # A record without an id is no record of an id-keyed resource.
+        *_read_cases([{"name": "x"}, {"data": [{"name": "x"}]}], needs_id=True),
     ],
 )
-async def test_missing_and_malformed_object_responses(
-    *,
+async def test_protect_read_without_record_raises_not_found(
+    endpoint: str, method: str, args: tuple[str, ...], path: str, response: Any
+) -> None:
+    """A 2xx read whose body holds no record raises UniFiNotFoundError, status 200."""
+    session = _Session([response])
+    resource = getattr(_client(session), endpoint)
+    with pytest.raises(UniFiNotFoundError) as exc_info:
+        await getattr(resource, method)(*args)
+    assert exc_info.value.status_code == 200
+    assert "not found" in exc_info.value.message
+    _assert_requests(session, [("GET", path, None, None)])
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "method", "args", "path", "response"),
+    [
+        pytest.param(endpoint, method, args, path, body, id=f"{endpoint}.{method}-{i}")
+        for endpoint, method, args, path, _ in _PROTECT_READS
+        for i, body in enumerate(
+            [
+                # Every model rejects a list where a scalar field is expected.
+                {
+                    "id": "x-1",
+                    "name": [SECRET],
+                    "applicationVersion": [SECRET],
+                    "type": [SECRET],
+                    "firstName": [SECRET],
+                    "high": [SECRET],
+                },
+                {
+                    "data": [
+                        {
+                            "id": "x-1",
+                            "name": [SECRET],
+                            "applicationVersion": [SECRET],
+                            "type": [SECRET],
+                            "firstName": [SECRET],
+                            "high": [SECRET],
+                        }
+                    ]
+                },
+            ]
+        )
+    ],
+)
+async def test_protect_read_malformed_record_raises_sanitized_response_error(
+    endpoint: str, method: str, args: tuple[str, ...], path: str, response: Any
+) -> None:
+    """A record that fails validation raises UniFiResponseError naming fields only."""
+    session = _Session([response])
+    resource = getattr(_client(session), endpoint)
+    with pytest.raises(UniFiResponseError) as exc_info:
+        await getattr(resource, method)(*args)
+    err = exc_info.value
+    assert not isinstance(err, UniFiNotFoundError)
+    assert err.status_code == 200
+    assert "failed validation" in err.message
+    assert SECRET not in err.message
+    assert SECRET not in str(err)
+    assert err.__cause__ is None
+    assert err.__context__ is None
+    _assert_requests(session, [("GET", path, None, None)])
+
+
+# (endpoint, method, args, kwargs, verb, write path, read path, sample)
+_PROTECT_WRITES_WITH_REFETCH = [
+    (
+        "alarm_hubs",
+        "update",
+        ("hub-1",),
+        {"name": "N"},
+        "PATCH",
+        "alarm-hubs/hub-1",
+        "alarm-hubs/hub-1",
+        SAMPLE_HUB,
+    ),
+    (
+        "cameras",
+        "update",
+        ("cam-1",),
+        {"name": "N"},
+        "PATCH",
+        "cameras/cam-1",
+        "cameras/cam-1",
+        SAMPLE_CAMERA,
+    ),
+    (
+        "cameras",
+        "disable_mic_permanently",
+        ("cam-1",),
+        {},
+        "POST",
+        "cameras/cam-1/disable-mic-permanently",
+        "cameras/cam-1",
+        SAMPLE_CAMERA,
+    ),
+    (
+        "cameras",
+        "create_rtsps_stream",
+        ("cam-1",),
+        {},
+        "POST",
+        "cameras/cam-1/rtsps-stream",
+        "cameras/cam-1/rtsps-stream",
+        SAMPLE_RTSPS,
+    ),
+    (
+        "chimes",
+        "update",
+        ("chime-1",),
+        {"name": "N"},
+        "PATCH",
+        "chimes/chime-1",
+        "chimes/chime-1",
+        SAMPLE_CHIME,
+    ),
+    (
+        "lights",
+        "update",
+        ("light-1",),
+        {"name": "N"},
+        "PATCH",
+        "lights/light-1",
+        "lights/light-1",
+        SAMPLE_LIGHT,
+    ),
+    (
+        "liveviews",
+        "update",
+        ("lv-1",),
+        {"name": "N"},
+        "PATCH",
+        "liveviews/lv-1",
+        "liveviews/lv-1",
+        SAMPLE_LIVEVIEW,
+    ),
+    (
+        "sensors",
+        "update",
+        ("sensor-1",),
+        {"name": "N"},
+        "PATCH",
+        "sensors/sensor-1",
+        "sensors/sensor-1",
+        SAMPLE_SENSOR,
+    ),
+    (
+        "viewers",
+        "update",
+        ("viewer-1",),
+        {"name": "N"},
+        "PATCH",
+        "viewers/viewer-1",
+        "viewers/viewer-1",
+        SAMPLE_VIEWER,
+    ),
+]
+
+
+def _write_body(kwargs: dict[str, Any], method: str) -> Any:
+    if method == "create_rtsps_stream":
+        return {"qualities": ["high"]}
+    return kwargs or None
+
+
+@pytest.mark.parametrize(
+    "written", [None, {"data": []}, {"data": {"name": "partial"}}, {"id": "x", "name": [1]}]
+)
+@pytest.mark.parametrize(
+    ("endpoint", "method", "args", "kwargs", "verb", "write_path", "read_path", "sample"),
+    _PROTECT_WRITES_WITH_REFETCH,
+)
+async def test_protect_write_without_record_refetches(
     endpoint: str,
     method: str,
     args: tuple[str, ...],
     kwargs: dict[str, Any],
-    response: Any,
+    verb: str,
+    write_path: str,
+    read_path: str,
+    sample: dict[str, Any],
+    written: Any,
+) -> None:
+    """A successful write with an empty, partial or invalid body re-fetches the resource."""
+    if method == "create_rtsps_stream" and written not in (None, {"data": []}):
+        # Every RTSPS stream field is optional and has no id, so only a wrong
+        # field type makes its body unusable.
+        written = {"data": {"high": [1]}}
+    session = _Session([written, {"data": sample}])
+    resource = getattr(_client(session), endpoint)
+    result = await getattr(resource, method)(*args, **kwargs)
+    expected = type(result).model_validate(sample)
+    assert result == expected
+    _assert_requests(
+        session,
+        [(verb, write_path, None, _write_body(kwargs, method)), ("GET", read_path, None, None)],
+    )
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "method", "args", "kwargs", "verb", "write_path", "read_path", "sample"),
+    _PROTECT_WRITES_WITH_REFETCH,
+)
+async def test_protect_write_refetch_finding_nothing_raises_not_found(
+    endpoint: str,
+    method: str,
+    args: tuple[str, ...],
+    kwargs: dict[str, Any],
+    verb: str,
+    write_path: str,
+    read_path: str,
+    sample: dict[str, Any],
+) -> None:
+    """When neither the write nor the re-fetch holds the resource, it is not found."""
+    del sample
+    session = _Session([None, {"data": []}])
+    resource = getattr(_client(session), endpoint)
+    with pytest.raises(UniFiNotFoundError) as exc_info:
+        await getattr(resource, method)(*args, **kwargs)
+    assert exc_info.value.status_code == 200
+    _assert_requests(
+        session,
+        [(verb, write_path, None, _write_body(kwargs, method)), ("GET", read_path, None, None)],
+    )
+
+
+@pytest.mark.parametrize("written", [None, {"data": []}, {"data": {"id": "prof-1", "name": [1]}}])
+async def test_arm_profiles_update_without_record_searches_listing(written: Any) -> None:
+    """Arm profiles have no single-profile GET, so the listing is searched instead."""
+    other = {**SAMPLE_ARM_PROFILE, "id": "prof-2"}
+    session = _Session([written, {"data": [other, SAMPLE_ARM_PROFILE]}])
+    profile = await _client(session).arm_profiles.update("prof-1", name="Home")
+    assert profile == ArmProfile.model_validate(SAMPLE_ARM_PROFILE)
+    _assert_requests(
+        session,
+        [
+            ("PATCH", "arm-profiles/prof-1", None, {"name": "Home"}),
+            ("GET", "arm-profiles", None, None),
+        ],
+    )
+
+
+async def test_arm_profiles_update_missing_from_listing_raises_not_found() -> None:
+    """An update whose profile is neither echoed nor listed is not found."""
+    session = _Session([None, {"data": [{**SAMPLE_ARM_PROFILE, "id": "prof-2"}]}])
+    with pytest.raises(UniFiNotFoundError) as exc_info:
+        await _client(session).arm_profiles.update("prof-1", name="Home")
+    assert exc_info.value.status_code == 200
+    assert "prof-1" in exc_info.value.message
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        None,
+        {"data": []},
+        {"data": {"other": 1}},
+        {"data": {"isArmed": "not-a-bool"}},
+    ],
+)
+async def test_arm_profiles_update_settings_without_settings_returns_true(response: Any) -> None:
+    """A settings PATCH acknowledged without a valid settings body still succeeded."""
+    session = _Session([response])
+    assert await _client(session).arm_profiles.update_settings(isArmed=True) is True
+    _assert_requests(session, [("PATCH", "arm-profiles/settings", None, {"isArmed": True})])
+
+
+# (endpoint, method, args, kwargs, verb, path, body sent)
+_PROTECT_CREATES = [
+    ("arm_profiles", "create", (), {"name": "Home"}, "POST", "arm-profiles", {"name": "Home"}),
+    (
+        "liveviews",
+        "create",
+        (),
+        {"name": "Main"},
+        "POST",
+        "liveviews",
+        {"name": "Main", "layout": 1},
+    ),
+    (
+        "cameras",
+        "create_talkback_session",
+        ("cam-1",),
+        {},
+        "POST",
+        "cameras/cam-1/talkback-session",
+        None,
+    ),
+    (
+        "pos",
+        "ingest_transaction",
+        ("cam-1", {"type": "sale", "externalId": "tx-1", "amount": 5.0}),
+        {},
+        "POST",
+        "pos/cameras/cam-1/transactions",
+        {"type": "sale", "externalId": "tx-1", "amount": 5.0},
+    ),
+]
+
+
+@pytest.mark.parametrize("response", [None, {"data": []}, {"data": {}}])
+@pytest.mark.parametrize(
+    ("endpoint", "method", "args", "kwargs", "verb", "path", "body"), _PROTECT_CREATES
+)
+async def test_protect_create_without_record_raises_response_error(
+    endpoint: str,
+    method: str,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
     verb: str,
     path: str,
+    body: Any,
+    response: Any,
 ) -> None:
-    """Empty objects and malformed envelopes cannot be published as devices."""
+    """A create whose response holds no record cannot be re-fetched, so it is reported."""
     session = _Session([response])
     resource = getattr(_client(session), endpoint)
-    with pytest.raises(ValueError, match=r"not found|Failed to"):
+    with pytest.raises(UniFiResponseError) as exc_info:
         await getattr(resource, method)(*args, **kwargs)
-    body = kwargs if verb in {"POST", "PATCH"} and kwargs else None
+    err = exc_info.value
+    assert not isinstance(err, UniFiNotFoundError)
+    assert err.status_code == 200
+    assert "may have been created" in err.message
     _assert_requests(session, [(verb, path, None, body)])
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "method", "args", "kwargs", "verb", "path", "body"), _PROTECT_CREATES
+)
+async def test_protect_create_malformed_record_raises_sanitized_response_error(
+    endpoint: str,
+    method: str,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    verb: str,
+    path: str,
+    body: Any,
+) -> None:
+    """A created record that fails validation names fields only."""
+    bad = {"id": "x-1", "name": [SECRET], "url": [SECRET], "created": [SECRET]}
+    session = _Session([{"data": bad}])
+    resource = getattr(_client(session), endpoint)
+    with pytest.raises(UniFiResponseError) as exc_info:
+        await getattr(resource, method)(*args, **kwargs)
+    err = exc_info.value
+    assert err.status_code == 200
+    assert SECRET not in err.message
+    assert err.__cause__ is None
+    assert err.__context__ is None
+    _assert_requests(session, [(verb, path, None, body)])
+
+
+@pytest.mark.parametrize("response", [None, {"data": {}}])
+async def test_application_upload_file_without_record_raises_response_error(
+    response: Any,
+) -> None:
+    """An accepted upload whose response holds no file record is reported."""
+    session = _Session([response])
+    with pytest.raises(UniFiResponseError) as exc_info:
+        await _client(session).application.upload_file(b"GIF89a", filename="a.gif")
+    assert not isinstance(exc_info.value, UniFiNotFoundError)
+    assert exc_info.value.status_code == 200
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "method", "args"),
+    [
+        ("alarm_hubs", "update", ("hub-1",)),
+        ("arm_profiles", "create", ()),
+        ("arm_profiles", "update", ("prof-1",)),
+        ("arm_profiles", "update_settings", ()),
+    ],
+)
+async def test_protect_dict_site_id_raises_type_error(
+    endpoint: str, method: str, args: tuple[str, ...]
+) -> None:
+    """Settings passed as a dict in the site_id position are rejected before any request."""
+    session = _Session([])
+    resource = getattr(_client(session), endpoint)
+    with pytest.raises(TypeError, match="site_id must be a str or None, not dict"):
+        await getattr(resource, method)(*args, {"name": "x"})
+    assert session.requests == []
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "method", "args"),
+    [
+        ("alarm_hubs", "update", ("hub-1",)),
+        ("arm_profiles", "create", ()),
+        ("arm_profiles", "update", ("prof-1",)),
+        ("arm_profiles", "update_settings", ()),
+    ],
+)
+async def test_protect_str_site_id_sends_keyword_settings(
+    endpoint: str, method: str, args: tuple[str, ...]
+) -> None:
+    """A string site_id is accepted and only the keyword arguments form the body."""
+    session = _Session([None, None])
+    resource = getattr(_client(session), endpoint)
+    with contextlib.suppress(UniFiResponseError):
+        await getattr(resource, method)(*args, "site-9", name="x")
+    assert session.requests[0]["json"] == {"name": "x"}
 
 
 @pytest.mark.parametrize("upload", [False, True])

@@ -18,6 +18,7 @@ from ..const import (
     ConnectionType,
 )
 from ..site_manager import UniFiSiteManagerClient
+from ..validation import require_record
 from .endpoints import (
     ACLEndpoint,
     ClientsEndpoint,
@@ -465,14 +466,11 @@ class UniFiNetworkClient(BaseUniFiClient):
             ApplicationInfo with the application version.
 
         Raises:
-            ValueError: If the response cannot be parsed.
+            UniFiNotFoundError: If the response holds no application info.
+            UniFiResponseError: If the application info fails validation.
 
         """
         path = self.build_api_path("/info")
-        response = await self._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return ApplicationInfo.model_validate(data)
-        raise ValueError("Unable to retrieve application info")
+        return require_record(
+            await self._get(path), ApplicationInfo, "Application info", id_key=None
+        )

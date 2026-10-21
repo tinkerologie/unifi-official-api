@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Final
 
 from ...exceptions import UniFiValidationError
+from ...validation import require_record
 from ..models import (
     Device,
     LegacyOutletMetrics,
@@ -140,17 +141,15 @@ class DevicesEndpoint:
         Returns:
             The device.
 
+        Raises:
+            UniFiNotFoundError: If the response holds no device.
+            UniFiResponseError: If the device in the response fails validation.
+
         """
         path = self._client.build_api_path(f"/sites/{site_id}/devices/{device_id}")
-        response = await self._client._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return Device.model_validate(data)
-            if isinstance(data, list) and len(data) > 0:
-                return Device.model_validate(data[0])
-        raise ValueError(f"Device {device_id} not found")
+        return require_record(
+            await self._client._get(path), Device, f"Device {device_id}", id_key=None
+        )
 
     async def restart(self, site_id: str, device_id: str) -> bool:
         """Restart a device via the documented device-actions endpoint."""

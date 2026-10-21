@@ -195,6 +195,15 @@ except UniFiError as e:
     print(f"API error: {e.message}")
 ```
 
+`UniFiNotFoundError` covers both an HTTP 404 and a successful response
+(`status_code == 200`) that holds no record. A record that fails validation
+raises `UniFiResponseError` with `status_code == 200` and a message naming the
+failing fields only. Any HTTP error answer, including one to a snapshot or
+other binary download, is a `UniFiResponseError` subclass;
+`UniFiConnectionError` and `UniFiTimeoutError` mean the console could not be
+reached. `ValueError` and `TypeError` are raised only for invalid arguments,
+before any request is made.
+
 ## Configuration Options
 
 Both clients accept the following configuration options:

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
 
+from ...validation import require_record, written_record
 from ..models import Light, LightMode
 
 if TYPE_CHECKING:
@@ -82,17 +83,13 @@ class LightsEndpoint:
         Returns:
             The light.
 
+        Raises:
+            UniFiNotFoundError: If the response holds no light with an ``id``.
+            UniFiResponseError: If the light in the response fails validation.
+
         """
         path = self._client.build_api_path(f"/lights/{light_id}", site_id)
-        response = await self._client._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return Light.model_validate(data)
-            if isinstance(data, list) and len(data) > 0:
-                return Light.model_validate(data[0])
-        raise ValueError(f"Light {light_id} not found")
+        return require_record(await self._client._get(path), Light, f"Light {light_id}")
 
     async def update(
         self,
@@ -111,15 +108,16 @@ class LightsEndpoint:
         Returns:
             The updated light.
 
+        Raises:
+            UniFiNotFoundError: If the follow-up ``get()`` finds no light.
+            UniFiResponseError: If the follow-up ``get()`` response fails validation.
+
         """
         path = self._client.build_api_path(f"/lights/{light_id}", site_id)
-        response = await self._client._patch(path, json_data=kwargs)
-
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict):
-                return Light.model_validate(result)
-        raise ValueError("Failed to update light")
+        written = written_record(await self._client._patch(path, json_data=kwargs), Light)
+        if written is not None:
+            return written
+        return await self.get(light_id, site_id)
 
     async def turn_on(self, light_id: str, site_id: str | None = None) -> Light:
         """

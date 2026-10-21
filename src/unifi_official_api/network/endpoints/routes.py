@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from ...const import ENDPOINT_TRAFFIC_ROUTES
 from ...exceptions import (
+    UniFiNotFoundError,
     UniFiResponseError,
     UniFiValidationError,
 )
@@ -157,7 +158,8 @@ class RoutesEndpoint:
             The PolicyBasedRoute model.
 
         Raises:
-            ValueError: If the route is not found.
+            UniFiNotFoundError: If neither the route read nor the route listing holds
+                the route.
 
         """
         path = self._client.build_legacy_v2_api_path(
@@ -174,7 +176,7 @@ class RoutesEndpoint:
                 return route
 
         msg = f"Policy-Based Route {route_id} not found"
-        raise ValueError(msg)
+        raise UniFiNotFoundError(msg, status_code=200)
 
     async def update_route(
         self,
@@ -200,7 +202,7 @@ class RoutesEndpoint:
             The updated PolicyBasedRoute model.
 
         Raises:
-            ValueError: If the route is not found.
+            UniFiNotFoundError: If the route listing holds no route with this ID.
 
         """
         path = self._client.build_legacy_v2_api_path(site_name, ENDPOINT_TRAFFIC_ROUTES)
@@ -216,7 +218,7 @@ class RoutesEndpoint:
 
         if current_payload is None:
             msg = f"Policy-Based Route {route_id} not found"
-            raise ValueError(msg)
+            raise UniFiNotFoundError(msg, status_code=200)
 
         current_payload = dict(current_payload)
         if enabled is not None:

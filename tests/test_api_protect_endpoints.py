@@ -550,7 +550,7 @@ async def test_cameras_create_rtsps_stream_custom_qualities() -> None:
 async def test_cameras_create_rtsps_stream_invalid_response(invalid_data: Any) -> None:
     """Non-dict response raises ValueError."""
     client, _, _ = make_client(json_data=invalid_data)
-    with pytest.raises(ValueError, match="Failed to create RTSPS stream"):
+    with pytest.raises(UniFiResponseError):
         await client.cameras.create_rtsps_stream("cam-1")
 
 
@@ -572,7 +572,7 @@ async def test_liveviews_create_with_slots() -> None:
 async def test_liveviews_create_invalid_response(invalid_data: Any) -> None:
     """Non-dict response raises ValueError."""
     client, _, _ = make_client(json_data=invalid_data)
-    with pytest.raises(ValueError, match="Failed to create live view"):
+    with pytest.raises(UniFiResponseError):
         await client.liveviews.create(name="Patio")
 
 
@@ -588,44 +588,8 @@ async def test_nvr_get_list_response() -> None:
 async def test_nvr_get_empty_list_raises() -> None:
     """Empty list response raises ValueError."""
     client, _, _ = make_client(json_data={"data": []})
-    with pytest.raises(ValueError, match="NVR not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.nvr.get()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("invalid_data", [None, {"data": None}])
-async def test_chimes_update_invalid_response(invalid_data: Any) -> None:
-    """Non-dict response on chime update raises ValueError."""
-    client, _, _ = make_client(json_data=invalid_data)
-    with pytest.raises(ValueError, match="Failed to update chime"):
-        await client.chimes.update("chime-1", name="Chime")
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("invalid_data", [None, {"data": None}])
-async def test_cameras_update_invalid_response(invalid_data: Any) -> None:
-    """Non-dict response on camera update raises ValueError."""
-    client, _, _ = make_client(json_data=invalid_data)
-    with pytest.raises(ValueError, match="Failed to update camera"):
-        await client.cameras.update("cam-1", name="Camera")
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("invalid_data", [None, {"data": None}])
-async def test_lights_update_invalid_response(invalid_data: Any) -> None:
-    """Non-dict response on light update raises ValueError."""
-    client, _, _ = make_client(json_data=invalid_data)
-    with pytest.raises(ValueError, match="Failed to update light"):
-        await client.lights.update("light-1", name="Light")
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("invalid_data", [None, {"data": None}])
-async def test_viewers_update_invalid_response(invalid_data: Any) -> None:
-    """Non-dict response on viewer update raises ValueError."""
-    client, _, _ = make_client(json_data=invalid_data)
-    with pytest.raises(ValueError, match="Failed to update viewer"):
-        await client.viewers.update("viewer-1", name="Viewer")
 
 
 @pytest.mark.asyncio

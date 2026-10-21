@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from unifi_official_api.innerspace.models.application import ApplicationInfo
+from unifi_official_api.validation import require_record
 
 if TYPE_CHECKING:
     from unifi_official_api.innerspace.client import UniFiInnerSpaceClient
@@ -19,12 +20,7 @@ class ApplicationEndpoint:
     async def get_info(self) -> ApplicationInfo:
         """Retrieve InnerSpace application information."""
         response = await self._client._get(self._client.build_api_path("/info"))
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return ApplicationInfo.model_validate(data)
-        msg = "Unable to retrieve InnerSpace application info"
-        raise ValueError(msg)
+        return require_record(response, ApplicationInfo, "InnerSpace application info", id_key=None)
 
 
 __all__ = ["ApplicationEndpoint"]

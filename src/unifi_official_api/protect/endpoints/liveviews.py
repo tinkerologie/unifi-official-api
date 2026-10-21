@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ...validation import created_record, require_record, written_record
 from ..models import LiveView
 
 if TYPE_CHECKING:
@@ -56,17 +57,13 @@ class LiveViewsEndpoint:
         Returns:
             The live view.
 
+        Raises:
+            UniFiNotFoundError: If the response holds no live view with an ``id``.
+            UniFiResponseError: If the live view in the response fails validation.
+
         """
         path = self._client.build_api_path(f"/liveviews/{liveview_id}", site_id)
-        response = await self._client._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return LiveView.model_validate(data)
-            if isinstance(data, list) and len(data) > 0:
-                return LiveView.model_validate(data[0])
-        raise ValueError(f"LiveView {liveview_id} not found")
+        return require_record(await self._client._get(path), LiveView, f"LiveView {liveview_id}")
 
     async def create(
         self,
@@ -90,6 +87,10 @@ class LiveViewsEndpoint:
         Returns:
             The created live view.
 
+        Raises:
+            UniFiResponseError: If the console accepted the request but the response
+                holds no valid live view. The live view may have been created.
+
         """
         path = self._client.build_api_path("/liveviews", site_id)
         data: dict[str, Any] = {
@@ -101,11 +102,7 @@ class LiveViewsEndpoint:
         data.update(kwargs)
 
         response = await self._client._post(path, json_data=data)
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict):
-                return LiveView.model_validate(result)
-        raise ValueError("Failed to create live view")
+        return created_record(response, LiveView, f"Live view {name}")
 
     async def update(
         self,
@@ -124,12 +121,13 @@ class LiveViewsEndpoint:
         Returns:
             The updated live view.
 
+        Raises:
+            UniFiNotFoundError: If the follow-up ``get()`` finds no live view.
+            UniFiResponseError: If the follow-up ``get()`` response fails validation.
+
         """
         path = self._client.build_api_path(f"/liveviews/{liveview_id}", site_id)
-        response = await self._client._patch(path, json_data=kwargs)
-
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict):
-                return LiveView.model_validate(result)
-        raise ValueError("Failed to update live view")
+        written = written_record(await self._client._patch(path, json_data=kwargs), LiveView)
+        if written is not None:
+            return written
+        return await self.get(liveview_id, site_id)

@@ -8,6 +8,7 @@ import pytest
 from aioresponses import aioresponses
 
 from unifi_official_api import ApiKeyAuth, ConnectionType
+from unifi_official_api.exceptions import UniFiNotFoundError, UniFiResponseError
 from unifi_official_api.network import UniFiNetworkClient
 from unifi_official_api.network.models import ACLAction, ACLRuleType, TrafficMatchingType
 from unifi_official_api.protect import UniFiProtectClient
@@ -86,7 +87,7 @@ class TestVouchersEndpoint:
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                with pytest.raises(ValueError, match="not found"):
+                with pytest.raises(UniFiNotFoundError):
                     await client.vouchers.get("site-1", "v-999")
 
     async def test_vouchers_create(self, auth: ApiKeyAuth) -> None:
@@ -124,7 +125,7 @@ class TestVouchersEndpoint:
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                with pytest.raises(ValueError, match="Failed"):
+                with pytest.raises(UniFiResponseError):
                     await client.vouchers.create(
                         "site-1", name="Test", time_limit_minutes=60, count=1
                     )
@@ -249,7 +250,7 @@ class TestACLEndpoint:
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                with pytest.raises(ValueError, match="not found"):
+                with pytest.raises(UniFiNotFoundError):
                     await client.acl.get("site-1", "acl-999")
 
     async def test_acl_create(self, auth: ApiKeyAuth) -> None:
@@ -292,7 +293,7 @@ class TestACLEndpoint:
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                with pytest.raises(ValueError, match="Failed"):
+                with pytest.raises(UniFiResponseError):
                     await client.acl.create("site-1", name="Test", index=0)
 
     async def test_acl_update(self, auth: ApiKeyAuth) -> None:
@@ -319,9 +320,13 @@ class TestACLEndpoint:
                 assert rule.name == "Updated Rule"
 
     async def test_acl_update_failed(self, auth: ApiKeyAuth) -> None:
-        """Test updating an ACL rule failure."""
+        """An empty write response is re-fetched; a missing resource is not found."""
         with aioresponses() as m:
             m.put(
+                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/acl-rules/acl-1",
+                payload={"data": []},
+            )
+            m.get(
                 "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/acl-rules/acl-1",
                 payload={"data": []},
             )
@@ -329,7 +334,7 @@ class TestACLEndpoint:
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                with pytest.raises(ValueError, match="Failed"):
+                with pytest.raises(UniFiNotFoundError):
                     await client.acl.update("site-1", "acl-1", name="Test")
 
     async def test_acl_delete(self, auth: ApiKeyAuth) -> None:
@@ -425,7 +430,7 @@ class TestTrafficEndpoint:
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                with pytest.raises(ValueError, match="not found"):
+                with pytest.raises(UniFiNotFoundError):
                     await client.traffic.get_list("site-1", "l-999")
 
     async def test_traffic_create_list(self, auth: ApiKeyAuth) -> None:
@@ -465,7 +470,7 @@ class TestTrafficEndpoint:
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                with pytest.raises(ValueError, match="Failed"):
+                with pytest.raises(UniFiResponseError):
                     await client.traffic.create_list(
                         "site-1",
                         name="Test",
@@ -497,9 +502,13 @@ class TestTrafficEndpoint:
                 assert traffic_list.name == "Updated List"
 
     async def test_traffic_update_list_failed(self, auth: ApiKeyAuth) -> None:
-        """Test updating a traffic matching list failure."""
+        """An empty write response is re-fetched; a missing resource is not found."""
         with aioresponses() as m:
             m.put(
+                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/traffic-matching-lists/list-1",
+                payload={"data": []},
+            )
+            m.get(
                 "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/traffic-matching-lists/list-1",
                 payload={"data": []},
             )
@@ -507,7 +516,7 @@ class TestTrafficEndpoint:
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                with pytest.raises(ValueError, match="Failed"):
+                with pytest.raises(UniFiNotFoundError):
                     await client.traffic.update_list("site-1", "list-1", name="Test")
 
     async def test_traffic_delete_list(self, auth: ApiKeyAuth) -> None:
@@ -827,7 +836,7 @@ class TestNetworkClientApplicationInfo:
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                with pytest.raises(ValueError, match="Unable to retrieve application info"):
+                with pytest.raises(UniFiNotFoundError):
                     await client.get_application_info()
 
 
@@ -1514,7 +1523,7 @@ class TestFirewallEndpoint:
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                with pytest.raises(ValueError, match="not found"):
+                with pytest.raises(UniFiNotFoundError):
                     await client.firewall.get_zone("site-1", "zone-999")
 
     async def test_firewall_create_zone(self, auth: ApiKeyAuth) -> None:
@@ -1543,7 +1552,7 @@ class TestFirewallEndpoint:
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                with pytest.raises(ValueError, match="Failed"):
+                with pytest.raises(UniFiResponseError):
                     await client.firewall.create_zone("site-1", name="Test")
 
     async def test_firewall_update_zone(self, auth: ApiKeyAuth) -> None:
@@ -1561,9 +1570,13 @@ class TestFirewallEndpoint:
                 assert zone.name == "Updated Zone"
 
     async def test_firewall_update_zone_failed(self, auth: ApiKeyAuth) -> None:
-        """Test updating a firewall zone failure."""
+        """An empty write response is re-fetched; a missing resource is not found."""
         with aioresponses() as m:
             m.put(
+                "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/firewall/zones/zone-1",
+                payload={"data": []},
+            )
+            m.get(
                 "https://api.ui.com/v1/connector/consoles/test-console-id/network/integration/v1/sites/site-1/firewall/zones/zone-1",
                 payload={"data": []},
             )
@@ -1571,7 +1584,7 @@ class TestFirewallEndpoint:
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                with pytest.raises(ValueError, match="Failed"):
+                with pytest.raises(UniFiNotFoundError):
                     await client.firewall.update_zone("site-1", "zone-1", name="Test")
 
     async def test_firewall_delete_zone(self, auth: ApiKeyAuth) -> None:
@@ -1662,7 +1675,7 @@ class TestFirewallEndpoint:
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                with pytest.raises(ValueError, match="not found"):
+                with pytest.raises(UniFiNotFoundError):
                     await client.firewall.get_rule("site-1", "rule-999")
 
     async def test_firewall_create_rule(self, auth: ApiKeyAuth) -> None:
@@ -1704,7 +1717,7 @@ class TestFirewallEndpoint:
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                with pytest.raises(ValueError, match="Failed"):
+                with pytest.raises(UniFiResponseError):
                     await client.firewall.create_rule(
                         "site-1",
                         name="Test",
@@ -1761,7 +1774,7 @@ class TestFirewallEndpoint:
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                with pytest.raises(ValueError, match="not found"):
+                with pytest.raises(UniFiNotFoundError):
                     await client.firewall.update_rule("site-1", "rule-1", name="Test")
 
     async def test_firewall_delete_rule(self, auth: ApiKeyAuth) -> None:
@@ -2014,7 +2027,7 @@ class TestFirewallZoneCRUD:
             async with UniFiNetworkClient(
                 auth=auth, connection_type=ConnectionType.REMOTE, console_id="test-console-id"
             ) as client:
-                with pytest.raises(ValueError, match="not found"):
+                with pytest.raises(UniFiNotFoundError):
                     await client.firewall.get_zone("site-1", "zone-999")
 
     async def test_create_zone(self, auth: ApiKeyAuth) -> None:

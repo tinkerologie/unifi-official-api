@@ -6,6 +6,7 @@ import pytest
 from aioresponses import aioresponses
 
 from unifi_official_api import ApiKeyAuth
+from unifi_official_api.exceptions import UniFiNotFoundError
 from unifi_official_api.mobility import (
     AdminSummary,
     MobilityDeviceClient,
@@ -137,7 +138,7 @@ class TestUniFiMobilityClient:
 
             assert await client.devices.get_all("ws-1") == []
 
-            with pytest.raises(ValueError, match="Device bad-id not found"):
+            with pytest.raises(UniFiNotFoundError):
                 await client.devices.get("ws-1", "bad-id")
 
             await client.devices.update_name("ws-1", "dev-1", "New Name")

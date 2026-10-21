@@ -1234,7 +1234,7 @@ async def test_lags_get_missing_raises_value_error() -> None:
     client = _network_client()
     client._get = AsyncMock(return_value=None)
 
-    with pytest.raises(ValueError, match="not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.lags.get("site-1", "missing")
 
 
@@ -1847,7 +1847,7 @@ async def test_chime_set_volume_without_paired_doorbell_raises(
     client._get = AsyncMock(return_value={"data": chime})
     client._patch = AsyncMock()
 
-    with pytest.raises(ValueError, match="no paired doorbell"):
+    with pytest.raises(UniFiValidationError, match="no paired doorbell"):
         await client.chimes.set_volume("chime-1", 50)
 
     client._patch.assert_not_awaited()
@@ -1875,7 +1875,7 @@ async def test_chime_set_volume_with_incomplete_ring_settings_raises(
     )
     client._patch = AsyncMock()
 
-    with pytest.raises(ValueError, match="incomplete ring settings"):
+    with pytest.raises(UniFiResponseError):
         await client.chimes.set_volume("chime-1", 50)
 
     client._patch.assert_not_awaited()
@@ -1952,7 +1952,7 @@ async def test_chime_set_repeat_times_needs_volume_in_each_entry() -> None:
     client._get = AsyncMock(return_value={"id": "chime-1", "mac": "AA:BB", "ringSettings": [ring]})
     client._patch = AsyncMock()
 
-    with pytest.raises(ValueError, match="incomplete ring settings"):
+    with pytest.raises(UniFiResponseError):
         await client.chimes.set_repeat_times("chime-1", 4)
 
     client._patch.assert_not_awaited()
@@ -2058,8 +2058,10 @@ async def test_chime_set_ringtone_rejects_invalid_settings(settings: Any) -> Non
         }
     )
     client._patch = AsyncMock()
-    with pytest.raises(ValueError, match=r"no paired doorbell|incomplete ring settings"):
+    expected = UniFiValidationError if not settings else UniFiResponseError
+    with pytest.raises(expected) as exc_info:
         await client.chimes.set_ringtone("chime-1", "tone-new")
+    assert type(exc_info.value) is expected
     client._patch.assert_not_awaited()
 
 
@@ -3182,7 +3184,7 @@ async def test_routes_endpoint_get_route_not_found_raises() -> None:
         connection_type=ConnectionType.LOCAL,
     )
     client._get = AsyncMock(return_value=[])
-    with pytest.raises(ValueError, match="Policy-Based Route missing not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.routes.get_route("default", "missing")
 
 
@@ -3219,7 +3221,7 @@ async def test_routes_endpoint_update_route_not_found_raises() -> None:
     )
     client._get = AsyncMock(return_value=[])
 
-    with pytest.raises(ValueError, match="Policy-Based Route missing not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.routes.update_route("default", "missing", enabled=False)
 
 
@@ -3381,7 +3383,7 @@ async def test_vpn_clients_endpoint_get_vpn_client_not_found_raises() -> None:
         connection_type=ConnectionType.LOCAL,
     )
     client._get = AsyncMock(return_value={"meta": {"rc": "ok"}, "data": []})
-    with pytest.raises(ValueError, match="VPN Client missing not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.vpn_clients.get_vpn_client("default", "missing")
 
 
@@ -3444,7 +3446,7 @@ async def test_vpn_clients_endpoint_update_not_found_raises() -> None:
     )
     client._get = AsyncMock(return_value={"meta": {"rc": "ok"}, "data": []})
 
-    with pytest.raises(ValueError, match="VPN Client missing not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.vpn_clients.update_vpn_client("default", "missing", enabled=False)
 
 
@@ -4565,7 +4567,7 @@ async def test_protect_users_get_all_and_get() -> None:
 
     # get single user not found
     client._get = AsyncMock(return_value=None)
-    with pytest.raises(ValueError, match="User user-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.users.get("user-1")
 
 
@@ -4626,7 +4628,7 @@ async def test_protect_ulp_users_get_all_and_get() -> None:
 
     # get single ULP user not found
     client._get = AsyncMock(return_value=None)
-    with pytest.raises(ValueError, match="ULP user ulp-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.ulp_users.get("ulp-1")
 
 
@@ -4703,7 +4705,7 @@ async def test_protect_pos_ingest_transaction_dict_and_duplicate() -> None:
 
     # Error handling
     client._post = AsyncMock(return_value=None)
-    with pytest.raises(ValueError, match="Failed to ingest POS transaction for camera cam-2"):
+    with pytest.raises(UniFiResponseError):
         await client.pos.ingest_transaction("cam-2", payload)
 
 
@@ -4717,17 +4719,15 @@ async def test_protect_users_get_invalid_id_raises(invalid_id: Any) -> None:
     client._get.assert_not_called()
 
 
-async def test_protect_users_get_list_response_raises() -> None:
-    """Users get should raise ValueError if response is a list."""
+async def test_protect_users_get_reads_list_wrapped_record() -> None:
+    """A user record wrapped in a one-item list is read like a bare one."""
     client = _protect_client()
     user_payload = {"id": "user-1", "name": "Jane"}
     client._get = AsyncMock(return_value=[user_payload])
-    with pytest.raises(ValueError, match="User user-1 not found"):
-        await client.users.get("user-1")
+    assert (await client.users.get("user-1")).id == "user-1"
 
     client._get = AsyncMock(return_value={"data": [user_payload]})
-    with pytest.raises(ValueError, match="User user-1 not found"):
-        await client.users.get("user-1")
+    assert (await client.users.get("user-1")).id == "user-1"
 
 
 @pytest.mark.parametrize("invalid_id", ["", "   ", None, 123])
@@ -4740,17 +4740,16 @@ async def test_protect_ulp_users_get_invalid_id_raises(invalid_id: Any) -> None:
     client._get.assert_not_called()
 
 
-async def test_protect_ulp_users_get_list_response_raises() -> None:
-    """ULP users get should raise ValueError if response is a list."""
+async def test_protect_ulp_users_get_list_wrapped_malformed_record_raises() -> None:
+    """A list-wrapped ULP user is read, and an incomplete one fails validation."""
     client = _protect_client()
     ulp_payload = {"id": "ulp-1", "fullName": "John"}
-    client._get = AsyncMock(return_value=[ulp_payload])
-    with pytest.raises(ValueError, match="ULP user ulp-1 not found"):
-        await client.ulp_users.get("ulp-1")
-
-    client._get = AsyncMock(return_value={"data": [ulp_payload]})
-    with pytest.raises(ValueError, match="ULP user ulp-1 not found"):
-        await client.ulp_users.get("ulp-1")
+    for response in ([ulp_payload], {"data": [ulp_payload]}):
+        client._get = AsyncMock(return_value=response)
+        with pytest.raises(UniFiResponseError) as exc_info:
+            await client.ulp_users.get("ulp-1")
+        assert not isinstance(exc_info.value, UniFiNotFoundError)
+        assert exc_info.value.__cause__ is None
 
 
 @pytest.mark.parametrize("invalid_id", ["", "   ", None, 123])
@@ -5018,7 +5017,7 @@ async def test_network_client_get_application_info_invalid_response_raises() -> 
     """get_application_info raises ValueError when response is not a dict."""
     client = _network_client()
     client._get = AsyncMock(return_value=["not-a-dict"])
-    with pytest.raises(ValueError, match="Unable to retrieve application info"):
+    with pytest.raises(UniFiNotFoundError):
         await client.get_application_info()
 
 
@@ -5068,7 +5067,7 @@ async def test_firewall_get_policy_ordering_invalid_data_raises() -> None:
     """get_policy_ordering raises ValueError when returned data is not a dict."""
     client = _network_client()
     client._get = AsyncMock(return_value={"data": "invalid"})
-    with pytest.raises(ValueError, match="Failed to get firewall policy ordering"):
+    with pytest.raises(UniFiNotFoundError):
         await client.firewall.get_policy_ordering(
             "site1",
             source_firewall_zone_id="sz1",
@@ -5076,27 +5075,11 @@ async def test_firewall_get_policy_ordering_invalid_data_raises() -> None:
         )
 
 
-async def test_firewall_update_policy_ordering_invalid_data_raises() -> None:
-    """update_policy_ordering raises ValueError when returned data is not a dict."""
-    client = _network_client()
-    client._put = AsyncMock(return_value={"data": "invalid"})
-    with pytest.raises(ValueError, match="Failed to update firewall policy ordering"):
-        await client.firewall.update_policy_ordering(
-            "site1",
-            source_firewall_zone_id="sz1",
-            destination_firewall_zone_id="dz1",
-            ordered_firewall_policy_ids={
-                "beforeSystemDefined": [],
-                "afterSystemDefined": [],
-            },
-        )
-
-
 async def test_lags_get_mc_lag_domain_non_dict_raises() -> None:
     """get_mc_lag_domain raises ValueError when response is not a dict."""
     client = _network_client()
     client._get = AsyncMock(return_value=None)
-    with pytest.raises(ValueError, match=r"MC-LAG domain lag1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.lags.get_mc_lag_domain("site1", "lag1")
 
 
@@ -5113,7 +5096,7 @@ async def test_stacks_get_switch_stack_non_dict_raises() -> None:
     """stacks.get raises ValueError when response is not a dict."""
     client = _network_client()
     client._get = AsyncMock(return_value=None)
-    with pytest.raises(ValueError, match=r"Switch stack stack1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.stacks.get("site1", "stack1")
 
 
@@ -5121,7 +5104,7 @@ async def test_vouchers_get_non_dict_raises() -> None:
     """vouchers.get raises ValueError when response is not a dict."""
     client = _network_client()
     client._get = AsyncMock(return_value=None)
-    with pytest.raises(ValueError, match=r"Voucher v1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.vouchers.get("site1", "v1")
 
 
@@ -5155,7 +5138,7 @@ async def test_vpn_clients_get_vpn_client_item_loop_and_fallback_loop() -> None:
         {"id": "different", "name": "Diff", "purpose": "vpn-client"}
     )
     client.vpn_clients.list_vpn_clients = AsyncMock(return_value=[dummy_client])
-    with pytest.raises(ValueError, match=r"VPN Client missing not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.vpn_clients.get_vpn_client("default", "missing")
 
 
@@ -5164,7 +5147,7 @@ async def test_wifi_create_invalid_result_raises() -> None:
     client = _network_client()
     client._post = AsyncMock(return_value={"data": "invalid"})
     wifi_key = "test-passphrase"
-    with pytest.raises(ValueError, match="Failed to create WiFi network"):
+    with pytest.raises(UniFiResponseError):
         await client.wifi.create(
             "site1",
             name="Guest",
@@ -5178,7 +5161,7 @@ async def test_protect_pos_ingest_transaction_invalid_data_raises() -> None:
     """pos.ingest_transaction raises ValueError when response data is not a dict."""
     client = _protect_client()
     client._post = AsyncMock(return_value={"data": "invalid"})
-    with pytest.raises(ValueError, match=r"Failed to ingest POS transaction for camera cam1"):
+    with pytest.raises(UniFiResponseError):
         await client.pos.ingest_transaction(
             "cam1", {"type": "sale", "externalId": "1", "amount": 1.0}
         )

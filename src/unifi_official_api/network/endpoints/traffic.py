@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ...validation import created_record, require_record, written_record
 from ..models.traffic import (
     Country,
     DPIApplication,
@@ -86,17 +87,18 @@ class TrafficEndpoint:
         Returns:
             The traffic matching list.
 
+        Raises:
+            UniFiNotFoundError: If the response holds no traffic matching list.
+            UniFiResponseError: If the list in the response fails validation.
+
         """
         path = self._client.build_api_path(f"/sites/{site_id}/traffic-matching-lists/{list_id}")
-        response = await self._client._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return TrafficMatchingList.model_validate(data)
-            if isinstance(data, list) and len(data) > 0:
-                return TrafficMatchingList.model_validate(data[0])
-        raise ValueError(f"Traffic matching list {list_id} not found")
+        return require_record(
+            await self._client._get(path),
+            TrafficMatchingList,
+            f"Traffic matching list {list_id}",
+            id_key=None,
+        )
 
     async def create_list(
         self,
@@ -121,6 +123,11 @@ class TrafficEndpoint:
 
         Returns:
             The created traffic matching list.
+
+        Raises:
+            ValueError: If the description, entries or items are invalid; no request is made.
+            UniFiResponseError: If the console accepted the request but the response
+                holds no valid list. The list may have been created.
 
         """
         path = self._client.build_api_path(f"/sites/{site_id}/traffic-matching-lists")
@@ -154,12 +161,7 @@ class TrafficEndpoint:
         }
 
         response = await self._client._post(path, json_data=data)
-
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict):
-                return TrafficMatchingList.model_validate(result)
-        raise ValueError("Failed to create traffic matching list")
+        return created_record(response, TrafficMatchingList, "Traffic matching list", id_key=None)
 
     async def update_list(
         self,
@@ -178,15 +180,18 @@ class TrafficEndpoint:
         Returns:
             The updated traffic matching list.
 
+        Raises:
+            UniFiNotFoundError: If the follow-up ``get_list()`` finds no traffic matching list.
+            UniFiResponseError: If the follow-up ``get_list()`` response fails validation.
+
         """
         path = self._client.build_api_path(f"/sites/{site_id}/traffic-matching-lists/{list_id}")
-        response = await self._client._put(path, json_data=kwargs)
-
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict):
-                return TrafficMatchingList.model_validate(result)
-        raise ValueError("Failed to update traffic matching list")
+        written = written_record(
+            await self._client._put(path, json_data=kwargs), TrafficMatchingList, id_key=None
+        )
+        if written is not None:
+            return written
+        return await self.get_list(site_id, list_id)
 
     async def delete_list(self, site_id: str, list_id: str) -> bool:
         """

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
+from ...validation import require_record
 from ..models.lag import LAG, McLagDomain
 
 if TYPE_CHECKING:
@@ -69,19 +70,12 @@ class LagsEndpoint:
             The LAG.
 
         Raises:
-            ValueError: If the LAG is not found.
+            UniFiNotFoundError: If the response holds no LAG.
+            UniFiResponseError: If the LAG in the response fails validation.
 
         """
         path = self._client.build_api_path(f"/sites/{site_id}/switching/lags/{lag_id}")
-        response = await self._client._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return LAG.model_validate(data)
-            if isinstance(data, list) and len(data) > 0:
-                return LAG.model_validate(data[0])
-        raise ValueError(f"LAG {lag_id} not found")
+        return require_record(await self._client._get(path), LAG, f"LAG {lag_id}", id_key=None)
 
     async def get_mc_lag_domains(
         self,
@@ -119,21 +113,19 @@ class LagsEndpoint:
             The MC-LAG domain.
 
         Raises:
-            ValueError: If the MC-LAG domain is not found.
+            UniFiNotFoundError: If the response holds no MC-LAG domain.
+            UniFiResponseError: If the MC-LAG domain in the response fails validation.
 
         """
         path = self._client.build_api_path(
             f"/sites/{site_id}/switching/mc-lag-domains/{mc_lag_domain_id}"
         )
-        response = await self._client._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return McLagDomain.model_validate(data)
-            if isinstance(data, list) and len(data) > 0:
-                return McLagDomain.model_validate(data[0])
-        raise ValueError(f"MC-LAG domain {mc_lag_domain_id} not found")
+        return require_record(
+            await self._client._get(path),
+            McLagDomain,
+            f"MC-LAG domain {mc_lag_domain_id}",
+            id_key=None,
+        )
 
 
 async def _list_paginated(

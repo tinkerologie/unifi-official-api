@@ -342,7 +342,8 @@ class UniFiProtectClient(BaseUniFiClient):
             The host ID (NVR ID).
 
         Raises:
-            ValueError: If NVR info cannot be retrieved.
+            UniFiNotFoundError: If the NVR response holds no NVR.
+            UniFiResponseError: If the NVR response fails validation.
 
         Example:
             ```python

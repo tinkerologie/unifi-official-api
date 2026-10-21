@@ -12,8 +12,10 @@ from pydantic import ValidationError
 
 from ...exceptions import (
     UniFiGlobalAlarmManagerError,
+    UniFiNotFoundError,
     UniFiResponseError,
 )
+from ...validation import created_record, response_record, written_record
 from ..models import ArmProfile, ArmProfileSettings
 
 if TYPE_CHECKING:
@@ -138,7 +140,7 @@ class ArmProfilesEndpoint:
 
     async def create(
         self,
-        site_id: str | dict[str, Any] | None = None,
+        site_id: str | None = None,
         **kwargs: Any,
     ) -> ArmProfile:
         """
@@ -152,29 +154,25 @@ class ArmProfilesEndpoint:
             The created arm profile.
 
         Raises:
-            ValueError: If creation fails.
+            TypeError: If ``site_id`` is neither a string nor ``None``.
+            UniFiResponseError: If the console accepted the request but the response
+                holds no valid arm profile. The profile may have been created.
 
         """
-        if isinstance(site_id, dict):
-            payload = {**site_id, **kwargs}
-            resolved_site_id: str | None = None
-        else:
-            payload = kwargs
-            resolved_site_id = site_id
-
-        path = self._client.build_api_path("/arm-profiles", resolved_site_id)
-        response = await self._client._post(path, json_data=payload)
-
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict) and result.get("id"):
-                return ArmProfile.model_validate(result)
-        raise ValueError("Failed to create arm profile")
+        if site_id is not None and not isinstance(site_id, str):
+            msg = (
+                f"site_id must be a str or None, not {type(site_id).__name__}; "
+                "pass settings as keyword arguments"
+            )
+            raise TypeError(msg)
+        path = self._client.build_api_path("/arm-profiles", site_id)
+        response = await self._client._post(path, json_data=kwargs)
+        return created_record(response, ArmProfile, "Arm profile")
 
     async def update(
         self,
         arm_profile_id: str,
-        site_id: str | dict[str, Any] | None = None,
+        site_id: str | None = None,
         **kwargs: Any,
     ) -> ArmProfile:
         """
@@ -189,24 +187,29 @@ class ArmProfilesEndpoint:
             The updated arm profile.
 
         Raises:
-            ValueError: If the update fails.
+            TypeError: If ``site_id`` is neither a string nor ``None``.
+            UniFiNotFoundError: If the update response holds no arm profile and the
+                follow-up listing has none with this ID.
+            UniFiGlobalAlarmManagerError: If the follow-up listing is refused because
+                the global alarm manager owns the alarm.
 
         """
-        if isinstance(site_id, dict):
-            payload = {**site_id, **kwargs}
-            resolved_site_id: str | None = None
-        else:
-            payload = kwargs
-            resolved_site_id = site_id
-
-        path = self._client.build_api_path(f"/arm-profiles/{arm_profile_id}", resolved_site_id)
-        response = await self._client._patch(path, json_data=payload)
-
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict) and result.get("id"):
-                return ArmProfile.model_validate(result)
-        raise ValueError("Failed to update arm profile")
+        if site_id is not None and not isinstance(site_id, str):
+            msg = (
+                f"site_id must be a str or None, not {type(site_id).__name__}; "
+                "pass settings as keyword arguments"
+            )
+            raise TypeError(msg)
+        path = self._client.build_api_path(f"/arm-profiles/{arm_profile_id}", site_id)
+        written = written_record(await self._client._patch(path, json_data=kwargs), ArmProfile)
+        if written is not None:
+            return written
+        # The spec has no single-profile GET, so the listing is searched.
+        for profile in await self.get_all(site_id):
+            if profile.id == arm_profile_id:
+                return profile
+        msg = f"Arm profile {arm_profile_id} not found"
+        raise UniFiNotFoundError(msg, status_code=200)
 
     async def delete(self, arm_profile_id: str, site_id: str | None = None) -> bool:
         """
@@ -274,7 +277,7 @@ class ArmProfilesEndpoint:
 
     async def update_settings(
         self,
-        site_id: str | dict[str, Any] | None = None,
+        site_id: str | None = None,
         **kwargs: Any,
     ) -> ArmProfileSettings | bool:
         """
@@ -288,24 +291,21 @@ class ArmProfilesEndpoint:
             ArmProfileSettings if returned by the API, or True if request accepted.
 
         Raises:
-            ValueError: If the update fails.
+            TypeError: If ``site_id`` is neither a string nor ``None``.
 
         """
-        if isinstance(site_id, dict):
-            payload = {**site_id, **kwargs}
-            resolved_site_id: str | None = None
-        else:
-            payload = kwargs
-            resolved_site_id = site_id
+        if site_id is not None and not isinstance(site_id, str):
+            msg = (
+                f"site_id must be a str or None, not {type(site_id).__name__}; "
+                "pass settings as keyword arguments"
+            )
+            raise TypeError(msg)
+        path = self._client.build_api_path("/arm-profiles/settings", site_id)
+        response = await self._client._patch(path, json_data=kwargs or None)
 
-        path = self._client.build_api_path("/arm-profiles/settings", resolved_site_id)
-        response = await self._client._patch(path, json_data=payload or None)
-
-        if response is None:
-            return True
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict) and ("activeProfileId" in data or "isArmed" in data):
-                return ArmProfileSettings.model_validate(data)
-        raise ValueError("Failed to update arm profile settings")
+        data = response_record(response, id_key=None)
+        if data is not None and ("activeProfileId" in data or "isArmed" in data):
+            settings = written_record(data, ArmProfileSettings, id_key=None)
+            if settings is not None:
+                return settings
+        return True
