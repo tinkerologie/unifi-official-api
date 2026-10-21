@@ -1,7 +1,5 @@
 """Error mapping for the UniFi Access developer API."""
 
-from __future__ import annotations
-
 import json
 import re
 from http import HTTPStatus
@@ -24,7 +22,7 @@ _CODE_PATTERN = re.compile(r"CODE_[A-Z0-9_]{1,60}")
 # HTTP 200 error envelope.
 _AUTH_STATUS_BY_CODE: dict[str, int] = {
     "CODE_AUTH_FAILED": 401,
-    "CODE_ACCESS_TOKEN_INVALID": 401,
+    "CODE_ACCESS_TOKEN_INVALID": 401,  # nosec B105 - an error code, not a credential
     "CODE_UNAUTHORIZED": 403,
     "CODE_OPERATION_FORBIDDEN": 403,
 }

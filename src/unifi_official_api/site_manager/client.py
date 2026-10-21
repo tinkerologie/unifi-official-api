@@ -1,7 +1,5 @@
 """UniFi Site Manager API client."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any, Literal, NoReturn
 
 from ..auth import ApiKeyAuth

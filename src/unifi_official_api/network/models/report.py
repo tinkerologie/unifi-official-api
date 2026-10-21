@@ -1,7 +1,5 @@
 """Pydantic models for UniFi Network historical site traffic reports."""
 
-from __future__ import annotations
-
 import math
 from typing import Any
 

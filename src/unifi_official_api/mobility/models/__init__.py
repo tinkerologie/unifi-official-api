@@ -1,7 +1,5 @@
 """Pydantic models for UniFi Mobility API."""
 
-from __future__ import annotations
-
 from .client import MobilityDeviceClient
 from .config import UpdateDeviceNameReq, UpdateNetworkReq, UpdateWirelessReq
 from .device import DeviceLocation, MobilityDeviceDetail, MobilityDeviceSummary

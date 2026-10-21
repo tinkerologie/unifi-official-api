@@ -6,8 +6,6 @@ heartbeat and rate-limit handling, reconnect behaviour, and connection-state
 callbacks.
 """
 
-from __future__ import annotations
-
 import asyncio
 import logging
 from unittest.mock import AsyncMock, MagicMock, patch

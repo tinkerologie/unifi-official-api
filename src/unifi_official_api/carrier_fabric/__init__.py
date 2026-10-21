@@ -1,7 +1,5 @@
 """UniFi Carrier Fabric API module."""
 
-from __future__ import annotations
-
 from .client import UniFiCarrierFabricClient
 from .models import (
     CarrierFabricMeta,

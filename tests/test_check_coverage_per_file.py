@@ -1,8 +1,6 @@
 # Copyright 2026 UniFi Insights contributors
 """Tests for script/check_coverage_per_file.py."""
 
-from __future__ import annotations
-
 import importlib.util
 from pathlib import Path
 from typing import Any

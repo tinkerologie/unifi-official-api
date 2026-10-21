@@ -8,8 +8,8 @@ applyTo: "src/**/*.py, tests/**/*.py"
 
 ## Language and Style
 
-- Target Python 3.11+ features already used in the repo.
-- Use `from __future__ import annotations` where existing modules use it.
+- Target Python 3.14+ (`requires-python` in `pyproject.toml`).
+- Do not add `from __future__ import annotations`: Python 3.14 evaluates annotations lazily, and the pyupgrade pre-commit hook (`--py314-plus`) removes the import.
 - Keep full type hints on public and internal functions unless intentionally private/simple.
 - Follow Ruff and MyPy strictness expectations in `pyproject.toml`.
 

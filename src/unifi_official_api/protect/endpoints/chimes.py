@@ -1,7 +1,5 @@
 """Chimes endpoint for UniFi Protect API."""
 
-from __future__ import annotations
-
 import logging
 from typing import TYPE_CHECKING, Any
 

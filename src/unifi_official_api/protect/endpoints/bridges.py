@@ -1,7 +1,5 @@
 """Bridges endpoint for UniFi Protect API."""
 
-from __future__ import annotations
-
 from ..models.bridge import Bridge
 from ._base import ProtectDeviceEndpoint
 

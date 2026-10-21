@@ -1,7 +1,5 @@
 """Application and file management endpoints for UniFi Protect API."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any
 
 import aiohttp

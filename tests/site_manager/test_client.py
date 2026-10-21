@@ -1,7 +1,5 @@
 """Tests for UniFi Site Manager client and endpoints."""
 
-from __future__ import annotations
-
 import pytest
 from aioresponses import aioresponses
 

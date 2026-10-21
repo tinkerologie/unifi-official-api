@@ -12,8 +12,6 @@ This library provides async Python clients for the official UniFi APIs:
 Supports both LOCAL (direct to device) and REMOTE (via cloud) connections.
 """
 
-from __future__ import annotations
-
 from ._version import __version__
 from .access import UniFiAccessClient
 from .auth import AccessTokenAuth, ApiKeyAuth, ApiKeyType, LocalAuth

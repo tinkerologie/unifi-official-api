@@ -1,7 +1,5 @@
 """Tests for new Network API endpoints (vouchers, ACL, traffic, resources)."""
 
-from __future__ import annotations
-
 import re
 
 import pytest

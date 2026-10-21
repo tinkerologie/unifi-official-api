@@ -1,7 +1,5 @@
 """Floor plans endpoint for UniFi InnerSpace API."""
 
-from __future__ import annotations
-
 import builtins
 from typing import TYPE_CHECKING, Any
 

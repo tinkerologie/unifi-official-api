@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """Check per-file test coverage against a threshold from Cobertura XML."""
 
-from __future__ import annotations
-
 import argparse
 import sys
 import xml.etree.ElementTree as ET
@@ -89,9 +87,7 @@ def check_coverage(
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entry point for per-file coverage verification."""
     parser = argparse.ArgumentParser(
-        description=(
-            "Verify per-file test coverage against a threshold from Cobertura XML."
-        ),
+        description=("Verify per-file test coverage against a threshold from Cobertura XML."),
     )
     parser.add_argument(
         "xml",
@@ -123,9 +119,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     threshold_str = (
-        f"{int(args.fail_under)}%"
-        if args.fail_under.is_integer()
-        else f"{args.fail_under}%"
+        f"{int(args.fail_under)}%" if args.fail_under.is_integer() else f"{args.fail_under}%"
     )
 
     for r in failing:
@@ -136,14 +130,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
 
     if failing:
-        sys.stdout.write(
-            f"{len(failing)} file(s) below {threshold_str} coverage threshold.\n"
-        )
+        sys.stdout.write(f"{len(failing)} file(s) below {threshold_str} coverage threshold.\n")
         return 1
 
     sys.stdout.write(
-        f"All {len(all_rows)} file(s) meet or exceed "
-        f"{threshold_str} coverage threshold.\n"
+        f"All {len(all_rows)} file(s) meet or exceed {threshold_str} coverage threshold.\n"
     )
     return 0
 

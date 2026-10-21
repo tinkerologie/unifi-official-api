@@ -1,7 +1,5 @@
 """Assets endpoint for UniFi InnerSpace API."""
 
-from __future__ import annotations
-
 import unicodedata
 from typing import TYPE_CHECKING
 from urllib.parse import quote

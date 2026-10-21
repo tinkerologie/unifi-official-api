@@ -1,8 +1,6 @@
 # Copyright 2026 UniFi Insights contributors
 """Tests for UniFi InnerSpace API client pinning requests against the spec."""
 
-from __future__ import annotations
-
 import json
 from typing import Any, Self
 

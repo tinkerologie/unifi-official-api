@@ -1,7 +1,5 @@
 """ISP Metrics endpoint for UniFi Site Manager API."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any
 
 from ..models.isp_metric import ISPMetric, ISPMetricQuery, ISPMetricQueryResult

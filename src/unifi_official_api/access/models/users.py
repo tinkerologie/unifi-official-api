@@ -1,7 +1,5 @@
 """User models for the UniFi Access developer API."""
 
-from __future__ import annotations
-
 from typing import Any, Literal
 
 from pydantic import SecretStr, field_validator

@@ -1,7 +1,5 @@
 """Comprehensive tests to achieve 100% code coverage."""
 
-from __future__ import annotations
-
 import re
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch

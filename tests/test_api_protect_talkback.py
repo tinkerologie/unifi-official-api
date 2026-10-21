@@ -1,8 +1,6 @@
 # Copyright 2026 UniFi Insights contributors
 """Tests for UniFi Protect talkback audio transport."""
 
-from __future__ import annotations
-
 import asyncio
 import sys
 import threading

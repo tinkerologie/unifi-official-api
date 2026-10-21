@@ -1,8 +1,6 @@
 # Copyright 2026 UniFi Insights contributors
 """Verify the Access notification socket's stop, retry and frame behaviour."""
 
-from __future__ import annotations
-
 import asyncio
 import logging
 from typing import Any

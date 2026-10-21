@@ -1,7 +1,5 @@
 """Endpoints for UniFi InnerSpace API."""
 
-from __future__ import annotations
-
 from .access_points import AccessPointsEndpoint
 from .application import ApplicationEndpoint
 from .assets import (
