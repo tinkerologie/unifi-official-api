@@ -418,10 +418,11 @@ class TestMaxCoverage:
                 "https://192.168.1.1/proxy/innerspace/integration/v1/binary-data-404",
                 status=404,
             )
-            with pytest.raises(UniFiConnectionError, match="HTTP 404"):
+            with pytest.raises(UniFiResponseError) as not_found:
                 await innerspace_client.get_binary(
                     "/proxy/innerspace/integration/v1/binary-data-404"
                 )
+            assert not_found.value.status_code == 404
 
             # get_binary timeout
             with patch.object(aiohttp.ClientSession, "get", side_effect=TimeoutError()):

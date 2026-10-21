@@ -6,11 +6,7 @@ import unicodedata
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
-from unifi_official_api.exceptions import (
-    UniFiConnectionError,
-    UniFiResponseError,
-    UniFiValidationError,
-)
+from unifi_official_api.exceptions import UniFiValidationError
 
 if TYPE_CHECKING:
     from unifi_official_api.innerspace.client import UniFiInnerSpaceClient
@@ -71,11 +67,15 @@ class AssetsEndpoint:
         return await self._client._get_binary_with_content_type(path)
 
     async def download(self, plan_id: str, filename: str) -> bytes:
-        """Download asset binary content."""
-        try:
-            content, _ = await self.download_floor_plan_image(plan_id, filename)
-            return content
-        except UniFiResponseError as err:
-            raise UniFiConnectionError(
-                f"Failed to fetch binary asset: HTTP {err.status_code}"
-            ) from err
+        """
+        Download asset binary content.
+
+        Raises:
+            UniFiValidationError: If ``plan_id`` or ``filename`` is not a safe path segment.
+            UniFiNotFoundError: If the console answers 404.
+            UniFiResponseError: If the console answers any other 4xx or 5xx status.
+            UniFiConnectionError: If the console cannot be reached.
+
+        """
+        content, _ = await self.download_floor_plan_image(plan_id, filename)
+        return content

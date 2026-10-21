@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
-import aiohttp
 from pydantic import BaseModel, ValidationError
 
 from unifi_official_api.auth import LocalAuth
@@ -17,11 +16,7 @@ from unifi_official_api.const import (
     INNERSPACE_INTEGRATION_PATH,
     ConnectionType,
 )
-from unifi_official_api.exceptions import (
-    UniFiConnectionError,
-    UniFiResponseError,
-    UniFiTimeoutError,
-)
+from unifi_official_api.exceptions import UniFiResponseError
 from unifi_official_api.innerspace.endpoints import (
     MAX_ASSET_SEGMENT_LENGTH,
     AccessPointsEndpoint,
@@ -283,24 +278,20 @@ class UniFiInnerSpaceClient(BaseUniFiClient):
         *,
         params: dict[str, Any] | None = None,
     ) -> bytes:
-        """Download binary data from an endpoint path."""
-        session = await self._ensure_session()
-        url = self._build_url(path)
-        headers = self._get_headers()
-        headers.pop("Content-Type", None)
-        headers["Accept"] = "*/*"
+        """
+        Download binary data from an endpoint path.
 
-        try:
-            async with session.get(url, params=params, headers=headers) as response:
-                if response.status >= 400:
-                    raise UniFiConnectionError(
-                        f"Failed to fetch binary asset: HTTP {response.status}"
-                    )
-                return await response.read()
-        except TimeoutError as err:
-            raise UniFiTimeoutError(f"Request to {url} timed out") from err
-        except aiohttp.ClientError as err:
-            raise UniFiConnectionError(f"Request to {url} failed: {err}") from err
+        Raises:
+            UniFiAuthenticationError: If the console answers 401 or 403.
+            UniFiNotFoundError: If the console answers 404.
+            UniFiRateLimitError: If the console still answers 429 after one retry.
+            UniFiResponseError: If the console answers any other 4xx or 5xx status.
+            UniFiConnectionError: If the console cannot be reached.
+            UniFiTimeoutError: If the request times out.
+
+        """
+        data, _ = await self._get_binary_with_content_type(path, params=params)
+        return data
 
 
 __all__ = [

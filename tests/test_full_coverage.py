@@ -13,6 +13,7 @@ from unifi_official_api import ApiKeyAuth, LocalAuth
 from unifi_official_api.const import ConnectionType
 from unifi_official_api.exceptions import (
     UniFiConnectionError,
+    UniFiNotFoundError,
     UniFiTimeoutError,
     UniFiUnsupportedError,
 )
@@ -1261,7 +1262,7 @@ class TestProtectClientCoverage:
             async with UniFiProtectClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                with pytest.raises(UniFiConnectionError):
+                with pytest.raises(UniFiNotFoundError):
                     await client._get_binary(f"{PROTECT_BASE}/cameras/c1/snapshot")
 
     async def test_get_binary_timeout(self, auth: LocalAuth) -> None:

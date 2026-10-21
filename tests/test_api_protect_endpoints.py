@@ -12,7 +12,10 @@ import pytest
 
 from unifi_official_api import ApiKeyAuth, ConnectionType
 from unifi_official_api.exceptions import (
+    UniFiAuthenticationError,
     UniFiConnectionError,
+    UniFiNotFoundError,
+    UniFiRateLimitError,
     UniFiResponseError,
     UniFiTimeoutError,
 )
@@ -433,13 +436,46 @@ async def test_cameras_get_snapshot_rejects_size(size: dict[str, int]) -> None:
     session.get.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    ("status", "body", "expected"),
+    [
+        (
+            400,
+            {"error": "Camera does not have a package camera", "name": "BAD_REQUEST"},
+            UniFiResponseError,
+        ),
+        (401, None, UniFiAuthenticationError),
+        (403, None, UniFiAuthenticationError),
+        (404, None, UniFiNotFoundError),
+        (429, None, UniFiRateLimitError),
+        (500, None, UniFiResponseError),
+        (503, None, UniFiResponseError),
+    ],
+)
 @pytest.mark.asyncio
-async def test_cameras_get_snapshot_error_mapping() -> None:
-    """Verify get_snapshot 500 error raises UniFiConnectionError."""
-    client, _, _ = make_client(status=500, raw_bytes=b"Camera offline")
+async def test_cameras_get_snapshot_error_mapping(
+    status: int,
+    body: dict[str, str] | None,
+    expected: type[UniFiResponseError | UniFiAuthenticationError],
+) -> None:
+    """An HTTP error answer to a snapshot is a response error, never a connection error."""
+    client, session, _ = make_client(
+        status=status,
+        json_data=body,
+        headers={"Content-Type": "application/json", "Retry-After": "0"},
+    )
 
-    with pytest.raises(UniFiConnectionError, match="Failed to fetch binary data: 500"):
+    with pytest.raises(expected) as exc_info:
         await client.cameras.get_snapshot("cam-1")
+
+    err = exc_info.value
+    assert type(err) is expected
+    assert not isinstance(err, UniFiConnectionError)
+    assert err.status_code == status
+    # The message names the status only; the console's body stays out of it.
+    assert "package camera" not in err.message
+    assert "package camera" not in str(err)
+    assert session.get.call_count == (2 if status == 429 else 1)
 
 
 @pytest.mark.asyncio
@@ -771,7 +807,7 @@ async def test_get_binary_rate_limit_retry_succeeds() -> None:
 
 @pytest.mark.asyncio
 async def test_get_binary_rate_limit_retry_exhausted() -> None:
-    """Repeated 429 raises UniFiConnectionError."""
+    """A 429 answered again on the retry raises UniFiRateLimitError."""
     client = UniFiProtectClient(
         auth=ApiKeyAuth(api_key="test-key"),
         base_url="https://192.168.1.1",
@@ -792,8 +828,9 @@ async def test_get_binary_rate_limit_retry_exhausted() -> None:
     session.get = MagicMock(side_effect=[ctx_429, ctx_429])
     client._session = session
 
-    with pytest.raises(UniFiConnectionError, match="Failed to fetch binary data: 429"):
+    with pytest.raises(UniFiRateLimitError) as exc_info:
         await client._get_binary("/test")
+    assert exc_info.value.status_code == 429
 
 
 @pytest.mark.parametrize(

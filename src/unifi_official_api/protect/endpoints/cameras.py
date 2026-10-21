@@ -174,6 +174,12 @@ class CamerasEndpoint:
 
         Raises:
             ValueError: If the channel is not ``"main"`` or ``"package"``.
+            UniFiAuthenticationError: If the console answers 401 or 403.
+            UniFiNotFoundError: If the console answers 404.
+            UniFiRateLimitError: If the console still answers 429 after one retry.
+            UniFiResponseError: If the console answers any other 4xx or 5xx status,
+                e.g. 400 when the camera cannot take the requested snapshot.
+            UniFiConnectionError: If the console cannot be reached.
 
         """
         if channel is not None and channel not in _SNAPSHOT_CHANNELS:

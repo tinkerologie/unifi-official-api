@@ -9,7 +9,10 @@ from unifi_official_api import (
     ApiKeyAuth,
     ConnectionType,
     LocalAuth,
+    UniFiAuthenticationError,
     UniFiConnectionError,
+    UniFiNotFoundError,
+    UniFiRateLimitError,
     UniFiResponseError,
 )
 from unifi_official_api.innerspace import (
@@ -252,10 +255,51 @@ class TestUniFiInnerSpaceClient:
             data = await local_client.assets.download("fp-1", "floorplan.png")
             assert data.startswith(b"\x89PNG")
 
-            with pytest.raises(
-                UniFiConnectionError, match="Failed to fetch binary asset: HTTP 404"
-            ):
+            with pytest.raises(UniFiNotFoundError) as exc_info:
                 await local_client.assets.download("fp-1", "bad.png")
+            assert exc_info.value.status_code == 404
+
+    @pytest.mark.parametrize(
+        ("status", "expected"),
+        [
+            (400, UniFiResponseError),
+            (401, UniFiAuthenticationError),
+            (403, UniFiAuthenticationError),
+            (404, UniFiNotFoundError),
+            (429, UniFiRateLimitError),
+            (500, UniFiResponseError),
+        ],
+    )
+    async def test_binary_http_errors_are_response_errors(
+        self,
+        local_client: UniFiInnerSpaceClient,
+        mock_aioresponse: aioresponses,
+        status: int,
+        expected: type[Exception],
+    ) -> None:
+        """An HTTP error answer to a binary download is never a connection error."""
+        base = "https://192.168.1.1/proxy/innerspace/integration/v1"
+        for _ in range(2):
+            mock_aioresponse.get(
+                f"{base}/assets/fp-1/bad.png",
+                status=status,
+                body="secret detail",
+                headers={"Retry-After": "0"},
+            )
+            mock_aioresponse.get(
+                f"{base}/raw", status=status, body="secret detail", headers={"Retry-After": "0"}
+            )
+        async with local_client:
+            for call in (
+                lambda: local_client.assets.download("fp-1", "bad.png"),
+                lambda: local_client.get_binary(f"{base}/raw".removeprefix("https://192.168.1.1")),
+            ):
+                with pytest.raises(expected) as exc_info:
+                    await call()
+                assert type(exc_info.value) is expected
+                assert not isinstance(exc_info.value, UniFiConnectionError)
+                assert exc_info.value.status_code == status  # type: ignore[attr-defined]
+                assert "secret detail" not in str(exc_info.value)
 
     async def test_validate_connection(
         self, local_client: UniFiInnerSpaceClient, mock_aioresponse: aioresponses

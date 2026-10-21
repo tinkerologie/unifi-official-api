@@ -3804,7 +3804,7 @@ async def test_binary_429_on_retry_defers_whole_client(
     client._session = _binary_session(429, {"Retry-After": "1"})
     start = fake_clock.now
 
-    with pytest.raises(UniFiConnectionError):
+    with pytest.raises(UniFiRateLimitError):
         await client._get_binary("/cameras/abc/snapshot")
 
     assert client._session.get.call_count == 2
@@ -3823,7 +3823,7 @@ async def test_binary_429_without_retry_after_defers_capped(
     client = _protect_client()
     client._session = _binary_session(429, {})
 
-    with pytest.raises(UniFiConnectionError):
+    with pytest.raises(UniFiRateLimitError):
         await client._get_binary("/cameras/abc/snapshot")
 
     assert client._session.get.call_count == 1
@@ -3844,20 +3844,17 @@ async def test_binary_request_is_throttled(fake_clock: _FakeClock) -> None:
     assert fake_clock.sleeps == [pytest.approx(1.0)]
 
 
-async def test_protect_client_get_binary_auth_error_raises_connection_error() -> None:
-    """UniFiProtectClient._get_binary wraps auth error in UniFiConnectionError."""
+@pytest.mark.parametrize("status", [401, 403])
+async def test_protect_client_get_binary_auth_error_is_not_a_connection_error(
+    status: int,
+) -> None:
+    """UniFiProtectClient._get_binary raises a 401/403 as UniFiAuthenticationError."""
     client = _protect_client()
-    client._session = _binary_session(401, {})
-    with pytest.raises(UniFiConnectionError) as exc:
+    client._session = _binary_session(status, {})
+    with pytest.raises(UniFiAuthenticationError) as exc:
         await client._get_binary("/cameras/abc/snapshot")
-    assert isinstance(exc.value.__cause__, UniFiAuthenticationError)
-    assert "401" in str(exc.value)
-
-    client._session = _binary_session(403, {})
-    with pytest.raises(UniFiConnectionError) as exc403:
-        await client._get_binary("/cameras/abc/snapshot")
-    assert isinstance(exc403.value.__cause__, UniFiAuthenticationError)
-    assert "403" in str(exc403.value)
+    assert exc.value.status_code == status
+    assert not isinstance(exc.value, UniFiConnectionError)
 
 
 async def test_base_client_get_binary_success() -> None:
