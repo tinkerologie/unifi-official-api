@@ -21,10 +21,13 @@ site cannot slip past the guard.
 from __future__ import annotations
 
 import ast
+import functools
+import importlib.util
 import inspect
 import json
 import re
 import sys
+import textwrap
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -84,9 +87,20 @@ OVERRIDES: dict[str, dict[str, Any]] = {
     "traffic.create_list": {"entries": ["443"]},
     "wifi.create": {"ssid": "id-name", "passphrase": "passphrase"},
 }
-# Responses for methods that read before they write; the write is what matters.
+# Responses for methods that send several requests, so every path-builder call
+# site is reached: each read returns what the next request needs.
 STAGED_RESPONSES: dict[str, list[Any]] = {
     "firewall.update_rule": [{"id": "id-rule-id", "name": "rule"}],
+    "nat_rules.update_nat_rule": [{"data": [{"_id": "id-rule-id"}]}],
+    "port_forwards.update_port_forward": [{"data": [{"_id": "id-rule-id"}]}],
+    "routes.update_route": [{"data": [{"_id": "id-route-id"}]}],
+    "static_routes.update_static_route": [{"data": [{"_id": "id-rule-id"}]}],
+    "traffic_rules.update_traffic_rule": [{"data": [{"_id": "id-rule-id"}]}],
+    # The client is missing from the direct read, so the list fallback runs.
+    "vpn_clients.update_vpn_client": [
+        {"data": []},
+        {"data": [{"_id": "id-client-id", "purpose": "vpn-client"}]},
+    ],
     "wifi.update": [{"id": "id-wifi-id", "name": "wifi"}],
 }
 # Public coroutines that never send a request.
@@ -157,15 +171,13 @@ def _load_spec() -> dict[str, Any]:
     return spec
 
 
+@functools.cache
 def _spec_operations() -> list[tuple[re.Pattern[str], str, frozenset[str]]]:
     operations = []
     for template, item in _load_spec()["paths"].items():
         pattern = re.compile("^" + re.sub(r"\\\{[^}]+\\\}", "[^/]+", re.escape(template)) + "$")
         operations.append((pattern, template, frozenset(k for k in item if k in HTTP_METHODS)))
     return operations
-
-
-SPEC_OPERATIONS = _spec_operations()
 
 
 def _spec_template(operation: Operation) -> str | None:
@@ -177,7 +189,7 @@ def _spec_template(operation: Operation) -> str | None:
     """
     matches = [
         (template.count("{"), template, methods)
-        for pattern, template, methods in SPEC_OPERATIONS
+        for pattern, template, methods in _spec_operations()
         if pattern.match(operation.path)
     ]
     if not matches:
@@ -186,12 +198,38 @@ def _spec_template(operation: Operation) -> str | None:
     return template if operation.method in methods else None
 
 
+class CallSite(NamedTuple):
+    """
+    A path-builder call, by module and line.
+
+    The line is the one holding the builder's name, which is the line the
+    interpreter reports for the call even when the call spans several lines.
+    """
+
+    module: str
+    line: int
+
+
+def _recording_builder(
+    build: Callable[..., str], call_sites: set[CallSite], package_dir: Path
+) -> Callable[..., str]:
+    """Wrap ``build`` so each call adds its caller's call site to ``call_sites``."""
+
+    def builder(*args: Any, **kwargs: Any) -> str:
+        frame = sys._getframe(1)
+        module = Path(frame.f_code.co_filename).relative_to(package_dir).as_posix()
+        call_sites.add(CallSite(module, frame.f_lineno))
+        return build(*args, **kwargs)
+
+    return builder
+
+
 class Recorder:
     """Recording transport installed on a client."""
 
     def __init__(self, client: UniFiNetworkClient) -> None:
         self.operations: list[Operation] = []
-        self.call_sites: set[tuple[str, str]] = set()
+        self.call_sites: set[CallSite] = set()
         self.staged: list[Any] = []
         self._prefix = client.build_api_path("/")
         self._legacy_prefixes = (
@@ -199,21 +237,13 @@ class Recorder:
             client.build_legacy_v2_api_path("default", "/").removesuffix("site/default/"),
         )
         for name in PATH_BUILDERS:
-            setattr(client, name, self._recording_builder(getattr(client, name)))
+            builder = _recording_builder(getattr(client, name), self.call_sites, PACKAGE_DIR)
+            setattr(client, name, builder)
 
         async def request(method: str, path: str, **_kwargs: Any) -> Any:
             return self._record(method, path)
 
         client._request = request  # type: ignore[method-assign]
-
-    def _recording_builder(self, build: Callable[..., str]) -> Callable[..., str]:
-        def builder(*args: Any) -> str:
-            code = sys._getframe(1).f_code
-            module = Path(code.co_filename).relative_to(PACKAGE_DIR).as_posix()
-            self.call_sites.add((module, code.co_qualname))
-            return build(*args)
-
-        return builder
 
     def _record(self, method: str, path: str) -> Any:
         if path.startswith(self._prefix):
@@ -288,26 +318,19 @@ async def _exercise(client: UniFiNetworkClient) -> tuple[Recorder, dict[str, lis
     return recorder, sent
 
 
-def _ast_call_sites() -> set[tuple[str, str]]:
-    """Return (module, qualified function) for every path-builder call in the package."""
-    sites: set[tuple[str, str]] = set()
-
-    def visit(node: ast.AST, module: str, scope: tuple[str, ...]) -> None:
-        for child in ast.iter_child_nodes(node):
-            if isinstance(child, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
-                visit(child, module, (*scope, child.name))
-                continue
+def _ast_call_sites(package_dir: Path) -> set[CallSite]:
+    """Return the call site of every path-builder call in the package."""
+    sites: set[CallSite] = set()
+    for path in sorted(package_dir.rglob("*.py")):
+        module = path.relative_to(package_dir).as_posix()
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if (
-                isinstance(child, ast.Call)
-                and isinstance(child.func, ast.Attribute)
-                and child.func.attr in PATH_BUILDERS
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in PATH_BUILDERS
             ):
-                sites.add((module, ".".join(scope)))
-            visit(child, module, scope)
-
-    for path in sorted(PACKAGE_DIR.rglob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        visit(tree, path.relative_to(PACKAGE_DIR).as_posix(), ())
+                assert node.func.end_lineno is not None
+                sites.add(CallSite(module, node.func.end_lineno))
     return sites
 
 
@@ -315,7 +338,7 @@ def test_vendored_spec_is_the_pinned_version() -> None:
     """The vendored spec file matches NETWORK_SPEC_VERSION and has operations."""
     assert SPEC_PATH.is_file(), f"Vendor the Network {NETWORK_SPEC_VERSION} spec at {SPEC_PATH}"
     assert _load_spec()["info"]["version"] == NETWORK_SPEC_VERSION
-    assert len(SPEC_OPERATIONS) > 1
+    assert len(_spec_operations()) > 1
 
 
 @pytest.mark.parametrize("connection_type", [ConnectionType.LOCAL, ConnectionType.REMOTE])
@@ -348,7 +371,8 @@ async def test_guard_reaches_every_path_builder_call_site() -> None:
     """The exercise run reaches every path-builder call site in the package."""
     recorder, _sent = await _exercise(_make_client(ConnectionType.LOCAL))
 
-    assert recorder.call_sites == _ast_call_sites()
+    assert sorted(_ast_call_sites(PACKAGE_DIR) - recorder.call_sites) == []
+    assert recorder.call_sites == _ast_call_sites(PACKAGE_DIR)
 
 
 async def test_multi_request_methods_send_their_write() -> None:
@@ -363,6 +387,64 @@ async def test_multi_request_methods_send_their_write() -> None:
         Operation("get", "/v1/sites/id-site-id/firewall/policies/id-rule-id"),
         Operation("put", "/v1/sites/id-site-id/firewall/policies/id-rule-id"),
     ]
+    assert sent["traffic_rules.update_traffic_rule"] == [
+        Operation("get", "/proxy/network/v2/api/site/default/trafficrules", legacy=True),
+        Operation("put", "/proxy/network/v2/api/site/default/trafficrules/id-rule-id", legacy=True),
+    ]
+    assert sent["vpn_clients.update_vpn_client"] == [
+        Operation("get", "/proxy/network/api/s/default/rest/networkconf/id-client-id", legacy=True),
+        Operation("get", "/proxy/network/api/s/default/rest/networkconf", legacy=True),
+        Operation("put", "/proxy/network/api/s/default/rest/networkconf/id-client-id", legacy=True),
+    ]
+
+
+def test_call_site_check_counts_each_call_in_a_function(tmp_path: Path) -> None:
+    """A function with two builder calls, one never run, leaves that call unreached."""
+    module_path = tmp_path / "endpoint.py"
+    module_path.write_text(
+        textwrap.dedent(
+            """
+            class Endpoint:
+                def __init__(self, client):
+                    self._client = client
+
+                def update(self, write):
+                    read_path = self._client.build_api_path(
+                        "/read",
+                    )
+                    if write:
+                        return (self._client
+                                .build_api_path("/write"))
+                    return read_path
+            """
+        ),
+        encoding="utf-8",
+    )
+    spec = importlib.util.spec_from_file_location("endpoint", module_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    class Client:
+        build_api_path = staticmethod(lambda endpoint: endpoint)
+
+    client = Client()
+    reached: set[CallSite] = set()
+    client.build_api_path = _recording_builder(client.build_api_path, reached, tmp_path)
+    endpoint = module.Endpoint(client)
+
+    assert endpoint.update(write=False) == "/read"
+    assert _ast_call_sites(tmp_path) - reached == {CallSite("endpoint.py", 12)}
+    assert endpoint.update(write=True) == "/write"
+    assert (
+        reached
+        == _ast_call_sites(tmp_path)
+        == {
+            CallSite("endpoint.py", 7),
+            CallSite("endpoint.py", 12),
+        }
+    )
 
 
 @pytest.mark.parametrize(
