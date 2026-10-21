@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from ...validation import created_record, require_record, written_record
+from ...validation import created_record, parse_records, require_record, written_record
 from ..models.acl import ACLAction, ACLRule, ACLRuleOrdering, ACLRuleType
 
 if TYPE_CHECKING:
@@ -45,6 +45,9 @@ class ACLEndpoint:
         Returns:
             List of ACL rules.
 
+        Raises:
+            UniFiResponseError: If an item in the response fails validation.
+
         """
         path = self._client.build_api_path(f"/sites/{site_id}/acl-rules")
         params: dict[str, Any] = {"offset": offset, "limit": min(limit, 200)}
@@ -58,7 +61,7 @@ class ACLEndpoint:
 
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [ACLRule.model_validate(item) for item in data]
+            return parse_records(ACLRule, data, "ACL rule")
         return []
 
     async def get(self, site_id: str, rule_id: str) -> ACLRule:

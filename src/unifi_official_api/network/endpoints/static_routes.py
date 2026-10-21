@@ -13,7 +13,7 @@ from ...exceptions import (
     UniFiResponseError,
     UniFiValidationError,
 )
-from ...validation import sanitized_validation_fields
+from ...validation import parse_record, sanitized_validation_fields, written_record
 from ..models.static_route import StaticRoute
 
 if TYPE_CHECKING:
@@ -154,6 +154,7 @@ class StaticRoutesEndpoint:
         )
         put_items = self._extract_items(await self._client._put(put_path, json_data=payload))
         if put_items and (put_items[0].get("_id") or put_items[0].get("id")) == rule_id:
-            return StaticRoute.model_validate(put_items[0])
-
-        return StaticRoute.model_validate(payload)
+            written = written_record(put_items[0], StaticRoute, id_key=None)
+            if written is not None:
+                return written
+        return parse_record(StaticRoute, payload, f"Static route {rule_id}")

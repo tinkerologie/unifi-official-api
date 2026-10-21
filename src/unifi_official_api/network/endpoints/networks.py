@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from ...const import ENDPOINT_NETWORKCONF
-from ...validation import created_record, require_record, written_record
+from ...validation import created_record, parse_records, require_record, written_record
 from ..models import Network
 
 if TYPE_CHECKING:
@@ -45,6 +45,9 @@ class NetworksEndpoint:
         Returns:
             List of networks.
 
+        Raises:
+            UniFiResponseError: If an item in the response fails validation.
+
         """
         params: dict[str, Any] = {}
         if offset is not None:
@@ -62,7 +65,7 @@ class NetworksEndpoint:
 
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [Network.model_validate(item) for item in data]
+            return parse_records(Network, data, "Network")
         return []
 
     async def get(self, site_id: str, network_id: str) -> Network:

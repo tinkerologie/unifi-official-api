@@ -13,7 +13,7 @@ from ...exceptions import (
     UniFiResponseError,
     UniFiValidationError,
 )
-from ...validation import sanitized_validation_fields
+from ...validation import parse_record, sanitized_validation_fields, written_record
 from ..models.routes import PolicyBasedRoute
 
 if TYPE_CHECKING:
@@ -160,6 +160,7 @@ class RoutesEndpoint:
         Raises:
             UniFiNotFoundError: If neither the route read nor the route listing holds
                 the route.
+            UniFiResponseError: If the route found fails validation.
 
         """
         path = self._client.build_legacy_v2_api_path(
@@ -167,16 +168,24 @@ class RoutesEndpoint:
         )
         response = await self._client._get(path)
         items: list[dict[str, Any]] = self._extract_routes_list(response)
-        if items:
-            return PolicyBasedRoute.model_validate(items[0])
+        record = items[0] if items else await self._find_route_record(site_name, route_id)
+        if record is None:
+            msg = f"Policy-Based Route {route_id} not found"
+            raise UniFiNotFoundError(msg, status_code=200)
+        return parse_record(PolicyBasedRoute, record, f"Policy-Based Route {route_id}")
 
-        all_routes = await self.list_routes(site_name)
-        for route in all_routes:
-            if route.id == route_id:
-                return route
+    async def _find_route_record(self, site_name: str, route_id: str) -> dict[str, Any] | None:
+        """
+        Return the raw record of a route from the route listing, or None.
 
-        msg = f"Policy-Based Route {route_id} not found"
-        raise UniFiNotFoundError(msg, status_code=200)
+        The raw record is searched, not ``list_routes()``, which skips a record
+        that fails validation: that route exists and must not read as missing.
+        """
+        path = self._client.build_legacy_v2_api_path(site_name, ENDPOINT_TRAFFIC_ROUTES)
+        for item in self._extract_routes_list(await self._client._get(path)):
+            if (item.get("id") or item.get("_id")) == route_id:
+                return item
+        return None
 
     async def update_route(
         self,
@@ -202,20 +211,14 @@ class RoutesEndpoint:
             The updated PolicyBasedRoute model.
 
         Raises:
-            UniFiNotFoundError: If the route listing holds no route with this ID.
+            UniFiNotFoundError: If the route listing holds no route with this ID, or
+                the follow-up ``get_route()`` after a ``PUT`` acknowledged without a
+                valid route finds none.
+            UniFiResponseError: If the follow-up ``get_route()`` finds a route that
+                fails validation.
 
         """
-        path = self._client.build_legacy_v2_api_path(site_name, ENDPOINT_TRAFFIC_ROUTES)
-        response = await self._client._get(path)
-        items: list[dict[str, Any]] = self._extract_routes_list(response)
-
-        current_payload: dict[str, Any] | None = None
-        for item in items:
-            item_id = item.get("id") or item.get("_id")
-            if item_id == route_id:
-                current_payload = item
-                break
-
+        current_payload = await self._find_route_record(site_name, route_id)
         if current_payload is None:
             msg = f"Policy-Based Route {route_id} not found"
             raise UniFiNotFoundError(msg, status_code=200)
@@ -231,7 +234,8 @@ class RoutesEndpoint:
         )
         put_response = await self._client._put(put_path, json_data=current_payload)
         put_items: list[dict[str, Any]] = self._extract_routes_list(put_response)
-        if put_items:
-            return PolicyBasedRoute.model_validate(put_items[0])
-
-        return PolicyBasedRoute.model_validate(current_payload)
+        if put_items and (put_items[0].get("id") or put_items[0].get("_id")) == route_id:
+            written = written_record(put_items[0], PolicyBasedRoute, id_key=None)
+            if written is not None:
+                return written
+        return await self.get_route(site_name, route_id)

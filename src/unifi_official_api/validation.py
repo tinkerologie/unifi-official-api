@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
@@ -57,6 +58,23 @@ def parse_record[ModelT: BaseModel](model: type[ModelT], record: object, what: s
     except ValidationError as err:
         fields = sanitized_validation_fields(err)
     raise UniFiResponseError(f"{what} response failed validation ({fields})", status_code=200)
+
+
+def parse_records[ModelT: BaseModel](
+    model: type[ModelT], items: Iterable[object], what: str
+) -> list[ModelT]:
+    """
+    Validate every record of a list response, or raise a sanitized response error.
+
+    For listings that cannot report a skipped record: dropping one silently
+    would make a record the console returned look absent, so the first record
+    that fails validation fails the read.
+
+    Raises:
+        UniFiResponseError: With status 200, if any record fails validation.
+
+    """
+    return [parse_record(model, item, what) for item in items]
 
 
 def require_record[ModelT: BaseModel](

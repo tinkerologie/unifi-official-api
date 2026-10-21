@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from ...validation import created_record, require_record, written_record
+from ...validation import created_record, parse_records, require_record, written_record
 from ..models import LiveView
 
 if TYPE_CHECKING:
@@ -34,6 +34,9 @@ class LiveViewsEndpoint:
         Returns:
             List of live views.
 
+        Raises:
+            UniFiResponseError: If an item in the response fails validation.
+
         """
         path = self._client.build_api_path("/liveviews", site_id)
         response = await self._client._get(path)
@@ -43,7 +46,7 @@ class LiveViewsEndpoint:
 
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [LiveView.model_validate(item) for item in data]
+            return parse_records(LiveView, data, "Live view")
         return []
 
     async def get(self, liveview_id: str, site_id: str | None = None) -> LiveView:

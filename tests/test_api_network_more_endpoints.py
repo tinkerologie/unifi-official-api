@@ -1661,11 +1661,12 @@ async def test_wifi_update_pins_spec_request_and_branches() -> None:
             # 1. Update with response payload
             {"data": current_wifi},
             {"data": updated_wifi},
-            # 2. Update when current_payload is missing -> ValueError
+            # 2. Update when current_payload is missing -> UniFiNotFoundError
             None,
-            # 3. Update when PUT returns empty/None response -> fallback to sent payload
+            # 3. Update when PUT returns empty/None response -> re-fetched with get()
             {"data": current_wifi},
             None,
+            {"data": updated_wifi},
         ]
     )
     client = _client(session)
@@ -1682,17 +1683,17 @@ async def test_wifi_update_pins_spec_request_and_branches() -> None:
     )
     assert req_put1["json"] == _wifi_document("New Name")
 
-    # 2. Update when current payload is missing -> ValueError
+    # 2. Update when current payload is missing -> UniFiNotFoundError
     with pytest.raises(UniFiNotFoundError):
         await client.wifi.update("default", "wifi-1", name="New Name")
 
-    # 3. Update when PUT returns empty response
+    # 3. Update when PUT returns empty response, so the network is re-fetched
     res3 = await client.wifi.update("default", "wifi-1", name="New Name")
     assert isinstance(res3, WifiNetwork)
     assert res3.id == "wifi-1"
     assert res3.name == "New Name"
 
-    for index in [0, 2, 3]:
+    for index in [0, 2, 3, 5]:
         _assert_request(
             session.requests[index],
             "GET",

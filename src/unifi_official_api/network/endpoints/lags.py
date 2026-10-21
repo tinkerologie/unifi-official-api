@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
-from ...validation import require_record
+from ...validation import parse_records, require_record
 from ..models.lag import LAG, McLagDomain
 
 if TYPE_CHECKING:
@@ -54,6 +54,9 @@ class LagsEndpoint:
         Returns:
             List of LAGs.
 
+        Raises:
+            UniFiResponseError: If an item in the response fails validation.
+
         """
         path = self._client.build_api_path(f"/sites/{site_id}/switching/lags")
         return await _list_paginated(self._client, path, LAG, offset, limit, filter_str)
@@ -96,6 +99,9 @@ class LagsEndpoint:
 
         Returns:
             List of MC-LAG domains.
+
+        Raises:
+            UniFiResponseError: If an item in the response fails validation.
 
         """
         path = self._client.build_api_path(f"/sites/{site_id}/switching/mc-lag-domains")
@@ -186,5 +192,5 @@ def _parse_items(response: Any, model: type[BaseModel]) -> list[Any]:
         return []
     data = response.get("data", response) if isinstance(response, dict) else response
     if isinstance(data, list):
-        return [model.model_validate(item) for item in data]
+        return parse_records(model, data, model.__name__)
     return []

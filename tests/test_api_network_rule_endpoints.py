@@ -1360,10 +1360,9 @@ async def test_list_methods_default_still_skips_invalid_and_single_dict(
     assert len(rules) == 1
 
 
-async def test_list_rules_default_is_lenient_unchanged() -> None:
-    """The default firewall read still raises on a non-dict record, as before."""
-    with pytest.raises(ValidationError):
-        await _client(_Session([[1, 2]])).firewall.list_rules("site-id")
+async def test_list_rules_default_skips_non_dict_records() -> None:
+    """The default firewall read skips a record that is not a dict, like the other lists."""
+    assert await _client(_Session([[1, 2]])).firewall.list_rules("site-id") == []
 
 
 @pytest.mark.parametrize("rule_type", _LENIENT)

@@ -15,7 +15,7 @@ from ...exceptions import (
     UniFiNotFoundError,
     UniFiResponseError,
 )
-from ...validation import created_record, response_record, written_record
+from ...validation import created_record, parse_record, response_record, written_record
 from ..models import ArmProfile, ArmProfileSettings
 
 if TYPE_CHECKING:
@@ -110,23 +110,9 @@ class ArmProfilesEndpoint:
                 this read-only call a way to tell that it is enabled.
 
         """
-        path = self._client.build_api_path("/arm-profiles", site_id)
         self.last_result_complete = True
-        try:
-            response = await self._client._get(path)
-        except UniFiResponseError as err:
-            _raise_for_global_alarm_manager(err)
-            raise
-
-        if response is None:
-            return []
-
-        data = response.get("data", response) if isinstance(response, dict) else response
-        if not isinstance(data, list):
-            return []
-
         profiles: list[ArmProfile] = []
-        for item in data:
+        for item in await self._get_raw_profiles(site_id):
             try:
                 profiles.append(ArmProfile.model_validate(item))
             except ValidationError as err:
@@ -137,6 +123,21 @@ class ArmProfilesEndpoint:
                     err,
                 )
         return profiles
+
+    async def _get_raw_profiles(self, site_id: str | None) -> list[Any]:
+        """Return the unvalidated items of the arm profile listing."""
+        path = self._client.build_api_path("/arm-profiles", site_id)
+        try:
+            response = await self._client._get(path)
+        except UniFiResponseError as err:
+            _raise_for_global_alarm_manager(err)
+            raise
+
+        if response is None:
+            return []
+
+        data = response.get("data", response) if isinstance(response, dict) else response
+        return data if isinstance(data, list) else []
 
     async def create(
         self,
@@ -190,6 +191,8 @@ class ArmProfilesEndpoint:
             TypeError: If ``site_id`` is neither a string nor ``None``.
             UniFiNotFoundError: If the update response holds no arm profile and the
                 follow-up listing has none with this ID.
+            UniFiResponseError: If the update response holds no valid arm profile and
+                the profile in the follow-up listing fails validation.
             UniFiGlobalAlarmManagerError: If the follow-up listing is refused because
                 the global alarm manager owns the alarm.
 
@@ -204,10 +207,12 @@ class ArmProfilesEndpoint:
         written = written_record(await self._client._patch(path, json_data=kwargs), ArmProfile)
         if written is not None:
             return written
-        # The spec has no single-profile GET, so the listing is searched.
-        for profile in await self.get_all(site_id):
-            if profile.id == arm_profile_id:
-                return profile
+        # The spec has no single-profile GET, so the listing is searched. Its raw
+        # items are, not get_all(), which skips a profile that fails validation:
+        # that profile exists and must not read as missing.
+        for item in await self._get_raw_profiles(site_id):
+            if isinstance(item, dict) and item.get("id") == arm_profile_id:
+                return parse_record(ArmProfile, item, f"Arm profile {arm_profile_id}")
         msg = f"Arm profile {arm_profile_id} not found"
         raise UniFiNotFoundError(msg, status_code=200)
 

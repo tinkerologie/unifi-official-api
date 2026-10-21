@@ -5,11 +5,14 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from pydantic import ValidationError
+
 from ...const import (
     ENDPOINT_NETWORKCONF,
     ENDPOINT_VPN_CONNECTIONS,
 )
 from ...exceptions import UniFiNotFoundError, UniFiResponseError
+from ...validation import parse_record, sanitized_validation_fields, written_record
 from ..models.vpn_client import VpnClient
 
 if TYPE_CHECKING:
@@ -141,8 +144,12 @@ class VpnClientsEndpoint:
                 continue
             try:
                 clients.append(VpnClient.model_validate(item))
-            except Exception as err:
-                _LOGGER.debug("Skipping invalid VPN client item: %s", err)
+            except ValidationError as err:
+                _LOGGER.debug(
+                    "Skipping invalid VPN client item (%s: %s)",
+                    type(err).__name__,
+                    sanitized_validation_fields(err),
+                )
                 continue
 
         return clients
@@ -161,24 +168,44 @@ class VpnClientsEndpoint:
         Raises:
             UniFiNotFoundError: If neither the client read nor the client listing holds
                 the VPN client.
+            UniFiResponseError: If the VPN client found fails validation.
 
         """
-        path = self._client.build_legacy_api_path(site_name, f"{ENDPOINT_NETWORKCONF}/{client_id}")
-        response = await self._client._get(path)
-        items = self._extract_items(response)
+        record = await self._find_vpn_client_record(site_name, client_id)
+        if record is None:
+            msg = f"VPN Client {client_id} not found"
+            raise UniFiNotFoundError(msg, status_code=200)
+        return parse_record(VpnClient, record, f"VPN Client {client_id}")
+
+    @staticmethod
+    def _match_vpn_client(items: list[dict[str, Any]], client_id: str) -> dict[str, Any] | None:
+        """Return the VPN client record with this ID, or None."""
         for item in items:
             if (item.get("_id") == client_id or item.get("id") == client_id) and item.get(
                 "purpose"
             ) == "vpn-client":
-                return VpnClient.model_validate(item)
+                return item
+        return None
 
-        all_clients = await self.list_vpn_clients(site_name)
-        for client in all_clients:
-            if client.id == client_id:
-                return client
+    async def _find_vpn_client_record(
+        self, site_name: str, client_id: str
+    ) -> dict[str, Any] | None:
+        """
+        Return the raw record of a VPN client, or None.
 
-        msg = f"VPN Client {client_id} not found"
-        raise UniFiNotFoundError(msg, status_code=200)
+        The client read is tried first, then the raw listing. The listing is
+        searched raw, not through ``list_vpn_clients()``, which skips a record
+        that fails validation: that client exists and must not read as missing.
+        """
+        path = self._client.build_legacy_api_path(site_name, f"{ENDPOINT_NETWORKCONF}/{client_id}")
+        record = self._match_vpn_client(
+            self._extract_items(await self._client._get(path)), client_id
+        )
+        if record is None:
+            list_path = self._client.build_legacy_api_path(site_name, ENDPOINT_NETWORKCONF)
+            list_items = self._extract_items(await self._client._get(list_path))
+            record = self._match_vpn_client(list_items, client_id)
+        return record
 
     async def update_vpn_client(
         self,
@@ -202,32 +229,14 @@ class VpnClientsEndpoint:
 
         Raises:
             UniFiNotFoundError: If neither the client read nor the client listing holds
-                the VPN client.
+                the VPN client, or the follow-up ``get_vpn_client()`` after a ``PUT``
+                acknowledged without a valid client finds none.
+            UniFiResponseError: If the follow-up ``get_vpn_client()`` finds a client
+                that fails validation.
 
         """
         path = self._client.build_legacy_api_path(site_name, f"{ENDPOINT_NETWORKCONF}/{client_id}")
-        response = await self._client._get(path)
-        items = self._extract_items(response)
-
-        current_payload: dict[str, Any] | None = None
-        for item in items:
-            if (item.get("_id") == client_id or item.get("id") == client_id) and item.get(
-                "purpose"
-            ) == "vpn-client":
-                current_payload = item
-                break
-
-        if current_payload is None:
-            # Fall back to list_vpn_clients search
-            list_path = self._client.build_legacy_api_path(site_name, ENDPOINT_NETWORKCONF)
-            list_response = await self._client._get(list_path)
-            for item in self._extract_items(list_response):
-                if (item.get("_id") == client_id or item.get("id") == client_id) and item.get(
-                    "purpose"
-                ) == "vpn-client":
-                    current_payload = item
-                    break
-
+        current_payload = await self._find_vpn_client_record(site_name, client_id)
         if current_payload is None:
             msg = f"VPN Client {client_id} not found"
             raise UniFiNotFoundError(msg, status_code=200)
@@ -239,8 +248,9 @@ class VpnClientsEndpoint:
         current_payload.update(kwargs)
 
         put_response = await self._client._put(path, json_data=current_payload)
-        put_items = self._extract_items(put_response)
-        if put_items:
-            return VpnClient.model_validate(put_items[0])
-
-        return VpnClient.model_validate(current_payload)
+        echo = self._match_vpn_client(self._extract_items(put_response), client_id)
+        if echo is not None:
+            written = written_record(echo, VpnClient, id_key=None)
+            if written is not None:
+                return written
+        return await self.get_vpn_client(site_name, client_id)

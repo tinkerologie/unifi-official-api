@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ...validation import parse_record
 from ..models.device import DeviceListResponse
 
 if TYPE_CHECKING:
@@ -37,11 +38,14 @@ class DevicesEndpoint:
 
         Returns:
             DeviceListResponse with host device groups.
+
+        Raises:
+            UniFiResponseError: If the page in the response fails validation.
         """
         params: dict[str, Any] = {"limit": limit}
         if next_token:
             params["nextToken"] = next_token
         response = await self._client._get("/v1/devices", params=params)
         if isinstance(response, dict):
-            return DeviceListResponse.model_validate(response)
+            return parse_record(DeviceListResponse, response, "Device list")
         return DeviceListResponse()

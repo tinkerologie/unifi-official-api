@@ -1338,7 +1338,7 @@ async def test_firewall_list_rules_params_and_fallback_branches() -> None:
 
 async def test_routes_update_route_branches_and_fallback() -> None:
     """routes.update_route covers non-matching items, id matching, enabled=None,
-    and empty PUT response."""
+    and an empty PUT response, which is re-fetched."""
     session = _Session(
         [
             # 1. GET returns non-matching route followed by matching route by 'id'
@@ -1348,13 +1348,15 @@ async def test_routes_update_route_branches_and_fallback() -> None:
                     {"id": "rt-2", "description": "Route 2", "enabled": True},
                 ]
             },
-            # PUT response returns empty list -> falls back to current_payload
+            # PUT response returns empty list -> the route is re-fetched
             {"data": []},
+            {"data": [{"id": "rt-2", "description": "Updated Route", "enabled": True}]},
         ]
     )
     client = _client(session)
 
     res = await client.routes.update_route("default", "rt-2", description="Updated Route")
+    assert [r["method"] for r in session.requests] == ["GET", "PUT", "GET"]
     assert isinstance(res, PolicyBasedRoute)
     assert res.id == "rt-2"
     assert res.description == "Updated Route"
@@ -1441,7 +1443,7 @@ async def test_vouchers_create_single_voucher_and_non_dict_error() -> None:
 
 async def test_vpn_clients_update_vpn_client_branches_and_fallback() -> None:
     """vpn_clients.update_vpn_client covers non-matching items, id matching,
-    enabled=None, and empty PUT response."""
+    enabled=None, and an empty PUT response, which is re-fetched."""
     session = _Session(
         [
             # 1. Direct hit with non-matching item first, target matched
@@ -1457,7 +1459,17 @@ async def test_vpn_clients_update_vpn_client_branches_and_fallback() -> None:
                     },
                 ]
             },
-            {"data": []},  # empty PUT response -> returns current_payload
+            {"data": []},  # empty PUT response -> the client is re-fetched
+            {
+                "data": [
+                    {
+                        "id": "vpn-target",
+                        "purpose": "vpn-client",
+                        "name": "Target Renamed",
+                        "enabled": True,
+                    }
+                ]
+            },
             # 2. Fallback search with non-matching item first
             {"data": []},  # direct GET miss
             {

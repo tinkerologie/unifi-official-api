@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ...validation import require_record
+from ...validation import parse_records, require_record
 from ..models.config import UpdateDeviceNameReq
 from ..models.device import MobilityDeviceDetail, MobilityDeviceSummary
 
@@ -24,7 +24,7 @@ class DevicesEndpoint:
             return []
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [MobilityDeviceSummary.model_validate(item) for item in data]
+            return parse_records(MobilityDeviceSummary, data, "Mobility device")
         return []
 
     async def get(self, workspace_id: str, device_id: str) -> MobilityDeviceDetail:

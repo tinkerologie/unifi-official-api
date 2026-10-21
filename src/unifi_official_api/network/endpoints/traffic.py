@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from ...validation import created_record, require_record, written_record
+from ...validation import created_record, parse_records, require_record, written_record
 from ..models.traffic import (
     Country,
     DPIApplication,
@@ -56,6 +56,9 @@ class TrafficEndpoint:
         Returns:
             List of traffic matching lists.
 
+        Raises:
+            UniFiResponseError: If an item in the response fails validation.
+
         """
         params: dict[str, Any] = {}
         if offset is not None:
@@ -73,7 +76,7 @@ class TrafficEndpoint:
 
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [TrafficMatchingList.model_validate(item) for item in data]
+            return parse_records(TrafficMatchingList, data, "Traffic matching list")
         return []
 
     async def get_list(self, site_id: str, list_id: str) -> TrafficMatchingList:
@@ -229,6 +232,9 @@ class TrafficEndpoint:
         Returns:
             List of DPI categories.
 
+        Raises:
+            UniFiResponseError: If an item in the response fails validation.
+
         """
         params: dict[str, Any] = {}
         if offset is not None:
@@ -246,7 +252,7 @@ class TrafficEndpoint:
 
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [DPICategory.model_validate(item) for item in data]
+            return parse_records(DPICategory, data, "DPI category")
         return []
 
     async def get_dpi_applications(
@@ -267,6 +273,9 @@ class TrafficEndpoint:
         Returns:
             List of DPI applications.
 
+        Raises:
+            UniFiResponseError: If an item in the response fails validation.
+
         """
         params: dict[str, Any] = {}
         if offset is not None:
@@ -284,7 +293,7 @@ class TrafficEndpoint:
 
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [DPIApplication.model_validate(item) for item in data]
+            return parse_records(DPIApplication, data, "DPI application")
         return []
 
     async def get_countries(
@@ -305,6 +314,9 @@ class TrafficEndpoint:
         Returns:
             List of countries.
 
+        Raises:
+            UniFiResponseError: If an item in the response fails validation.
+
         """
         params: dict[str, Any] = {}
         if offset is not None:
@@ -322,5 +334,5 @@ class TrafficEndpoint:
 
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [Country.model_validate(item) for item in data]
+            return parse_records(Country, data, "Country")
         return []

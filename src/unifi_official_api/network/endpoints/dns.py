@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from ...validation import created_record, require_record, written_record
+from ...validation import created_record, parse_records, require_record, written_record
 from ..models.dns import DNSPolicy, DNSRecordType
 
 if TYPE_CHECKING:
@@ -49,6 +49,9 @@ class DNSEndpoint:
         Returns:
             List of DNS policies.
 
+        Raises:
+            UniFiResponseError: If an item in the response fails validation.
+
         """
         path = self._client.build_api_path(f"/sites/{site_id}/dns/policies")
         params: dict[str, Any] = {"offset": offset, "limit": limit}
@@ -62,7 +65,7 @@ class DNSEndpoint:
 
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [DNSPolicy.model_validate(item) for item in data]
+            return parse_records(DNSPolicy, data, "DNS policy")
         return []
 
     async def get(self, site_id: str, policy_id: str) -> DNSPolicy:

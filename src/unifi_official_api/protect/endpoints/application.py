@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 import aiohttp
 
-from ...validation import created_record, require_record
+from ...validation import created_record, parse_records, require_record
 from ..models.files import ApplicationInfo, DeviceFile, FileType
 from ..models.pos import PosTransactionRequest, PosTransactionResponse
 
@@ -57,6 +57,9 @@ class ApplicationEndpoint:
         Returns:
             List of DeviceFile objects.
 
+        Raises:
+            UniFiResponseError: If an item in the response fails validation.
+
         """
         ft = file_type.value if isinstance(file_type, FileType) else file_type
         path = self._client.build_api_path(f"/files/{ft}", site_id)
@@ -69,7 +72,7 @@ class ApplicationEndpoint:
         if not isinstance(items, list):
             return []
 
-        return [DeviceFile.model_validate(item) for item in items]
+        return parse_records(DeviceFile, items, "Device file")
 
     async def upload_file(
         self,

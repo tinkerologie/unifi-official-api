@@ -7,7 +7,7 @@ import copy
 import json
 import logging
 from typing import Any, Final
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import aiohttp
 import pytest
@@ -882,19 +882,16 @@ EMPTY_PUT_RESPONSES = [None, [], {"data": []}, {"data": None}]
 async def test_wifi_update_empty_put_response_fallback(
     put_response: dict[str, Any] | list[Any] | None,
 ) -> None:
-    """With no PUT body, the result is the sent payload with the requested id."""
+    """With no PUT body, the network is re-fetched with get()."""
     client = _network_client()
-    client._get = AsyncMock(
-        return_value={
-            "data": {
-                "id": "wifi-1",
-                "type": "STANDARD",
-                "name": "Guest WiFi",
-                "enabled": False,
-                "metadata": {"origin": "USER_DEFINED"},
-            }
-        }
-    )
+    current = {
+        "id": "wifi-1",
+        "type": "STANDARD",
+        "name": "Guest WiFi",
+        "enabled": False,
+        "metadata": {"origin": "USER_DEFINED"},
+    }
+    client._get = AsyncMock(side_effect=[{"data": current}, {"data": {**current, "enabled": True}}])
     client._put = AsyncMock(return_value=put_response)
     client._patch = AsyncMock()
 
@@ -903,6 +900,7 @@ async def test_wifi_update_empty_put_response_fallback(
     assert isinstance(result, WifiNetwork)
     assert result.id == "wifi-1"
     assert result.enabled is True
+    assert client._get.await_count == 2
     client._put.assert_awaited_once_with(
         "/proxy/network/integration/v1/sites/site-1/wifi/broadcasts/wifi-1",
         json_data={"type": "STANDARD", "name": "Guest WiFi", "enabled": True},
@@ -914,20 +912,19 @@ async def test_wifi_update_empty_put_response_fallback(
 async def test_firewall_update_rule_empty_put_response_fallback(
     put_response: dict[str, Any] | list[Any] | None,
 ) -> None:
-    """With no PUT body, the result is the sent payload with the requested id."""
+    """With no PUT body, the rule is re-fetched with get_rule()."""
     client = _network_client()
     path = "/proxy/network/integration/v1/sites/site-1/firewall/policies/rule-1"
+    current = {
+        "id": "rule-1",
+        "name": "Drop Rule",
+        "action": "drop",
+        "enabled": True,
+        "index": 3,
+        "metadata": {"origin": "USER_DEFINED"},
+    }
     client._get = AsyncMock(
-        return_value={
-            "data": {
-                "id": "rule-1",
-                "name": "Drop Rule",
-                "action": "drop",
-                "enabled": True,
-                "index": 3,
-                "metadata": {"origin": "USER_DEFINED"},
-            }
-        }
+        side_effect=[{"data": current}, {"data": {**current, "enabled": False}}]
     )
     client._put = AsyncMock(return_value=put_response)
     client._patch = AsyncMock()
@@ -938,7 +935,7 @@ async def test_firewall_update_rule_empty_put_response_fallback(
     assert result.id == "rule-1"
     assert result.enabled is False
     assert result.name == "Drop Rule"
-    client._get.assert_awaited_once_with(path)
+    assert client._get.await_args_list == [call(path), call(path)]
     client._put.assert_awaited_once_with(
         path, json_data={"name": "Drop Rule", "action": "drop", "enabled": False}
     )
