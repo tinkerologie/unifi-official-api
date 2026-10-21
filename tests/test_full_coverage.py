@@ -211,8 +211,9 @@ class TestNetworkEndpointPagination:
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiNotFoundError) as exc_info:
                     await client.devices.get("s1", "missing")
+                assert type(exc_info.value) is UniFiNotFoundError
 
     async def test_devices_pending_pagination(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
@@ -274,8 +275,9 @@ class TestNetworkEndpointPagination:
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiNotFoundError) as exc_info:
                     await client.clients.get("s1", "missing")
+                assert type(exc_info.value) is UniFiNotFoundError
 
     async def test_clients_execute_action(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
@@ -324,8 +326,9 @@ class TestNetworkEndpointPagination:
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiNotFoundError) as exc_info:
                     await client.networks.get("s1", "missing")
+                assert type(exc_info.value) is UniFiNotFoundError
 
     async def test_networks_create(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
@@ -345,8 +348,9 @@ class TestNetworkEndpointPagination:
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiResponseError) as exc_info:
                     await client.networks.create("s1", name="Test")
+                assert type(exc_info.value) is UniFiResponseError
 
     async def test_networks_update(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
@@ -430,8 +434,9 @@ class TestNetworkEndpointPagination:
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiNotFoundError) as exc_info:
                     await client.wifi.get("s1", "missing")
+                assert type(exc_info.value) is UniFiNotFoundError
 
     async def test_wifi_create(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
@@ -457,8 +462,9 @@ class TestNetworkEndpointPagination:
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiResponseError) as exc_info:
                     await client.wifi.create("s1", name="X", ssid="X", passphrase="secret")
+                assert type(exc_info.value) is UniFiResponseError
 
     async def test_wifi_update(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
@@ -586,8 +592,9 @@ class TestNetworkEndpointPagination:
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiNotFoundError) as exc_info:
                     await client.firewall.get_zone("s1", "missing")
+                assert type(exc_info.value) is UniFiNotFoundError
 
     async def test_firewall_create_zone(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
@@ -607,8 +614,9 @@ class TestNetworkEndpointPagination:
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiResponseError) as exc_info:
                     await client.firewall.create_zone("s1", name="X")
+                assert type(exc_info.value) is UniFiResponseError
 
     async def test_firewall_update_zone(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
@@ -661,8 +669,9 @@ class TestNetworkEndpointPagination:
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiNotFoundError) as exc_info:
                     await client.firewall.get_rule("s1", "missing")
+                assert type(exc_info.value) is UniFiNotFoundError
 
     async def test_firewall_create_rule(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
@@ -778,12 +787,13 @@ class TestNetworkEndpointPagination:
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiNotFoundError) as exc_info:
                     await client.firewall.get_policy_ordering(
                         "s1",
                         source_firewall_zone_id="z1",
                         destination_firewall_zone_id="z2",
                     )
+                assert type(exc_info.value) is UniFiNotFoundError
 
     async def test_firewall_update_policy_ordering(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
@@ -916,8 +926,9 @@ class TestNetworkEndpointPagination:
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiNotFoundError) as exc_info:
                     await client.dns.get("s1", "missing")
+                assert type(exc_info.value) is UniFiNotFoundError
 
     async def test_dns_create_with_enum(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
@@ -950,8 +961,9 @@ class TestNetworkEndpointPagination:
             async with UniFiNetworkClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiResponseError) as exc_info:
                     await client.dns.create("s1", record_type="A_RECORD")
+                assert type(exc_info.value) is UniFiResponseError
 
     async def test_dns_update_all_fields(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
@@ -1305,8 +1317,9 @@ class TestProtectEndpointsCoverage:
             async with UniFiProtectClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiNotFoundError) as exc_info:
                     await client.cameras.get("missing")
+                assert type(exc_info.value) is UniFiNotFoundError
 
     async def test_cameras_update(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
@@ -1405,8 +1418,9 @@ class TestProtectEndpointsCoverage:
             async with UniFiProtectClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiNotFoundError) as exc_info:
                     await client.cameras.get_rtsps_stream("c1")
+                assert type(exc_info.value) is UniFiNotFoundError
 
     async def test_cameras_delete_rtsps_stream(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
@@ -1442,8 +1456,9 @@ class TestProtectEndpointsCoverage:
             async with UniFiProtectClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiResponseError) as exc_info:
                     await client.cameras.create_talkback_session("c1")
+                assert type(exc_info.value) is UniFiResponseError
 
     async def test_cameras_disable_mic_permanently(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
@@ -1489,8 +1504,9 @@ class TestProtectEndpointsCoverage:
             async with UniFiProtectClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiNotFoundError) as exc_info:
                     await client.lights.get("missing")
+                assert type(exc_info.value) is UniFiNotFoundError
 
     async def test_lights_update(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
@@ -1533,8 +1549,9 @@ class TestProtectEndpointsCoverage:
             async with UniFiProtectClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiNotFoundError) as exc_info:
                     await client.chimes.get("missing")
+                assert type(exc_info.value) is UniFiNotFoundError
 
     async def test_chimes_update(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
@@ -1584,8 +1601,9 @@ class TestProtectEndpointsCoverage:
             async with UniFiProtectClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiNotFoundError) as exc_info:
                     await client.sensors.get("missing")
+                assert type(exc_info.value) is UniFiNotFoundError
 
     async def test_sensors_update(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
@@ -1628,8 +1646,9 @@ class TestProtectEndpointsCoverage:
             async with UniFiProtectClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiNotFoundError) as exc_info:
                     await client.liveviews.get("missing")
+                assert type(exc_info.value) is UniFiNotFoundError
 
     async def test_liveviews_create(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
@@ -1649,8 +1668,9 @@ class TestProtectEndpointsCoverage:
             async with UniFiProtectClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiResponseError) as exc_info:
                     await client.liveviews.create(name="X")
+                assert type(exc_info.value) is UniFiResponseError
 
     async def test_liveviews_update(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
@@ -1687,8 +1707,9 @@ class TestProtectEndpointsCoverage:
             async with UniFiProtectClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiNotFoundError) as exc_info:
                     await client.application.get_info()
+                assert type(exc_info.value) is UniFiNotFoundError
 
     async def test_application_get_files_none(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
@@ -1733,8 +1754,9 @@ class TestProtectEndpointsCoverage:
             async with UniFiProtectClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiResponseError) as exc_info:
                     await client.application.upload_file(b"data", "test.gif")
+                assert type(exc_info.value) is UniFiResponseError
 
     async def test_application_trigger_alarm_empty_id(self, auth: LocalAuth) -> None:
         async with UniFiProtectClient(
@@ -1766,8 +1788,9 @@ class TestProtectEndpointsCoverage:
             async with UniFiProtectClient(
                 auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
             ) as client:
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiNotFoundError) as exc_info:
                     await client.viewers.get("missing")
+                assert type(exc_info.value) is UniFiNotFoundError
 
 
 # ===========================================================================
@@ -2460,8 +2483,9 @@ class TestPartialBranches:
             auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
         ) as client:
             with patch.object(client, "_post", new_callable=AsyncMock, return_value=[]):
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiResponseError) as exc_info:
                     await client.acl.create("s1", name="Test")
+                assert type(exc_info.value) is UniFiResponseError
 
     # --- acl.py update error branch ---
     # --- dns.py branches: get with dict data, create/update/delete errors ---
@@ -2483,13 +2507,14 @@ class TestPartialBranches:
             auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
         ) as client:
             with patch.object(client, "_post", new_callable=AsyncMock, return_value=[]):
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiResponseError) as exc_info:
                     await client.dns.create(
                         "s1",
                         record_type=DNSRecordType.A_RECORD,
                         domain="test.local",
                         value="1.2.3.4",
                     )
+                assert type(exc_info.value) is UniFiResponseError
 
     async def test_dns_delete_error(self, auth: LocalAuth) -> None:
         async with UniFiNetworkClient(
@@ -2518,8 +2543,9 @@ class TestPartialBranches:
             auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
         ) as client:
             with patch.object(client, "_post", new_callable=AsyncMock, return_value=[]):
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiResponseError) as exc_info:
                     await client.networks.create("s1", name="Test")
+                assert type(exc_info.value) is UniFiResponseError
 
     async def test_networks_delete_error(self, auth: LocalAuth) -> None:
         async with UniFiNetworkClient(
@@ -2547,8 +2573,9 @@ class TestPartialBranches:
             auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
         ) as client:
             with patch.object(client, "_post", new_callable=AsyncMock, return_value=[]):
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiResponseError) as exc_info:
                     await client.wifi.create("s1", name="Test", ssid="Test", passphrase="secret")
+                assert type(exc_info.value) is UniFiResponseError
 
     async def test_wifi_update_error(self, auth: LocalAuth) -> None:
         async with UniFiNetworkClient(
@@ -2584,8 +2611,9 @@ class TestPartialBranches:
             auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
         ) as client:
             with patch.object(client, "_post", new_callable=AsyncMock, return_value=[]):
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiResponseError) as exc_info:
                     await client.vouchers.create("s1", name="Test", time_limit_minutes=60)
+                assert type(exc_info.value) is UniFiResponseError
 
     async def test_vouchers_delete_error(self, auth: LocalAuth) -> None:
         async with UniFiNetworkClient(
@@ -2615,13 +2643,14 @@ class TestPartialBranches:
             auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
         ) as client:
             with patch.object(client, "_post", new_callable=AsyncMock, return_value=[]):
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiResponseError) as exc_info:
                     await client.traffic.create_list(
                         "s1",
                         name="Test",
                         list_type=TrafficMatchingType.PORTS,
                         entries=["80"],
                     )
+                assert type(exc_info.value) is UniFiResponseError
 
     async def test_traffic_delete_error(self, auth: LocalAuth) -> None:
         async with UniFiNetworkClient(
@@ -2636,8 +2665,9 @@ class TestPartialBranches:
             auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
         ) as client:
             with patch.object(client, "_post", new_callable=AsyncMock, return_value=[]):
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiResponseError) as exc_info:
                     await client.firewall.create_zone("s1", name="Test")
+                assert type(exc_info.value) is UniFiResponseError
 
     async def test_firewall_delete_zone_error(self, auth: LocalAuth) -> None:
         async with UniFiNetworkClient(
@@ -2737,8 +2767,9 @@ class TestPartialBranches:
             auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
         ) as client:
             with patch.object(client, "_post", new_callable=AsyncMock, return_value=[]):
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiResponseError) as exc_info:
                     await client.liveviews.create(name="Test", slot_ids=[])
+                assert type(exc_info.value) is UniFiResponseError
 
     # --- Protect NVR: get with list data ---
     async def test_nvr_get_list_data(self, auth: LocalAuth) -> None:
@@ -3057,7 +3088,7 @@ class TestPartialBranches:
             auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
         ) as client:
             with patch.object(client, "_post", new_callable=AsyncMock, return_value=[]):
-                with pytest.raises(UniFiResponseError):
+                with pytest.raises(UniFiResponseError) as exc_info:
                     await client.firewall.create_rule(
                         "s1",
                         name="Test",
@@ -3065,6 +3096,7 @@ class TestPartialBranches:
                         source_zone_id="z1",
                         destination_zone_id="z2",
                     )
+                assert type(exc_info.value) is UniFiResponseError
 
     async def test_firewall_update_rule_error(self, auth: LocalAuth) -> None:
         async with UniFiNetworkClient(

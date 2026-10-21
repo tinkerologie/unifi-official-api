@@ -198,8 +198,10 @@ except UniFiError as e:
 `UniFiNotFoundError` covers both an HTTP 404 and a successful response
 (`status_code == 200`) that holds no record. A record that fails validation
 raises `UniFiResponseError` with `status_code == 200` and a message naming the
-failing fields only. Any HTTP error answer, including one to a snapshot or
-other binary download, is a `UniFiResponseError` subclass;
+failing fields only. An HTTP error answer, including one to a snapshot or
+other binary download, raises `UniFiAuthenticationError` for 401 and 403, and
+`UniFiResponseError` or one of its subclasses (`UniFiNotFoundError` for 404,
+`UniFiRateLimitError` for 429) for any other 4xx or 5xx status;
 `UniFiConnectionError` and `UniFiTimeoutError` mean the console could not be
 reached. `ValueError` and `TypeError` are raised only for invalid arguments,
 before any request is made.
