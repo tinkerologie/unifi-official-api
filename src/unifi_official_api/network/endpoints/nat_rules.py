@@ -143,7 +143,7 @@ class NatRulesEndpoint:
         current = next((i for i in items if (i.get("_id") or i.get("id")) == rule_id), None)
         if current is None:
             msg = f"NAT rule {rule_id} not found"
-            raise UniFiNotFoundError(msg, status_code=404)
+            raise UniFiNotFoundError(msg, status_code=200)
 
         if is_predefined_nat_rule(current):
             raise UniFiRuleNotEditableError(f"NAT rule {rule_id} is managed by the console")

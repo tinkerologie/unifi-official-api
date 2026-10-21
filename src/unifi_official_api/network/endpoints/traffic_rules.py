@@ -139,7 +139,7 @@ class TrafficRulesEndpoint:
         current = next((i for i in items if (i.get("_id") or i.get("id")) == rule_id), None)
         if current is None:
             msg = f"Traffic rule {rule_id} not found"
-            raise UniFiNotFoundError(msg, status_code=404)
+            raise UniFiNotFoundError(msg, status_code=200)
 
         payload = dict(current)
         payload["enabled"] = enabled

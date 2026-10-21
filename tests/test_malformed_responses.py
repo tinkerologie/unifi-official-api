@@ -393,3 +393,17 @@ async def test_arm_profile_update_skips_non_dict_listing_items() -> None:
     profile = await client.arm_profiles.update("prof-1", name="Away")
     assert profile.id == "prof-1"
     assert profile.name == "Away"
+
+
+@pytest.mark.parametrize("name", list(_TOGGLES))
+async def test_rule_toggle_missing_rule_is_not_found_with_status_200(name: str) -> None:
+    """A listing without the rule is a successful answer with no record: not found, 200."""
+    call, _ = _TOGGLES[name]
+    client = _network()
+    client._get = AsyncMock(return_value={"data": [{"_id": "other", "name": "Other"}]})
+    client._put = AsyncMock()
+    with pytest.raises(UniFiNotFoundError) as exc_info:
+        await call(client)
+    assert type(exc_info.value) is UniFiNotFoundError
+    assert exc_info.value.status_code == 200
+    client._put.assert_not_awaited()
