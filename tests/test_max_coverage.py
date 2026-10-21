@@ -270,7 +270,8 @@ class TestMaxCoverage:
             assert pos_resp.created is True
             assert pos_resp.event_id == "evt-1"
 
-        # ProtectDeviceEndpoint update with dict site_id
+        # ProtectDeviceEndpoint update with keyword settings; AlarmHubsEndpoint
+        # still accepts settings as a dict in the site_id position
         mock_aioresponse.patch(
             "https://192.168.1.1/proxy/protect/integration/v1/bridges/br-1",
             payload={"data": {"id": "br-1", "name": "Bridge Patched"}},
@@ -280,10 +281,7 @@ class TestMaxCoverage:
             payload={"data": {"id": "hub-1", "name": "Hub Patched"}},
         )
         async with prot_client:
-            b_updated = await prot_client.bridges.update(
-                "br-1",
-                {"name": "Bridge Patched"},
-            )
+            b_updated = await prot_client.bridges.update("br-1", name="Bridge Patched")
             assert b_updated.name == "Bridge Patched"
 
             h_updated = await prot_client.alarm_hubs.update(

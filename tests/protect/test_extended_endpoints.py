@@ -6,6 +6,7 @@ import pytest
 from aioresponses import aioresponses
 
 from unifi_official_api import ConnectionType, LocalAuth
+from unifi_official_api.exceptions import UniFiNotFoundError
 from unifi_official_api.protect import (
     AlarmHub,
     ArmProfile,
@@ -94,13 +95,18 @@ class TestProtectExtendedEndpoints:
         mock_aioresponse.patch(
             "https://192.168.1.1/proxy/protect/integration/v1/sirens/bad-id", payload={}
         )
+        # The empty PATCH body makes update() re-fetch the resource.
+        mock_aioresponse.get(
+            "https://192.168.1.1/proxy/protect/integration/v1/sirens/bad-id",
+            payload={"data": {"id": "bad-id"}},
+        )
 
         async with client:
             assert await client.sirens.get_all() == []
-            with pytest.raises(ValueError, match="not found"):
+            with pytest.raises(UniFiNotFoundError):
                 await client.sirens.get("bad-id")
-            with pytest.raises(ValueError, match="Failed to update"):
-                await client.sirens.update("bad-id", volume=50)
+            updated = await client.sirens.update("bad-id", volume=50)
+            assert updated.id == "bad-id"
 
     async def test_fobs_endpoints(
         self, client: UniFiProtectClient, mock_aioresponse: aioresponses
@@ -141,13 +147,18 @@ class TestProtectExtendedEndpoints:
         mock_aioresponse.patch(
             "https://192.168.1.1/proxy/protect/integration/v1/fobs/bad-id", payload={}
         )
+        # The empty PATCH body makes update() re-fetch the resource.
+        mock_aioresponse.get(
+            "https://192.168.1.1/proxy/protect/integration/v1/fobs/bad-id",
+            payload={"data": {"id": "bad-id"}},
+        )
 
         async with client:
             assert await client.fobs.get_all() == []
-            with pytest.raises(ValueError, match="not found"):
+            with pytest.raises(UniFiNotFoundError):
                 await client.fobs.get("bad-id")
-            with pytest.raises(ValueError, match="Failed to update"):
-                await client.fobs.update("bad-id", name="x")
+            updated = await client.fobs.update("bad-id", name="x")
+            assert updated.id == "bad-id"
 
     async def test_relays_endpoints(
         self, client: UniFiProtectClient, mock_aioresponse: aioresponses
@@ -207,13 +218,18 @@ class TestProtectExtendedEndpoints:
         mock_aioresponse.patch(
             "https://192.168.1.1/proxy/protect/integration/v1/relays/bad-id", payload={}
         )
+        # The empty PATCH body makes update() re-fetch the resource.
+        mock_aioresponse.get(
+            "https://192.168.1.1/proxy/protect/integration/v1/relays/bad-id",
+            payload={"data": {"id": "bad-id"}},
+        )
 
         async with client:
             assert await client.relays.get_all() == []
-            with pytest.raises(ValueError, match="not found"):
+            with pytest.raises(UniFiNotFoundError):
                 await client.relays.get("bad-id")
-            with pytest.raises(ValueError, match="Failed to update"):
-                await client.relays.update("bad-id", name="x")
+            updated = await client.relays.update("bad-id", name="x")
+            assert updated.id == "bad-id"
 
     async def test_speakers_endpoints(
         self, client: UniFiProtectClient, mock_aioresponse: aioresponses
@@ -262,13 +278,18 @@ class TestProtectExtendedEndpoints:
         mock_aioresponse.patch(
             "https://192.168.1.1/proxy/protect/integration/v1/speakers/bad-id", payload={}
         )
+        # The empty PATCH body makes update() re-fetch the resource.
+        mock_aioresponse.get(
+            "https://192.168.1.1/proxy/protect/integration/v1/speakers/bad-id",
+            payload={"data": {"id": "bad-id"}},
+        )
 
         async with client:
             assert await client.speakers.get_all() == []
-            with pytest.raises(ValueError, match="not found"):
+            with pytest.raises(UniFiNotFoundError):
                 await client.speakers.get("bad-id")
-            with pytest.raises(ValueError, match="Failed to update"):
-                await client.speakers.update("bad-id", volume=10)
+            updated = await client.speakers.update("bad-id", volume=10)
+            assert updated.id == "bad-id"
 
     async def test_bridges_endpoints(
         self, client: UniFiProtectClient, mock_aioresponse: aioresponses
@@ -311,13 +332,18 @@ class TestProtectExtendedEndpoints:
         mock_aioresponse.patch(
             "https://192.168.1.1/proxy/protect/integration/v1/bridges/bad-id", payload={}
         )
+        # The empty PATCH body makes update() re-fetch the resource.
+        mock_aioresponse.get(
+            "https://192.168.1.1/proxy/protect/integration/v1/bridges/bad-id",
+            payload={"data": {"id": "bad-id"}},
+        )
 
         async with client:
             assert await client.bridges.get_all() == []
-            with pytest.raises(ValueError, match="not found"):
+            with pytest.raises(UniFiNotFoundError):
                 await client.bridges.get("bad-id")
-            with pytest.raises(ValueError, match="Failed to update"):
-                await client.bridges.update("bad-id", name="x")
+            updated = await client.bridges.update("bad-id", name="x")
+            assert updated.id == "bad-id"
 
     async def test_link_stations_endpoints(
         self, client: UniFiProtectClient, mock_aioresponse: aioresponses
@@ -360,13 +386,18 @@ class TestProtectExtendedEndpoints:
         mock_aioresponse.patch(
             "https://192.168.1.1/proxy/protect/integration/v1/link-stations/bad-id", payload={}
         )
+        # The empty PATCH body makes update() re-fetch the resource.
+        mock_aioresponse.get(
+            "https://192.168.1.1/proxy/protect/integration/v1/link-stations/bad-id",
+            payload={"data": {"id": "bad-id"}},
+        )
 
         async with client:
             assert await client.link_stations.get_all() == []
-            with pytest.raises(ValueError, match="not found"):
+            with pytest.raises(UniFiNotFoundError):
                 await client.link_stations.get("bad-id")
-            with pytest.raises(ValueError, match="Failed to update"):
-                await client.link_stations.update("bad-id", name="x")
+            updated = await client.link_stations.update("bad-id", name="x")
+            assert updated.id == "bad-id"
 
     async def test_alarm_hubs_endpoints(
         self, client: UniFiProtectClient, mock_aioresponse: aioresponses

@@ -216,69 +216,131 @@ async def test_protect_device_endpoint_get_all_branches() -> None:
     )
 
 
-async def test_protect_device_endpoint_get_and_update_branches() -> None:
-    """Test ProtectDeviceEndpoint get and update fallback and error branches."""
+async def test_protect_device_endpoint_get_parses_dict_and_list_payloads() -> None:
+    """get() parses a wrapped object and the first item of a wrapped list."""
     session = _Session(
         [
-            # Dict payload
             {"data": {"id": "d-1", "name": "dict-first"}},
-            # List payload with items
             {"data": [{"id": "d-1", "name": "first"}]},
-            # Empty list error
-            {"data": []},
-            # Non-dict response error
-            None,
-            # update: data dict
-            {"data": {"id": "d-1", "name": "updated"}},
-            # update: data not dict -> ValueError
-            {"data": "not-a-dict"},
-            # update: failure -> ValueError
-            None,
         ]
     )
-    client = _client(session)
-    ep = _DummyEndpoint(client)
+    ep = _DummyEndpoint(_client(session))
+    assert (await ep.get("d-1")).name == "dict-first"
+    assert (await ep.get("d-1")).name == "first"
+    _assert_requests(
+        session, [("GET", "dummies/d-1", None, None), ("GET", "dummies/d-1", None, None)]
+    )
 
-    # get with dict
-    item0 = await ep.get("d-1")
-    assert item0.name == "dict-first"
 
-    # get with list fallback
-    item = await ep.get("d-1")
-    assert item.id == "d-1"
+@pytest.mark.parametrize(
+    "body",
+    [
+        None,
+        {},
+        {"data": None},
+        {"data": []},
+        {"data": ["not-a-dict"]},
+        {"data": "not-a-dict"},
+        {"data": {"name": "no id"}},
+        {"data": {"id": ""}},
+    ],
+)
+async def test_protect_device_endpoint_get_without_resource_raises_not_found(body: Any) -> None:
+    """A 200 body holding no resource with an id raises UniFiNotFoundError."""
+    session = _Session([body])
+    with pytest.raises(UniFiNotFoundError) as exc_info:
+        await _DummyEndpoint(_client(session)).get("d-1")
+    assert exc_info.value.message == "dummies d-1 not found"
+    assert exc_info.value.status_code == 200
+    _assert_requests(session, [("GET", "dummies/d-1", None, None)])
 
-    # get with empty list
-    with pytest.raises(ValueError, match="dummies d-1 not found"):
-        await ep.get("d-1")
 
-    # get with non-dict
-    with pytest.raises(ValueError, match="dummies d-1 not found"):
-        await ep.get("d-1")
+async def test_protect_device_endpoint_get_malformed_resource_raises_sanitized_error() -> None:
+    """A resource failing validation raises UniFiResponseError without the raw input."""
+    session = _Session([{"data": {"id": "d-1", "name": ["secret-value"]}}])
+    with pytest.raises(UniFiResponseError) as exc_info:
+        await _DummyEndpoint(_client(session)).get("d-1")
+    err = exc_info.value
+    assert not isinstance(err, UniFiNotFoundError)
+    assert err.status_code == 200
+    assert err.response_body is None
+    assert err.message == "dummies d-1 response failed validation (name)"
+    assert err.__cause__ is None
+    assert err.__context__ is None
 
-    # update success
-    up = await ep.update("d-1", name="updated")
-    assert up.name == "updated"
 
-    # update with non-dict data
-    with pytest.raises(ValueError, match="Failed to update dummies"):
-        await ep.update("d-1", name="updated")
+async def test_protect_device_endpoint_update_returns_full_patch_body() -> None:
+    """A PATCH body holding the full resource is returned without a re-fetch."""
+    session = _Session([{"data": {"id": "d-1", "name": "updated"}}])
+    updated = await _DummyEndpoint(_client(session)).update("d-1", name="updated")
+    assert updated.name == "updated"
+    _assert_requests(session, [("PATCH", "dummies/d-1", None, {"name": "updated"})])
 
-    # update failure
-    with pytest.raises(ValueError, match="Failed to update dummies"):
-        await ep.update("d-1", name="updated")
 
+@pytest.mark.parametrize(
+    "patch_response",
+    [
+        _Response(status=204),
+        _Response({}),
+        _Response({"data": {}}),
+        _Response({"data": None}),
+        _Response({"name": "updated"}),
+        _Response({"data": {"id": "d-1", "name": ["partial"]}}),
+    ],
+)
+async def test_protect_device_endpoint_update_refetches_after_incomplete_body(
+    patch_response: _Response,
+) -> None:
+    """A successful PATCH without a full resource body re-fetches instead of raising."""
+    session = _Session([patch_response, {"data": {"id": "d-1", "name": "updated"}}])
+    ep = _DummyEndpoint(_client(session))
+    updated = await ep.update("d-1", "site-1", name="updated")
+    assert updated == _DummyModel(id="d-1", name="updated")
     _assert_requests(
         session,
         [
-            ("GET", "dummies/d-1", None, None),
-            ("GET", "dummies/d-1", None, None),
-            ("GET", "dummies/d-1", None, None),
-            ("GET", "dummies/d-1", None, None),
             ("PATCH", "dummies/d-1", None, {"name": "updated"}),
-            ("PATCH", "dummies/d-1", None, {"name": "updated"}),
-            ("PATCH", "dummies/d-1", None, {"name": "updated"}),
+            ("GET", "dummies/d-1", None, None),
         ],
     )
+
+
+async def test_protect_device_endpoint_update_refetch_missing_raises_not_found() -> None:
+    """A re-fetch that finds no resource raises UniFiNotFoundError, not 'failed to update'."""
+    session = _Session([{}, {}])
+    with pytest.raises(UniFiNotFoundError):
+        await _DummyEndpoint(_client(session)).update("d-1", name="updated")
+    assert [r["method"] for r in session.requests] == ["PATCH", "GET"]
+
+
+@pytest.mark.parametrize(
+    ("responses", "exception", "methods"),
+    [
+        ([_Response({"error": "bad"}, status=400)], UniFiResponseError, ["PATCH"]),
+        (
+            [_Response(status=204), _Response({"error": "gone"}, status=404)],
+            UniFiNotFoundError,
+            ["PATCH", "GET"],
+        ),
+    ],
+)
+async def test_protect_device_endpoint_update_propagates_transport_errors(
+    responses: list[_Response], exception: type[Exception], methods: list[str]
+) -> None:
+    """HTTP errors from the PATCH or the re-fetch propagate unchanged."""
+    session = _Session(list(responses))
+    with pytest.raises(exception):
+        await _DummyEndpoint(_client(session)).update("d-1", name="updated")
+    assert [r["method"] for r in session.requests] == methods
+
+
+async def test_protect_device_endpoint_update_rejects_dict_site_id() -> None:
+    """Settings passed as a dict in the site_id position raise TypeError, sending nothing."""
+    session = _Session([])
+    ep = _DummyEndpoint(_client(session))
+    with pytest.raises(TypeError, match="site_id must be a str or None, not dict"):
+        await ep.update("d-1", {"name": "x"})  # type: ignore[arg-type]
+    assert session.requests == []
 
 
 # ===================================================================
