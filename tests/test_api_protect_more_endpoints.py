@@ -2089,14 +2089,3 @@ async def test_sensor_setter_response_parsing(*, method: str, value: bool | int)
     assert isinstance(sensor, Sensor)
     assert sensor.id == "sensor-1"
     _assert_requests(session, [("PATCH", "sensors/sensor-1", None, ANY)])
-
-
-async def test_liveview_delete_response() -> None:
-    """Exercise the public delete return path without pinning an off-spec verb."""
-    session = _Session([_Response(status=204)])
-    assert await _client(session).liveviews.delete("lv-1") is True
-    assert len(session.requests) == 1
-    request = session.requests[0]
-    assert request["url"] == ("https://192.168.1.1/proxy/protect/integration/v1/liveviews/lv-1")
-    assert request["params"] is None
-    assert request["json"] is None

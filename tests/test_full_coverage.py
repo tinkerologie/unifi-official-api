@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
@@ -29,7 +28,6 @@ from unifi_official_api.network.models.traffic import (
     TrafficMetadata,
 )
 from unifi_official_api.protect import UniFiProtectClient
-from unifi_official_api.protect.models import EventType
 from unifi_official_api.protect.models.nvr import StorageInfo
 
 # Base URL for mock endpoints
@@ -1228,33 +1226,6 @@ class TestProtectClientCoverage:
                 result = await client.validate_connection()
                 assert result is True
 
-    async def test_get_sites(self, auth: LocalAuth) -> None:
-        with aioresponses() as m:
-            m.get(re.compile(r".*/sites"), payload={"data": [{"id": "s1"}]})
-            async with UniFiProtectClient(
-                auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-            ) as client:
-                sites = await client.get_sites()
-                assert len(sites) == 1
-
-    async def test_get_sites_none(self, auth: LocalAuth) -> None:
-        with aioresponses() as m:
-            m.get(re.compile(r".*/sites"), payload=None)
-            async with UniFiProtectClient(
-                auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-            ) as client:
-                sites = await client.get_sites()
-                assert sites == []
-
-    async def test_get_sites_non_list(self, auth: LocalAuth) -> None:
-        with aioresponses() as m:
-            m.get(re.compile(r".*/sites"), payload={"data": "not a list"})
-            async with UniFiProtectClient(
-                auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-            ) as client:
-                sites = await client.get_sites()
-                assert sites == []
-
     async def test_get_host_id(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
             m.get(
@@ -1432,15 +1403,6 @@ class TestProtectEndpointsCoverage:
         ) as client:
             with pytest.raises(ValueError, match="Volume"):
                 await client.cameras.set_speaker_volume("c1", -1)
-
-    async def test_cameras_ptz_move(self, auth: LocalAuth) -> None:
-        with aioresponses() as m:
-            m.post(re.compile(r".*/cameras/c1/ptz/move"), payload={})
-            async with UniFiProtectClient(
-                auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-            ) as client:
-                result = await client.cameras.ptz_move("c1", pan=0.5, tilt=-0.3, zoom=0.8)
-                assert result is True
 
     async def test_cameras_ptz_goto_preset(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
@@ -1816,15 +1778,6 @@ class TestProtectEndpointsCoverage:
                 with pytest.raises(ValueError):
                     await client.liveviews.update("lv1", name="X")
 
-    async def test_liveviews_delete(self, auth: LocalAuth) -> None:
-        with aioresponses() as m:
-            m.delete(re.compile(r".*/liveviews/lv1"), payload={})
-            async with UniFiProtectClient(
-                auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-            ) as client:
-                result = await client.liveviews.delete("lv1")
-                assert result is True
-
     # --- NVR ---
     async def test_nvr_get_list_response(self, auth: LocalAuth) -> None:
         with aioresponses() as m:
@@ -1843,117 +1796,6 @@ class TestProtectEndpointsCoverage:
             ) as client:
                 with pytest.raises(ValueError, match="NVR not found"):
                     await client.nvr.get()
-
-    async def test_nvr_update(self, auth: LocalAuth) -> None:
-        with aioresponses() as m:
-            m.patch(re.compile(r".*/nvr"), payload={"data": self._nvr()})
-            async with UniFiProtectClient(
-                auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-            ) as client:
-                nvr = await client.nvr.update(timezone="UTC")
-                assert nvr.id == "nvr1"
-
-    async def test_nvr_update_error(self, auth: LocalAuth) -> None:
-        with aioresponses() as m:
-            m.patch(re.compile(r".*/nvr"), payload=[])
-            async with UniFiProtectClient(
-                auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-            ) as client:
-                with pytest.raises(ValueError):
-                    await client.nvr.update(timezone="UTC")
-
-    async def test_nvr_restart(self, auth: LocalAuth) -> None:
-        with aioresponses() as m:
-            m.post(re.compile(r".*/nvr/restart"), payload={})
-            async with UniFiProtectClient(
-                auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-            ) as client:
-                result = await client.nvr.restart()
-                assert result is True
-
-    async def test_nvr_set_recording_retention_invalid(self, auth: LocalAuth) -> None:
-        async with UniFiProtectClient(
-            auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-        ) as client:
-            with pytest.raises(ValueError, match="at least 1"):
-                await client.nvr.set_recording_retention(0)
-
-    # --- Events ---
-    async def test_events_get_all_with_filters(self, auth: LocalAuth) -> None:
-        with aioresponses() as m:
-            m.get(re.compile(r".*/events.*"), payload=[self._event()])
-            async with UniFiProtectClient(
-                auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-            ) as client:
-                events = await client.events.get_all(
-                    start=datetime(2024, 1, 1, tzinfo=UTC),
-                    end=datetime(2024, 1, 2, tzinfo=UTC),
-                    types=[EventType.MOTION, "smartDetectZone"],
-                    camera_ids=["c1"],
-                )
-                assert len(events) == 1
-
-    async def test_events_get_all_none(self, auth: LocalAuth) -> None:
-        with aioresponses() as m:
-            m.get(re.compile(r".*/events.*"), payload=None)
-            async with UniFiProtectClient(
-                auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-            ) as client:
-                events = await client.events.get_all()
-                assert events == []
-
-    async def test_events_get(self, auth: LocalAuth) -> None:
-        with aioresponses() as m:
-            m.get(re.compile(r".*/events/e1"), payload={"data": self._event()})
-            async with UniFiProtectClient(
-                auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-            ) as client:
-                e = await client.events.get("e1")
-                assert e.id == "e1"
-
-    async def test_events_get_list_response(self, auth: LocalAuth) -> None:
-        with aioresponses() as m:
-            m.get(re.compile(r".*/events/e1"), payload={"data": [self._event()]})
-            async with UniFiProtectClient(
-                auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-            ) as client:
-                e = await client.events.get("e1")
-                assert e.id == "e1"
-
-    async def test_events_get_not_found(self, auth: LocalAuth) -> None:
-        with aioresponses() as m:
-            m.get(re.compile(r".*/events/.*"), payload=[])
-            async with UniFiProtectClient(
-                auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-            ) as client:
-                with pytest.raises(ValueError):
-                    await client.events.get("missing")
-
-    async def test_events_get_thumbnail(self, auth: LocalAuth) -> None:
-        with aioresponses() as m:
-            m.get(
-                re.compile(r".*/events/e1/thumbnail.*"),
-                body=b"\x89PNG",
-                content_type="image/png",
-            )
-            async with UniFiProtectClient(
-                auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-            ) as client:
-                data = await client.events.get_thumbnail("e1", width=320, height=240)
-                assert data == b"\x89PNG"
-
-    async def test_events_get_heatmap(self, auth: LocalAuth) -> None:
-        with aioresponses() as m:
-            m.get(
-                re.compile(r".*/events/e1/heatmap"),
-                body=b"\x89PNG",
-                content_type="image/png",
-            )
-            async with UniFiProtectClient(
-                auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-            ) as client:
-                data = await client.events.get_heatmap("e1")
-                assert data == b"\x89PNG"
 
     # --- Application ---
     async def test_application_get_info_error(self, auth: LocalAuth) -> None:
@@ -2628,16 +2470,6 @@ class TestNoneAndNonListResponses:
                 views = await client.liveviews.get_all()
                 assert views == []
 
-    # --- Events: non-list data ---
-    async def test_events_get_all_nonlist_data(self, auth: LocalAuth) -> None:
-        """Cover events.py line 68."""
-        async with UniFiProtectClient(
-            auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-        ) as client:
-            with patch.object(client, "_get", new_callable=AsyncMock, return_value={"data": 42}):
-                events = await client.events.get_all()
-                assert events == []
-
     # --- Viewers: None response ---
     async def test_viewers_get_all_none_response(self, auth: LocalAuth) -> None:
         """Cover viewers.py line 37."""
@@ -2662,7 +2494,7 @@ class TestNoneAndNonListResponses:
                     ),
                 )
                 with pytest.raises(UniFiConnectionError, match="Failed to connect"):
-                    await client._get_binary(f"{PROTECT_BASE}/events/e1/thumbnail")
+                    await client._get_binary(f"{PROTECT_BASE}/cameras/c1/snapshot")
 
 
 # ===========================================================================
@@ -3082,14 +2914,7 @@ class TestPartialBranches:
                 with pytest.raises(ValueError, match="Failed to update"):
                     await client.liveviews.update("lv1")
 
-    async def test_liveviews_delete_error(self, auth: LocalAuth) -> None:
-        async with UniFiProtectClient(
-            auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-        ) as client:
-            with patch.object(client, "_delete", new_callable=AsyncMock, return_value="fail"):
-                await client.liveviews.delete("lv1")
-
-    # --- Protect NVR: get with list data, update error ---
+    # --- Protect NVR: get with list data ---
     async def test_nvr_get_list_data(self, auth: LocalAuth) -> None:
         async with UniFiProtectClient(
             auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
@@ -3102,28 +2927,6 @@ class TestPartialBranches:
             ):
                 n = await client.nvr.get()
                 assert n.id == "nvr1"
-
-    async def test_nvr_update_error(self, auth: LocalAuth) -> None:
-        async with UniFiProtectClient(
-            auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-        ) as client:
-            with patch.object(client, "_patch", new_callable=AsyncMock, return_value=[]):
-                with pytest.raises(ValueError, match="Failed to update"):
-                    await client.nvr.update()
-
-    # --- Protect events: get with list data ---
-    async def test_events_get_list_data(self, auth: LocalAuth) -> None:
-        async with UniFiProtectClient(
-            auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-        ) as client:
-            with patch.object(
-                client,
-                "_get",
-                new_callable=AsyncMock,
-                return_value={"data": [{"id": "e1", "type": "motion"}]},
-            ):
-                e = await client.events.get("e1")
-                assert e.id == "e1"
 
     # --- Protect viewers: get with list data (84->88) ---
     async def test_viewers_get_list_data(self, auth: LocalAuth) -> None:
@@ -3216,16 +3019,7 @@ class TestPartialBranches:
                 with pytest.raises(ValueError, match="not found"):
                     await client.sensors.get("s1")
 
-    # --- Protect events: get not found ---
-    async def test_events_get_not_found_error(self, auth: LocalAuth) -> None:
-        async with UniFiProtectClient(
-            auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-        ) as client:
-            with patch.object(client, "_get", new_callable=AsyncMock, return_value={"data": "str"}):
-                with pytest.raises(ValueError, match="not found"):
-                    await client.events.get("e1")
-
-    # --- Protect liveviews: get not found, update/create/delete errors ---
+    # --- Protect liveviews: get not found, update/create errors ---
     async def test_liveviews_get_not_found_error(self, auth: LocalAuth) -> None:
         async with UniFiProtectClient(
             auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
@@ -3251,15 +3045,6 @@ class TestPartialBranches:
             with patch.object(client, "_get", new_callable=AsyncMock, return_value={"data": "str"}):
                 with pytest.raises(ValueError, match="not found"):
                     await client.viewers.get("vw1")
-
-    # --- cameras PTZ with all params ---
-    async def test_cameras_ptz_all_params(self, auth: LocalAuth) -> None:
-        async with UniFiProtectClient(
-            auth=auth, base_url="https://192.168.1.1", connection_type=ConnectionType.LOCAL
-        ) as client:
-            with patch.object(client, "_post", new_callable=AsyncMock, return_value=None):
-                result = await client.cameras.ptz_move("c1", pan=0.5, tilt=0.5, zoom=0.5)
-                assert result is True
 
     # --- Network endpoints: get not found, create/update/delete success for remaining ---
     async def test_acl_get_dict_direct(self, auth: LocalAuth) -> None:

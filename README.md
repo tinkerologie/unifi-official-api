@@ -159,11 +159,13 @@ asyncio.run(main())
 | Client / API | Endpoints / Resources Covered |
 | -------------- | ------------------------------- |
 | **UniFiNetworkClient** | Sites, Devices, Clients, Networks, WiFi/SSIDs, Firewall & Zones, Vouchers, ACL Rules, Switching (LAGs, MC-LAG domains, Switch Stacks), Traffic Matching, Resources (WAN, VPN, RADIUS) |
-| **UniFiProtectClient** | Cameras (Streams, Snapshots, PTZ, Talkback), Sirens, Key Fobs, Relays, Speakers, Bridges, Link Stations, Alarm Hubs, Alarm Manager Webhooks, Arm Profiles, Local & Identity Users, POS Transaction Ingestion, Sensors, Lights, Chimes, NVR, LiveViews, Viewers, Real-time WebSockets |
+| **UniFiProtectClient** | Cameras (Streams, Snapshots, PTZ Presets & Patrols, Talkback), Sirens, Key Fobs, Relays, Speakers, Bridges, Link Stations, Alarm Hubs, Alarm Manager Webhooks, Arm Profiles, Local & Identity Users, POS Transaction Ingestion, Sensors, Lights, Chimes, NVR (read-only), LiveViews, Viewers, Real-time Device & Event WebSockets |
 | **UniFiInnerSpaceClient** | Full Project Data (Shapes, Walls, Attenuation), Floor Plans, Placed Access Points, Placed Switches, Unplaced Inventory, Blueprint Image Assets |
 | **UniFiSiteManagerClient** | Hosts/Consoles, Multi-site Aggregation, Cross-console Devices, ISP Performance Telemetry & Queries, SD-WAN Configs & Health Status, Cloud Connector Arbitrary Proxy |
 | **UniFiMobilityClient** | Workspaces, Workspace Admins, UMR Device Gateways & Location Coordinates, Connected Clients, Remote LAN/DHCP Configuration, Remote Wireless WiFi Configuration |
 | **UniFiCarrierFabricClient** | Subscribers Lifecycle (Create, Update, Suspend, Resume), Gateway Host Attach/Detach, Service Plan Assignment, Bandwidth QoS Service Plans |
+
+`UniFiProtectClient` sends only operations documented in the Protect OpenAPI spec pinned by `PROTECT_SPEC_VERSION` (7.3.70). A test checks every public Protect method against a vendored copy of that spec.
 
 ## Error Handling
 

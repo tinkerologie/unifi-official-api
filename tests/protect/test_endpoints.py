@@ -63,38 +63,6 @@ class TestCamerasEndpoint:
         snapshot = await protect_client.cameras.get_snapshot(camera_id)
         assert snapshot == b"fake_image_data"
 
-    async def test_cameras_restart(
-        self,
-        protect_client: UniFiProtectClient,
-        mock_aioresponse: aioresponses,
-        sample_camera: dict[str, Any],
-    ) -> None:
-        """Test restarting camera."""
-        camera_id = sample_camera["id"]
-        mock_aioresponse.post(
-            f"https://192.168.1.1/proxy/protect/integration/v1/cameras/{camera_id}/restart",
-            payload={},
-        )
-
-        result = await protect_client.cameras.restart(camera_id)
-        assert result is True
-
-    async def test_cameras_ptz_move(
-        self,
-        protect_client: UniFiProtectClient,
-        mock_aioresponse: aioresponses,
-        sample_camera: dict[str, Any],
-    ) -> None:
-        """Test PTZ camera movement."""
-        camera_id = sample_camera["id"]
-        mock_aioresponse.post(
-            f"https://192.168.1.1/proxy/protect/integration/v1/cameras/{camera_id}/ptz/move",
-            payload={},
-        )
-
-        result = await protect_client.cameras.ptz_move(camera_id, pan=0.5, tilt=0.3)
-        assert result is True
-
 
 class TestSensorsEndpoint:
     """Tests for sensors endpoint methods."""
@@ -376,53 +344,6 @@ class TestNVREndpoint:
         nvr = await protect_client.nvr.get()
         assert nvr.id == "nvr-1"
 
-    async def test_nvr_update(
-        self,
-        protect_client: UniFiProtectClient,
-        mock_aioresponse: aioresponses,
-    ) -> None:
-        """Test updating NVR."""
-        mock_aioresponse.patch(
-            "https://192.168.1.1/proxy/protect/integration/v1/nvr",
-            payload={"data": {"id": "nvr-1", "mac": "AA:BB:CC:DD:EE:FF", "name": "Updated"}},
-        )
-
-        nvr = await protect_client.nvr.update(name="Updated")
-        assert nvr.name == "Updated"
-
-    async def test_nvr_restart(
-        self,
-        protect_client: UniFiProtectClient,
-        mock_aioresponse: aioresponses,
-    ) -> None:
-        """Test restarting NVR."""
-        mock_aioresponse.post(
-            "https://192.168.1.1/proxy/protect/integration/v1/nvr/restart",
-            payload={},
-        )
-
-        result = await protect_client.nvr.restart()
-        assert result is True
-
-    async def test_nvr_set_recording_retention(
-        self,
-        protect_client: UniFiProtectClient,
-        mock_aioresponse: aioresponses,
-    ) -> None:
-        """Test setting NVR recording retention."""
-        nvr_data = {
-            "id": "nvr-1",
-            "mac": "AA:BB:CC:DD:EE:FF",
-            "recordingRetentionDays": 30,
-        }
-        mock_aioresponse.patch(
-            "https://192.168.1.1/proxy/protect/integration/v1/nvr",
-            payload={"data": nvr_data},
-        )
-
-        nvr = await protect_client.nvr.set_recording_retention(30)
-        assert nvr is not None
-
 
 class TestLiveViewsEndpoint:
     """Tests for liveviews endpoint methods."""
@@ -482,108 +403,6 @@ class TestLiveViewsEndpoint:
 
         liveview = await protect_client.liveviews.update("lv-1", name="Updated")
         assert liveview.name == "Updated"
-
-    async def test_liveviews_delete(
-        self,
-        protect_client: UniFiProtectClient,
-        mock_aioresponse: aioresponses,
-    ) -> None:
-        """Test deleting a liveview."""
-        mock_aioresponse.delete(
-            "https://192.168.1.1/proxy/protect/integration/v1/liveviews/lv-1",
-            status=200,
-        )
-
-        result = await protect_client.liveviews.delete("lv-1")
-        assert result is True
-
-
-class TestEventsEndpoint:
-    """Tests for events endpoint methods."""
-
-    async def test_events_get_all(
-        self,
-        protect_client: UniFiProtectClient,
-        mock_aioresponse: aioresponses,
-    ) -> None:
-        """Test listing events."""
-        mock_aioresponse.get(
-            "https://192.168.1.1/proxy/protect/integration/v1/events?limit=100",
-            payload={"data": [{"id": "ev-1", "type": "motion", "start": 1234567890000}]},
-        )
-
-        events = await protect_client.events.get_all()
-        assert len(events) == 1
-
-    async def test_events_get(
-        self,
-        protect_client: UniFiProtectClient,
-        mock_aioresponse: aioresponses,
-    ) -> None:
-        """Test getting an event."""
-        mock_aioresponse.get(
-            "https://192.168.1.1/proxy/protect/integration/v1/events/ev-1",
-            payload={"data": {"id": "ev-1", "type": "motion", "start": 1234567890000}},
-        )
-
-        event = await protect_client.events.get("ev-1")
-        assert event.id == "ev-1"
-
-    async def test_events_get_thumbnail(
-        self,
-        protect_client: UniFiProtectClient,
-        mock_aioresponse: aioresponses,
-    ) -> None:
-        """Test getting event thumbnail."""
-        mock_aioresponse.get(
-            "https://192.168.1.1/proxy/protect/integration/v1/events/ev-1/thumbnail",
-            body=b"fake_thumb_data",
-        )
-
-        thumbnail = await protect_client.events.get_thumbnail("ev-1")
-        assert thumbnail == b"fake_thumb_data"
-
-    async def test_events_get_heatmap(
-        self,
-        protect_client: UniFiProtectClient,
-        mock_aioresponse: aioresponses,
-    ) -> None:
-        """Test getting event heatmap."""
-        mock_aioresponse.get(
-            "https://192.168.1.1/proxy/protect/integration/v1/events/ev-1/heatmap",
-            body=b"fake_heatmap_data",
-        )
-
-        heatmap = await protect_client.events.get_heatmap("ev-1")
-        assert heatmap == b"fake_heatmap_data"
-
-    async def test_events_list_motion_events(
-        self,
-        protect_client: UniFiProtectClient,
-        mock_aioresponse: aioresponses,
-    ) -> None:
-        """Test listing motion events."""
-        mock_aioresponse.get(
-            "https://192.168.1.1/proxy/protect/integration/v1/events?limit=100&types=motion",
-            payload={"data": [{"id": "ev-1", "type": "motion", "start": 1234567890000}]},
-        )
-
-        events = await protect_client.events.list_motion_events()
-        assert len(events) == 1
-
-    async def test_events_list_smart_detect_events(
-        self,
-        protect_client: UniFiProtectClient,
-        mock_aioresponse: aioresponses,
-    ) -> None:
-        """Test listing smart detect events."""
-        mock_aioresponse.get(
-            "https://192.168.1.1/proxy/protect/integration/v1/events?limit=100&types=smartDetect",
-            payload={"data": [{"id": "ev-1", "type": "smartDetect", "start": 1234567890000}]},
-        )
-
-        events = await protect_client.events.list_smart_detect_events()
-        assert len(events) == 1
 
 
 class TestProtectClientBinary:

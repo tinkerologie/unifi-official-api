@@ -98,38 +98,6 @@ async def test_arm_profiles_update_settings_non_dict_response() -> None:
 
 
 @pytest.mark.asyncio
-async def test_cameras_ptz_move_none_branches() -> None:
-    """Test cameras.ptz_move when pan and tilt are None (branches 268->270 and 270->272)."""
-    client = UniFiProtectClient(
-        auth=ApiKeyAuth(api_key="test-key"),
-        base_url="https://192.168.1.1",
-        connection_type=ConnectionType.LOCAL,
-    )
-    client._post = AsyncMock(return_value={})
-
-    result = await client.cameras.ptz_move(camera_id="cam-1", pan=None, tilt=None, zoom=0.8)
-    assert result is True
-    client._post.assert_awaited_once_with(
-        "/proxy/protect/integration/v1/cameras/cam-1/ptz/move",
-        json_data={"zoom": 0.8},
-    )
-
-
-@pytest.mark.asyncio
-async def test_nvr_endpoint_update_non_dict_result() -> None:
-    """Test nvr.update when response['data'] is not a dict (branch 69->71)."""
-    client = UniFiProtectClient(
-        auth=ApiKeyAuth(api_key="test-key"),
-        base_url="https://192.168.1.1",
-        connection_type=ConnectionType.LOCAL,
-    )
-    client._patch = AsyncMock(return_value={"data": "not_a_dict"})
-
-    with pytest.raises(ValueError, match="Failed to update NVR"):
-        await client.nvr.update(name="New NVR Name")
-
-
-@pytest.mark.asyncio
 async def test_hosts_endpoint_get_non_dict_response() -> None:
     """Test hosts.get when response is not a dict (branch 35->39)."""
     client = UniFiSiteManagerClient(

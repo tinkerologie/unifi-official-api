@@ -77,7 +77,7 @@ class TestUniFiProtectClient:
             assert client.chimes is not None
             assert client.nvr is not None
             assert client.liveviews is not None
-            assert client.events is not None
+            assert not hasattr(client, "events")
 
     async def test_build_api_path_local(self, local_auth: LocalAuth, base_url: str) -> None:
         """Test build_api_path for LOCAL connection."""

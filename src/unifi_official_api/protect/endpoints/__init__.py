@@ -10,7 +10,6 @@ from .arm_profiles import ArmProfilesEndpoint
 from .bridges import BridgesEndpoint
 from .cameras import CamerasEndpoint
 from .chimes import ChimesEndpoint
-from .events import EventsEndpoint
 from .fobs import FobsEndpoint
 from .lights import LightsEndpoint
 from .link_stations import LinkStationsEndpoint
@@ -33,7 +32,6 @@ __all__ = [
     "BridgesEndpoint",
     "CamerasEndpoint",
     "ChimesEndpoint",
-    "EventsEndpoint",
     "FobsEndpoint",
     "LightsEndpoint",
     "LinkStationsEndpoint",

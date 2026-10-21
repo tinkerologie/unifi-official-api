@@ -133,19 +133,3 @@ class LiveViewsEndpoint:
             if isinstance(result, dict):
                 return LiveView.model_validate(result)
         raise ValueError("Failed to update live view")
-
-    async def delete(self, liveview_id: str, site_id: str | None = None) -> bool:
-        """
-        Delete a live view.
-
-        Args:
-            liveview_id: The live view ID.
-            site_id: The site ID (required for REMOTE connections, ignored for LOCAL).
-
-        Returns:
-            True if successful.
-
-        """
-        path = self._client.build_api_path(f"/liveviews/{liveview_id}", site_id)
-        await self._client._delete(path)
-        return True

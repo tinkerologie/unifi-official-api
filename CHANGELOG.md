@@ -7,10 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Removed
+### Added
 
-- **Breaking:** `TalkbackStream` no longer takes the unused third positional argument; everything after `media_source` is keyword-only, so `TalkbackStream(session, url, hass)` raises `TypeError` (#47). Migration: `TalkbackStream(session, url, loop=hass.loop)` or `TalkbackStream(session, url, executor=hass.async_add_executor_job)`.
-- **Breaking:** the `TalkbackStream.media_url` compatibility alias is removed (#47). Migration: read `media_source`.
+- A test vendors the Protect 7.3.70 OpenAPI spec and fails when any public Protect method sends an operation the spec does not document, or when a `build_api_path` call site is not exercised (#44).
 
 ### Changed
 
@@ -20,6 +19,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Every public function and method can be introspected again: `inspect.signature()`, `unittest.mock.create_autospec` and `patch(..., autospec=True)` raised `NameError` for annotations naming a type imported only under `TYPE_CHECKING` (such as the endpoints' client parameter), because modules no longer kept their annotations as strings. All modules use `from __future__ import annotations` again, ruff requires it, and `tests/test_introspection.py` checks every public signature. `CamerasEndpoint` already had this problem in 2.0.0.
+
+### Removed
+
+- **Breaking:** `TalkbackStream` no longer takes the unused third positional argument; everything after `media_source` is keyword-only, so `TalkbackStream(session, url, hass)` raises `TypeError` (#47). Migration: `TalkbackStream(session, url, loop=hass.loop)` or `TalkbackStream(session, url, executor=hass.async_add_executor_job)`.
+- **Breaking:** the `TalkbackStream.media_url` compatibility alias is removed (#47). Migration: read `media_source`.
+- **Breaking:** Protect methods that called operations missing from the pinned Protect 7.3.70 OpenAPI spec are removed; a console answered them with 404 (#44):
+  - `CamerasEndpoint.restart()` (`POST /cameras/{id}/restart`). The official API cannot restart a camera; drop the call.
+  - `CamerasEndpoint.ptz_move()` (`POST /cameras/{id}/ptz/move`). Use `ptz_goto_preset()`, `ptz_patrol_start()` or `ptz_patrol_stop()`.
+  - `NVREndpoint.update()` and `NVREndpoint.set_recording_retention()` (`PATCH /nvr`). The spec only reads the NVR; keep using `nvr.get()`.
+  - `NVREndpoint.restart()` (`POST /nvr/restart`). Drop the call.
+  - `LiveViewsEndpoint.delete()` (`DELETE /liveviews/{id}`). The spec has no live view delete; drop the call.
+  - `UniFiProtectClient.get_sites()` (`GET /sites`). Protect paths are not site-scoped; pass `"default"` as the WebSocket `site_id` for local consoles.
+  - `UniFiProtectClient.events` and `EventsEndpoint` with all its methods (`get_all`, `get`, `get_thumbnail`, `get_heatmap`, `list_motion_events`, `list_smart_detect_events`; `/events/...`). Use `client.websocket.subscribe_events()`, which reads `GET /v1/subscribe/events`. The `Event`, `EventType` and `SmartDetectType` models stay.
 
 ## [2.0.0] - 2026-10-18
 
