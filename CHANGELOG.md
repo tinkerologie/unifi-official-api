@@ -33,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Every public function and method can be introspected again: `inspect.signature()`, `unittest.mock.create_autospec` and `patch(..., autospec=True)` raised `NameError` for annotations naming a type imported only under `TYPE_CHECKING` (such as the endpoints' client parameter), because modules no longer kept their annotations as strings. All modules use `from __future__ import annotations` again, ruff requires it, and `tests/test_introspection.py` checks every public signature. `CamerasEndpoint` already had this problem in 2.0.0.
 
+### Security
+
+- `uv.lock` moves certifi to 2026.10.19, which drops the emSign root CAs whose intermediate CA keys were compromised (GHSA for certifi < 2026.10.19, Dependabot alert #36). The lock is regenerated against the package's own `requires-python = ">=3.14"` (it still said `>=3.11`), so it now includes the `talkback` extra's `av` and no longer carries `tomli` or the markers for older Pythons.
+
 ## [2.0.0] - 2026-10-18
 
 ### Added
