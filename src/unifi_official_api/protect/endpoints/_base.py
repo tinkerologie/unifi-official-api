@@ -7,6 +7,9 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
+from ...exceptions import UniFiNotFoundError, UniFiResponseError
+from ...validation import sanitized_validation_fields
+
 if TYPE_CHECKING:
     from ..client import UniFiProtectClient
 
@@ -99,33 +102,38 @@ class ProtectDeviceEndpoint(Generic[_ModelT]):
             The parsed model.
 
         Raises:
-            ValueError: If the resource is not found.
+            UniFiNotFoundError: If the response holds no resource with an ``id``.
+            UniFiResponseError: If the resource in the response fails validation.
 
         """
         path = self._client.build_api_path(f"/{self._resource}/{resource_id}", site_id)
-        response = await self._client._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict) and data.get("id"):
-                return self._model.model_validate(data)
-            if (
-                isinstance(data, list)
-                and len(data) > 0
-                and isinstance(data[0], dict)
-                and data[0].get("id")
-            ):
-                return self._model.model_validate(data[0])
-        raise ValueError(f"{self._resource} {resource_id} not found")
+        record = _resource_record(await self._client._get(path))
+        if record is None:
+            raise UniFiNotFoundError(f"{self._resource} {resource_id} not found", status_code=200)
+        try:
+            return self._model.model_validate(record)
+        except ValidationError as err:
+            fields = sanitized_validation_fields(err)
+        # Raised outside the except block: the ValidationError quotes the
+        # rejected input, so it is neither chained nor kept as context.
+        msg = f"{self._resource} {resource_id} response failed validation ({fields})"
+        raise UniFiResponseError(msg, status_code=200)
 
     async def update(
         self,
         resource_id: str,
-        site_id: str | dict[str, Any] | None = None,
+        site_id: str | None = None,
         **kwargs: Any,
     ) -> _ModelT:
         """
         Update a resource via ``PATCH``.
+
+        A console may acknowledge a successful ``PATCH`` with a body that
+        holds no resource with an ``id``, or one that fails validation. The
+        write has still been applied, so instead of failing, the resource is
+        re-fetched with :meth:`get` and returned. A body that holds a valid
+        resource is returned as is, even when the console left out optional
+        fields.
 
         Args:
             resource_id: The resource ID.
@@ -133,24 +141,41 @@ class ProtectDeviceEndpoint(Generic[_ModelT]):
             **kwargs: Settings to update.
 
         Returns:
-            The updated model.
+            The updated model: from the ``PATCH`` response when it holds a
+            valid resource with an ``id``, otherwise from a follow-up ``get()``.
 
         Raises:
-            ValueError: If the update fails.
+            TypeError: If ``site_id`` is neither a string nor ``None``.
+            UniFiNotFoundError: If the follow-up ``get()`` finds no resource.
+            UniFiResponseError: If the follow-up ``get()`` response fails validation.
 
         """
-        if isinstance(site_id, dict):
-            payload = {**site_id, **kwargs}
-            resolved_site_id: str | None = None
-        else:
-            payload = kwargs
-            resolved_site_id = site_id
+        if site_id is not None and not isinstance(site_id, str):
+            msg = (
+                f"site_id must be a str or None, not {type(site_id).__name__}; "
+                "pass settings as keyword arguments"
+            )
+            raise TypeError(msg)
+        path = self._client.build_api_path(f"/{self._resource}/{resource_id}", site_id)
+        record = _resource_record(await self._client._patch(path, json_data=kwargs))
+        if record is not None:
+            try:
+                return self._model.model_validate(record)
+            except ValidationError:
+                pass
+        return await self.get(resource_id, site_id)
 
-        path = self._client.build_api_path(f"/{self._resource}/{resource_id}", resolved_site_id)
-        response = await self._client._patch(path, json_data=payload)
 
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict) and result.get("id"):
-                return self._model.model_validate(result)
-        raise ValueError(f"Failed to update {self._resource}")
+def _resource_record(response: Any) -> dict[str, Any] | None:
+    """Return the single resource in a response, or None when it holds none with an ``id``."""
+    if isinstance(response, list):
+        data: Any = response
+    elif isinstance(response, dict):
+        data = response.get("data", response)
+    else:
+        return None
+    if isinstance(data, list) and data:
+        data = data[0]
+    if isinstance(data, dict) and data.get("id"):
+        return data
+    return None

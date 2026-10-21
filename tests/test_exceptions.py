@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from unifi_official_api import (
     UniFiAuthenticationError,
     UniFiConnectionError,
@@ -98,6 +100,23 @@ class TestUniFiNotFoundError:
         assert str(error) == "UniFiNotFoundError(status=404)"
         assert error.status_code == 404
         assert isinstance(error, UniFiResponseError)
+
+    def test_supported_keywords_are_stored(self) -> None:
+        """status_code, response_body and api_error_code are accepted and kept."""
+        error = UniFiNotFoundError(
+            "Gone", status_code=410, response_body="{}", api_error_code="CODE_GONE"
+        )
+        assert (error.status_code, error.response_body, error.api_error_code) == (
+            410,
+            "{}",
+            "CODE_GONE",
+        )
+
+    @pytest.mark.parametrize("keyword", ["bogus", "respones_body"])
+    def test_unknown_keyword_raises_type_error(self, keyword: str) -> None:
+        """A misspelled or unknown keyword is rejected instead of silently dropped."""
+        with pytest.raises(TypeError, match=keyword):
+            UniFiNotFoundError(**{keyword: 1})  # type: ignore[arg-type]
 
 
 class TestUniFiGlobalAlarmManagerError:
