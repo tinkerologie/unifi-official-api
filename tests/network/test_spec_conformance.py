@@ -396,6 +396,24 @@ async def test_multi_request_methods_send_their_write() -> None:
         Operation("get", "/proxy/network/api/s/default/rest/networkconf", legacy=True),
         Operation("put", "/proxy/network/api/s/default/rest/networkconf/id-client-id", legacy=True),
     ]
+    assert sent["nat_rules.update_nat_rule"] == [
+        Operation("get", "/proxy/network/v2/api/site/default/nat", legacy=True),
+        Operation("put", "/proxy/network/v2/api/site/default/nat/id-rule-id", legacy=True),
+    ]
+    assert sent["port_forwards.update_port_forward"] == [
+        Operation("get", "/proxy/network/api/s/default/rest/portforward", legacy=True),
+        Operation("put", "/proxy/network/api/s/default/rest/portforward/id-rule-id", legacy=True),
+    ]
+    assert sent["routes.update_route"] == [
+        Operation("get", "/proxy/network/v2/api/site/default/trafficroutes", legacy=True),
+        Operation(
+            "put", "/proxy/network/v2/api/site/default/trafficroutes/id-route-id", legacy=True
+        ),
+    ]
+    assert sent["static_routes.update_static_route"] == [
+        Operation("get", "/proxy/network/api/s/default/rest/routing", legacy=True),
+        Operation("put", "/proxy/network/api/s/default/rest/routing/id-rule-id", legacy=True),
+    ]
 
 
 def test_call_site_check_counts_each_call_in_a_function(tmp_path: Path) -> None:

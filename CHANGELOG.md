@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A test vendors the Protect 7.3.70 OpenAPI spec and fails when any public Protect method sends an operation the spec does not document, or when a `build_api_path` call site is not exercised (#44).
 - `CamerasEndpoint.get_snapshot()` takes a `channel` argument (`"main"` or `"package"`) and sends it as the spec's `channel` query parameter, so the package camera of a doorbell with `hasPackageCamera` can be captured (#45).
+- A test vendors the Network 10.6.106 OpenAPI spec and fails when any public Network method sends an Integration API operation the spec does not document, when a method outside an explicit list calls the legacy controller API (`/api`, `/v2/api`), or when a path-builder call site is not exercised. Every current Integration API call is in the spec, so no Network method is removed.
 
 ### Changed
 
