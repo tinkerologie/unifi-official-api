@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, get_args
 
 from pydantic import ValidationError
 
@@ -14,6 +14,9 @@ if TYPE_CHECKING:
     from ..client import UniFiProtectClient
 
 _LOGGER = logging.getLogger(__name__)
+
+SnapshotChannel = Literal["main", "package"]
+_SNAPSHOT_CHANNELS: frozenset[str] = frozenset(get_args(SnapshotChannel))
 
 
 class CamerasEndpoint:
@@ -152,33 +155,34 @@ class CamerasEndpoint:
         site_id: str | None = None,
         *,
         high_quality: bool = False,
-        width: int | None = None,
-        height: int | None = None,
+        channel: SnapshotChannel | None = None,
     ) -> bytes:
         """
         Get a snapshot from the camera.
 
-        The Protect Integration API snapshot endpoint does not accept width or
-        height query parameters (sending them returns HTTP 500). It optionally
-        accepts ``highQuality`` for cameras that support a full-HD snapshot.
-
         Args:
             camera_id: The camera ID.
             site_id: The site ID (required for REMOTE connections, ignored for LOCAL).
-            high_quality: Request a full-HD snapshot (only supported on some
-                cameras; ignored by the API when unsupported).
-            width: Optional width for compatibility.
-            height: Optional height for compatibility.
+            high_quality: Request a 1080p or higher snapshot (only supported on
+                some cameras; ignored by the API when unsupported).
+            channel: Camera channel to capture, ``"main"`` or ``"package"``.
+                Use ``"package"`` for cameras with a package camera
+                (``hasPackageCamera``). Not sent when None.
 
         Returns:
             The raw snapshot image bytes.
 
+        Raises:
+            ValueError: If the channel is not ``"main"`` or ``"package"``.
+
         """
-        # width/height are accepted for compatibility only; the API rejects them.
-        del width, height
+        if channel is not None and channel not in _SNAPSHOT_CHANNELS:
+            raise ValueError("Snapshot channel must be 'main' or 'package'")
         params: dict[str, Any] = {}
         if high_quality:
             params["highQuality"] = "true"
+        if channel is not None:
+            params["channel"] = channel
 
         path = self._client.build_api_path(f"/cameras/{camera_id}/snapshot", site_id)
         return await self._client._get_binary(path, params=params or None)

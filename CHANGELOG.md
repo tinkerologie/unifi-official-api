@@ -10,11 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - A test vendors the Protect 7.3.70 OpenAPI spec and fails when any public Protect method sends an operation the spec does not document, or when a `build_api_path` call site is not exercised (#44).
+- `CamerasEndpoint.get_snapshot()` takes a `channel` argument (`"main"` or `"package"`) and sends it as the spec's `channel` query parameter, so the package camera of a doorbell with `hasPackageCamera` can be captured (#45).
 
 ### Changed
 
 - `TalkbackStream` documents its `loop` and `executor` keywords: the worker runs in a dedicated daemon thread unless `executor` (an awaitable-returning callable such as `hass.async_add_executor_job`) is given (#47).
 - `pre-commit run --all-files` passes again on Python 3.14: every hook is updated to its current release, mypy checks the whole package like CI, pyupgrade targets 3.13 so it keeps `from __future__ import annotations`, and `tests/fixtures/` is no longer checked as test modules.
+- **Breaking:** `CamerasEndpoint.get_snapshot()` no longer accepts `width` and `height`; it ignored them, because the Protect API cannot resize snapshots. Remove the arguments and resize the returned image yourself if needed (#45).
 
 ### Removed
 
