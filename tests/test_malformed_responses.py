@@ -434,3 +434,14 @@ async def test_get_route_missing_from_direct_read_and_listing_is_not_found() -> 
     with pytest.raises(UniFiNotFoundError) as exc_info:
         await client.routes.get_route("default", "r-1")
     assert exc_info.value.status_code == 200
+
+
+async def test_get_route_matches_the_id_the_model_parses() -> None:
+    """A record whose ``_id`` differs from its ``id`` is matched by ``_id``, like the model."""
+    client = _network()
+    mismatched = {"id": "r-1", "_id": "r-2", "description": "Other"}
+    wanted = {"_id": "r-1", "description": "Wanted"}
+    client._get = AsyncMock(side_effect=[{"data": mismatched}, {"data": [mismatched, wanted]}])
+    route = await client.routes.get_route("default", "r-1")
+    assert route.id == "r-1"
+    assert route.description == "Wanted"

@@ -188,7 +188,7 @@ class RoutesEndpoint:
     @staticmethod
     def _match_route(items: list[dict[str, Any]], route_id: str) -> dict[str, Any] | None:
         """Return the route record with this ID, or None (an empty or other record is no match)."""
-        return next((i for i in items if (i.get("id") or i.get("_id")) == route_id), None)
+        return next((i for i in items if (i.get("_id") or i.get("id")) == route_id), None)
 
     async def update_route(
         self,
