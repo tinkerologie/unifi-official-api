@@ -19,8 +19,8 @@ from unifi_official_api.const import (
 
 def test_api_version_drives_user_agent() -> None:
     """Test the public version in _version.py remains the user-agent source."""
-    assert version_from_module == "2.0.0"
-    assert __version__ == "2.0.0"
+    assert version_from_module == "3.0.0"
+    assert __version__ == "3.0.0"
     assert f"unifi-official-api/{__version__}" == USER_AGENT
 
 
