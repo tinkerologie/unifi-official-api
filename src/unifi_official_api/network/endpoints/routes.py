@@ -167,8 +167,9 @@ class RoutesEndpoint:
             site_name, f"{ENDPOINT_TRAFFIC_ROUTES}/{route_id}"
         )
         response = await self._client._get(path)
-        items: list[dict[str, Any]] = self._extract_routes_list(response)
-        record = items[0] if items else await self._find_route_record(site_name, route_id)
+        record = self._match_route(self._extract_routes_list(response), route_id)
+        if record is None:
+            record = await self._find_route_record(site_name, route_id)
         if record is None:
             msg = f"Policy-Based Route {route_id} not found"
             raise UniFiNotFoundError(msg, status_code=200)
@@ -182,10 +183,12 @@ class RoutesEndpoint:
         that fails validation: that route exists and must not read as missing.
         """
         path = self._client.build_legacy_v2_api_path(site_name, ENDPOINT_TRAFFIC_ROUTES)
-        for item in self._extract_routes_list(await self._client._get(path)):
-            if (item.get("id") or item.get("_id")) == route_id:
-                return item
-        return None
+        return self._match_route(self._extract_routes_list(await self._client._get(path)), route_id)
+
+    @staticmethod
+    def _match_route(items: list[dict[str, Any]], route_id: str) -> dict[str, Any] | None:
+        """Return the route record with this ID, or None (an empty or other record is no match)."""
+        return next((i for i in items if (i.get("id") or i.get("_id")) == route_id), None)
 
     async def update_route(
         self,

@@ -407,3 +407,30 @@ async def test_rule_toggle_missing_rule_is_not_found_with_status_200(name: str) 
     assert type(exc_info.value) is UniFiNotFoundError
     assert exc_info.value.status_code == 200
     client._put.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "direct",
+    [{}, {"data": {}}, {"data": {"_id": "other-route", "description": "Other"}}],
+    ids=["empty", "empty-data", "other-route"],
+)
+async def test_get_route_only_takes_the_requested_route_from_the_direct_read(
+    direct: dict[str, Any],
+) -> None:
+    """A direct answer without this route falls back to the listing instead of parsing it."""
+    client = _network()
+    wanted = {"_id": "r-1", "description": "Wanted"}
+    client._get = AsyncMock(side_effect=[direct, {"data": [{"_id": "x"}, wanted]}])
+    route = await client.routes.get_route("default", "r-1")
+    assert route.id == "r-1"
+    assert route.description == "Wanted"
+    assert client._get.await_count == 2
+
+
+async def test_get_route_missing_from_direct_read_and_listing_is_not_found() -> None:
+    """A route in neither the direct answer nor the listing is not found (200)."""
+    client = _network()
+    client._get = AsyncMock(side_effect=[{"data": {"_id": "other"}}, {"data": [{"_id": "x"}]}])
+    with pytest.raises(UniFiNotFoundError) as exc_info:
+        await client.routes.get_route("default", "r-1")
+    assert exc_info.value.status_code == 200
