@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
+from ...validation import require_record
 from ..models.ulp_user import UlpUser
 
 if TYPE_CHECKING:
@@ -75,21 +76,17 @@ class UlpUsersEndpoint:
             The UniFi Identity user.
 
         Raises:
-            ValueError: If the ULP user is not found.
+            ValueError: If ``user_id`` is empty; no request is made.
+            UniFiNotFoundError: If the response holds no ULP user with an ``id``.
+            UniFiResponseError: If the ULP user in the response fails validation.
+
         """
         if not isinstance(user_id, str) or not user_id.strip():
             msg = "ULP user ID must be a non-empty string"
             raise ValueError(msg)
 
         path = self._client.build_api_path(f"/ulp-users/{user_id}", site_id)
-        response = await self._client._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return UlpUser.model_validate(data)
-        msg = f"ULP user {user_id} not found"
-        raise ValueError(msg)
+        return require_record(await self._client._get(path), UlpUser, f"ULP user {user_id}")
 
 
 __all__ = ["UlpUsersEndpoint"]

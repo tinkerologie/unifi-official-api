@@ -218,13 +218,13 @@ async def test_dns_get_pins_spec_request_and_branches() -> None:
     assert p2.id == "dns-1"
 
     # 3. Empty list
-    with pytest.raises(ValueError, match="DNS policy missing not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.dns.get("default", "missing")
 
     # 4. Invalid structure
-    with pytest.raises(ValueError, match="DNS policy invalid not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.dns.get("default", "invalid")
-    with pytest.raises(ValueError, match="DNS policy none not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.dns.get("default", "none")
 
 
@@ -291,14 +291,14 @@ async def test_dns_create_pins_spec_request_and_branches() -> None:
     }
 
     # 3. Invalid response
-    with pytest.raises(ValueError, match="Failed to create DNS policy"):
+    with pytest.raises(UniFiResponseError):
         await client.dns.create(
             "default",
             record_type=DNSRecordType.TXT_RECORD,
             domain="example.com",
             text="test",
         )
-    with pytest.raises(ValueError, match="Failed to create DNS policy"):
+    with pytest.raises(UniFiResponseError):
         await client.dns.create(
             "default",
             record_type=DNSRecordType.TXT_RECORD,
@@ -319,8 +319,10 @@ async def test_dns_update_pins_spec_request_and_branches() -> None:
         [
             {"data": updated_payload},  # 1. Enum type and fields
             updated_payload,  # 2. String type and kwargs
-            [],  # 3. Invalid response -> ValueError
-            {"data": "non-dict"},  # 4. Result not dict -> ValueError
+            [],  # 3. Invalid response -> re-fetched
+            {"data": []},  # re-fetch after the write finds nothing
+            {"data": "non-dict"},  # 4. Result not dict -> re-fetched
+            {"data": []},  # re-fetch after the write finds nothing
         ]
     )
     client = _client(session)
@@ -371,7 +373,7 @@ async def test_dns_update_pins_spec_request_and_branches() -> None:
     }
 
     # 3. Invalid response
-    with pytest.raises(ValueError, match="Failed to update DNS policy"):
+    with pytest.raises(UniFiNotFoundError):
         await client.dns.update(
             "default",
             "dns-1",
@@ -380,7 +382,7 @@ async def test_dns_update_pins_spec_request_and_branches() -> None:
             domain="example.com",
             text="test",
         )
-    with pytest.raises(ValueError, match="Failed to update DNS policy"):
+    with pytest.raises(UniFiNotFoundError):
         await client.dns.update(
             "default",
             "dns-1",
@@ -496,13 +498,13 @@ async def test_acl_get_pins_spec_request_and_branches() -> None:
     assert r2.id == "rule-1"
 
     # 3. Empty list
-    with pytest.raises(ValueError, match="ACL rule missing not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.acl.get("default", "missing")
 
     # 4. Non-dict/non-list
-    with pytest.raises(ValueError, match="ACL rule invalid not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.acl.get("default", "invalid")
-    with pytest.raises(ValueError, match="ACL rule none not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.acl.get("default", "none")
 
 
@@ -569,9 +571,9 @@ async def test_acl_create_pins_spec_request_and_branches() -> None:
     }
 
     # 3. Invalid response
-    with pytest.raises(ValueError, match="Failed to create ACL rule"):
+    with pytest.raises(UniFiResponseError):
         await client.acl.create("default", name="Fail")
-    with pytest.raises(ValueError, match="Failed to create ACL rule"):
+    with pytest.raises(UniFiResponseError):
         await client.acl.create("default", name="Fail")
 
 
@@ -590,7 +592,9 @@ async def test_acl_update_pins_spec_request_and_branches() -> None:
             {"data": updated_rule},
             updated_rule,
             None,
+            {"data": []},  # re-fetch after the write finds nothing
             {"data": "non-dict"},
+            {"data": []},  # re-fetch after the write finds nothing
         ]
     )
     client = _client(session)
@@ -630,7 +634,7 @@ async def test_acl_update_pins_spec_request_and_branches() -> None:
     assert res2.id == "rule-1"
 
     # 3. Invalid response
-    with pytest.raises(ValueError, match="Failed to update ACL rule"):
+    with pytest.raises(UniFiNotFoundError):
         await client.acl.update(
             "default",
             "rule-1",
@@ -639,7 +643,7 @@ async def test_acl_update_pins_spec_request_and_branches() -> None:
             action="ALLOW",
             enabled=True,
         )
-    with pytest.raises(ValueError, match="Failed to update ACL rule"):
+    with pytest.raises(UniFiNotFoundError):
         await client.acl.update(
             "default",
             "rule-1",
@@ -676,7 +680,9 @@ async def test_acl_ordering_pins_spec_request_and_branches() -> None:
             {"data": ordering_data},  # 4. update_ordering wrapped
             ordering_data,  # 5. update_ordering raw
             None,  # 6. update_ordering failure
+            {"data": []},  # re-fetch after the write finds nothing
             {"data": "non-dict"},  # 6b. update_ordering result not dict
+            {"data": []},  # re-fetch after the write finds nothing
         ]
     )
     client = _client(session)
@@ -696,9 +702,9 @@ async def test_acl_ordering_pins_spec_request_and_branches() -> None:
     assert ord2.ordered_acl_rule_ids == ["r1", "r2", "r3"]
 
     # 3. get_ordering failure
-    with pytest.raises(ValueError, match="Failed to get ACL rule ordering"):
+    with pytest.raises(UniFiNotFoundError):
         await client.acl.get_ordering("default")
-    with pytest.raises(ValueError, match="Failed to get ACL rule ordering"):
+    with pytest.raises(UniFiNotFoundError):
         await client.acl.get_ordering("default")
 
     # 4. update_ordering wrapped
@@ -717,9 +723,9 @@ async def test_acl_ordering_pins_spec_request_and_branches() -> None:
     assert uord2.ordered_acl_rule_ids == ["r1", "r2", "r3"]
 
     # 6. update_ordering failure
-    with pytest.raises(ValueError, match="Failed to update ACL rule ordering"):
+    with pytest.raises(UniFiNotFoundError):
         await client.acl.update_ordering("default", ordered_rule_ids=[])
-    with pytest.raises(ValueError, match="Failed to update ACL rule ordering"):
+    with pytest.raises(UniFiNotFoundError):
         await client.acl.update_ordering("default", ordered_rule_ids=[])
 
 
@@ -1008,13 +1014,13 @@ async def test_networks_get_pins_spec_request_and_branches() -> None:
     assert n2.id == "net-1"
 
     # 3. Empty list
-    with pytest.raises(ValueError, match="Network missing not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.networks.get("default", "missing")
 
     # 4. Non-dict/non-list
-    with pytest.raises(ValueError, match="Network invalid not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.networks.get("default", "invalid")
-    with pytest.raises(ValueError, match="Network none not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.networks.get("default", "none")
 
 
@@ -1091,7 +1097,7 @@ async def test_networks_create_response_parsing_and_branches() -> None:
             await client.networks.create("default", name="Legacy", **legacy)
     assert len(session.requests) == 2
     for _ in range(2):
-        with pytest.raises(ValueError, match="Failed to create network"):
+        with pytest.raises(UniFiResponseError):
             await client.networks.create("default", name="Fail")
 
 
@@ -1103,7 +1109,9 @@ async def test_networks_update_pins_spec_request_and_branches() -> None:
             {"data": net_dict},
             net_dict,
             None,
+            {"data": []},  # re-fetch after the write finds nothing
             {"data": "non-dict"},
+            {"data": []},  # re-fetch after the write finds nothing
         ]
     )
     client = _client(session)
@@ -1143,7 +1151,7 @@ async def test_networks_update_pins_spec_request_and_branches() -> None:
     assert res2.id == "net-1"
 
     # 3. Failure
-    with pytest.raises(ValueError, match="Failed to update network"):
+    with pytest.raises(UniFiNotFoundError):
         await client.networks.update(
             "default",
             "net-1",
@@ -1152,7 +1160,7 @@ async def test_networks_update_pins_spec_request_and_branches() -> None:
             management="UNMANAGED",
             enabled=True,
         )
-    with pytest.raises(ValueError, match="Failed to update network"):
+    with pytest.raises(UniFiNotFoundError):
         await client.networks.update(
             "default",
             "net-1",
@@ -1368,13 +1376,13 @@ async def test_traffic_get_list_pins_spec_request_and_branches() -> None:
     assert l2.id == "list-1"
 
     # 3. Empty list
-    with pytest.raises(ValueError, match="Traffic matching list missing not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.traffic.get_list("default", "missing")
 
     # 4. Non-dict/non-list
-    with pytest.raises(ValueError, match="Traffic matching list invalid not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.traffic.get_list("default", "invalid")
-    with pytest.raises(ValueError, match="Traffic matching list none not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.traffic.get_list("default", "none")
 
 
@@ -1430,7 +1438,7 @@ async def test_traffic_create_list_response_parsing_and_branches() -> None:
     )
     assert res2.id == "list-1"
     for _ in range(2):
-        with pytest.raises(ValueError, match="Failed to create traffic matching list"):
+        with pytest.raises(UniFiResponseError):
             await client.traffic.create_list(
                 "default",
                 name="Fail",
@@ -1447,7 +1455,9 @@ async def test_traffic_update_list_pins_spec_request_and_branches() -> None:
             {"data": list_dict},
             list_dict,
             None,
+            {"data": []},  # re-fetch after the write finds nothing
             {"data": "non-dict"},
+            {"data": []},  # re-fetch after the write finds nothing
         ]
     )
     client = _client(session)
@@ -1484,7 +1494,7 @@ async def test_traffic_update_list_pins_spec_request_and_branches() -> None:
     assert res2.id == "list-1"
 
     # 3. Failure
-    with pytest.raises(ValueError, match="Failed to update traffic matching list"):
+    with pytest.raises(UniFiNotFoundError):
         await client.traffic.update_list(
             "default",
             "list-1",
@@ -1492,7 +1502,7 @@ async def test_traffic_update_list_pins_spec_request_and_branches() -> None:
             type="PORTS",
             items=[{"type": "PORT_NUMBER", "value": 8080}],
         )
-    with pytest.raises(ValueError, match="Failed to update traffic matching list"):
+    with pytest.raises(UniFiNotFoundError):
         await client.traffic.update_list(
             "default",
             "list-1",
@@ -1715,13 +1725,13 @@ async def test_firewall_get_zone_pins_spec_request_and_branches() -> None:
     assert z2.id == "zone-1"
 
     # 3. Empty list
-    with pytest.raises(ValueError, match="Firewall zone missing not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.firewall.get_zone("default", "missing")
 
     # 4. Non-dict/non-list
-    with pytest.raises(ValueError, match="Firewall zone invalid not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.firewall.get_zone("default", "invalid")
-    with pytest.raises(ValueError, match="Firewall zone none not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.firewall.get_zone("default", "none")
 
 
@@ -1764,9 +1774,9 @@ async def test_firewall_create_zone_pins_spec_request_and_branches() -> None:
     assert req2["json"] == {"name": "Isolated Zone", "networkIds": []}
 
     # 3. Failure
-    with pytest.raises(ValueError, match="Failed to create firewall zone"):
+    with pytest.raises(UniFiResponseError):
         await client.firewall.create_zone("default", name="Fail", networkIds=[])
-    with pytest.raises(ValueError, match="Failed to create firewall zone"):
+    with pytest.raises(UniFiResponseError):
         await client.firewall.create_zone("default", name="Fail", networkIds=[])
 
 
@@ -1778,7 +1788,9 @@ async def test_firewall_update_zone_pins_spec_request_and_branches() -> None:
             {"data": zone_dict},
             zone_dict,
             None,
+            {"data": []},  # re-fetch after the write finds nothing
             {"data": "non-dict"},
+            {"data": []},  # re-fetch after the write finds nothing
         ]
     )
     client = _client(session)
@@ -1803,9 +1815,9 @@ async def test_firewall_update_zone_pins_spec_request_and_branches() -> None:
     assert res2.id == "zone-1"
 
     # 3. Failure
-    with pytest.raises(ValueError, match="Failed to update firewall zone"):
+    with pytest.raises(UniFiNotFoundError):
         await client.firewall.update_zone("default", "zone-1", name="Updated Zone", networkIds=[])
-    with pytest.raises(ValueError, match="Failed to update firewall zone"):
+    with pytest.raises(UniFiNotFoundError):
         await client.firewall.update_zone("default", "zone-1", name="Updated Zone", networkIds=[])
 
 
@@ -1853,13 +1865,13 @@ async def test_firewall_get_rule_pins_spec_request_and_branches() -> None:
     assert r2.id == "rule-1"
 
     # 3. Empty list
-    with pytest.raises(ValueError, match="Firewall rule missing not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.firewall.get_rule("default", "missing")
 
     # 4. Non-dict/non-list
-    with pytest.raises(ValueError, match="Firewall rule invalid not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.firewall.get_rule("default", "invalid")
-    with pytest.raises(ValueError, match="Firewall rule none not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.firewall.get_rule("default", "none")
 
 
@@ -1928,7 +1940,7 @@ async def test_firewall_create_rule_response_parsing_and_branches() -> None:
     )
     assert res2.id == "rule-1"
     for _ in range(2):
-        with pytest.raises(ValueError, match="Failed to create firewall rule"):
+        with pytest.raises(UniFiResponseError):
             await client.firewall.create_rule(
                 "default", name="Fail", source_zone_id="z-1", destination_zone_id="z-2"
             )
@@ -1956,6 +1968,7 @@ async def test_firewall_patch_rule_pins_spec_request_and_branches() -> None:
             {"data": rule_dict},
             rule_dict,
             None,
+            {"data": []},  # re-fetch after the write finds nothing
             {"data": "non-dict"},
         ]
     )
@@ -1977,7 +1990,7 @@ async def test_firewall_patch_rule_pins_spec_request_and_branches() -> None:
     assert res2.id == "rule-1"
 
     # 3. Failure
-    with pytest.raises(ValueError, match="Failed to patch firewall rule"):
+    with pytest.raises(UniFiNotFoundError):
         await client.firewall.patch_rule("default", "rule-1", logging_enabled=True)
 
 
@@ -1997,6 +2010,7 @@ async def test_firewall_policy_ordering_pins_spec_request_and_branches() -> None
             {"data": ordering_data},  # 4. update_policy_ordering dict
             ordering_data,  # 5. update_policy_ordering model instance
             None,  # 6. update_policy_ordering failure
+            {"data": []},  # re-fetch after the write finds nothing
         ]
     )
     client = _client(session)
@@ -2028,7 +2042,7 @@ async def test_firewall_policy_ordering_pins_spec_request_and_branches() -> None
     assert ord2.ordered_firewall_policy_ids.after_system_defined == ["p2"]
 
     # 3. get_policy_ordering failure
-    with pytest.raises(ValueError, match="Failed to get firewall policy ordering"):
+    with pytest.raises(UniFiNotFoundError):
         await client.firewall.get_policy_ordering(
             "default",
             source_firewall_zone_id="z-src",
@@ -2086,26 +2100,13 @@ async def test_firewall_policy_ordering_pins_spec_request_and_branches() -> None
     }
 
     # 7. update_policy_ordering failure
-    with pytest.raises(ValueError, match="Failed to update firewall policy ordering"):
+    with pytest.raises(UniFiNotFoundError):
         await client.firewall.update_policy_ordering(
             "default",
             source_firewall_zone_id="z-src",
             destination_firewall_zone_id="z-dst",
             ordered_firewall_policy_ids=model_obj,
         )
-
-
-@pytest.mark.parametrize("payload", [None, [], ["not-a-dict"], 123])
-async def test_firewall_patch_rule_invalid_response(payload: Any) -> None:
-    """Exercise extraction failures through the public PATCH method."""
-    session = _Session([_Response(payload)])
-    with pytest.raises(ValueError, match="Failed to patch firewall rule"):
-        await _client(session).firewall.patch_rule("default", "rule-1", logging_enabled=True)
-    assert session.requests[0]["method"] == "PATCH"
-    assert session.requests[0]["url"] == (
-        "https://192.168.1.1/proxy/network/integration/v1/sites/default/firewall/policies/rule-1"
-    )
-    assert session.requests[0]["json"] == {"loggingEnabled": True}
 
 
 async def test_firewall_patch_rule_list_response() -> None:

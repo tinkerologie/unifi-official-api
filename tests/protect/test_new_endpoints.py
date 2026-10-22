@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 from aioresponses import aioresponses
 
+from unifi_official_api.exceptions import UniFiNotFoundError, UniFiResponseError
 from unifi_official_api.protect import UniFiProtectClient
 from unifi_official_api.protect.models import FileType
 
@@ -90,7 +91,7 @@ class TestViewersEndpoint:
             payload={"data": []},
         )
 
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(UniFiNotFoundError):
             await protect_client.viewers.get("viewer-999")
 
     async def test_viewers_update(
@@ -121,13 +122,17 @@ class TestViewersEndpoint:
         protect_client: UniFiProtectClient,
         mock_aioresponse: aioresponses,
     ) -> None:
-        """Test updating a viewer failure."""
+        """An empty write response is re-fetched; a missing resource is not found."""
         mock_aioresponse.patch(
             "https://192.168.1.1/proxy/protect/integration/v1/viewers/viewer-1",
             payload={"data": []},
         )
+        mock_aioresponse.get(
+            "https://192.168.1.1/proxy/protect/integration/v1/viewers/viewer-1",
+            payload={"data": []},
+        )
 
-        with pytest.raises(ValueError, match="Failed"):
+        with pytest.raises(UniFiNotFoundError):
             await protect_client.viewers.update("viewer-1", name="Test")
 
     async def test_viewers_set_liveview(
@@ -183,7 +188,7 @@ class TestApplicationEndpoint:
             payload={"data": []},
         )
 
-        with pytest.raises(ValueError, match="Failed"):
+        with pytest.raises(UniFiResponseError):
             await protect_client.application.get_info()
 
     async def test_application_get_files(
@@ -261,7 +266,7 @@ class TestApplicationEndpoint:
             payload={"data": []},
         )
 
-        with pytest.raises(ValueError, match="Failed"):
+        with pytest.raises(UniFiResponseError):
             await protect_client.application.upload_file(file_data=b"...", filename="test.gif")
 
     async def test_application_trigger_alarm_webhook(
@@ -368,13 +373,17 @@ class TestCameraNewMethods:
         protect_client: UniFiProtectClient,
         mock_aioresponse: aioresponses,
     ) -> None:
-        """Test creating RTSPS stream failure."""
+        """An empty write response is re-fetched; a missing resource is not found."""
         mock_aioresponse.post(
             "https://192.168.1.1/proxy/protect/integration/v1/cameras/cam-1/rtsps-stream",
             payload={"data": []},
         )
+        mock_aioresponse.get(
+            "https://192.168.1.1/proxy/protect/integration/v1/cameras/cam-1/rtsps-stream",
+            payload={"data": []},
+        )
 
-        with pytest.raises(ValueError, match="Failed"):
+        with pytest.raises(UniFiNotFoundError):
             await protect_client.cameras.create_rtsps_stream("cam-1")
 
     async def test_camera_get_rtsps_stream(
@@ -402,7 +411,7 @@ class TestCameraNewMethods:
             payload={"data": []},
         )
 
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(UniFiNotFoundError):
             await protect_client.cameras.get_rtsps_stream("cam-1")
 
     async def test_camera_delete_rtsps_stream(
@@ -469,7 +478,7 @@ class TestCameraNewMethods:
             payload={"data": []},
         )
 
-        with pytest.raises(ValueError, match="Failed"):
+        with pytest.raises(UniFiResponseError):
             await protect_client.cameras.create_talkback_session("cam-1")
 
     async def test_camera_disable_mic_permanently(
@@ -497,13 +506,17 @@ class TestCameraNewMethods:
         protect_client: UniFiProtectClient,
         mock_aioresponse: aioresponses,
     ) -> None:
-        """Test disabling camera microphone failure."""
+        """An empty write response is re-fetched; a missing resource is not found."""
         mock_aioresponse.post(
             "https://192.168.1.1/proxy/protect/integration/v1/cameras/cam-1/disable-mic-permanently",
             payload={"data": []},
         )
+        mock_aioresponse.get(
+            "https://192.168.1.1/proxy/protect/integration/v1/cameras/cam-1",
+            payload={"data": []},
+        )
 
-        with pytest.raises(ValueError, match="Failed"):
+        with pytest.raises(UniFiNotFoundError):
             await protect_client.cameras.disable_mic_permanently("cam-1")
 
     async def test_camera_set_hdr_mode(

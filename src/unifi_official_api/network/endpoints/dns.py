@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ...validation import created_record, parse_records, require_record, written_record
 from ..models.dns import DNSPolicy, DNSRecordType
 
 if TYPE_CHECKING:
@@ -48,6 +49,9 @@ class DNSEndpoint:
         Returns:
             List of DNS policies.
 
+        Raises:
+            UniFiResponseError: If an item in the response fails validation.
+
         """
         path = self._client.build_api_path(f"/sites/{site_id}/dns/policies")
         params: dict[str, Any] = {"offset": offset, "limit": limit}
@@ -61,7 +65,7 @@ class DNSEndpoint:
 
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [DNSPolicy.model_validate(item) for item in data]
+            return parse_records(DNSPolicy, data, "DNS policy")
         return []
 
     async def get(self, site_id: str, policy_id: str) -> DNSPolicy:
@@ -76,19 +80,14 @@ class DNSEndpoint:
             The DNS policy.
 
         Raises:
-            ValueError: If the policy is not found.
+            UniFiNotFoundError: If the response holds no DNS policy.
+            UniFiResponseError: If the DNS policy in the response fails validation.
 
         """
         path = self._client.build_api_path(f"/sites/{site_id}/dns/policies/{policy_id}")
-        response = await self._client._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return DNSPolicy.model_validate(data)
-            if isinstance(data, list) and len(data) > 0:
-                return DNSPolicy.model_validate(data[0])
-        raise ValueError(f"DNS policy {policy_id} not found")
+        return require_record(
+            await self._client._get(path), DNSPolicy, f"DNS policy {policy_id}", id_key=None
+        )
 
     async def create(
         self,
@@ -117,7 +116,8 @@ class DNSEndpoint:
             The created DNS policy.
 
         Raises:
-            ValueError: If the policy creation fails.
+            UniFiResponseError: If the console accepted the request but the response
+                holds no valid DNS policy. The DNS policy may have been created.
 
         """
         path = self._client.build_api_path(f"/sites/{site_id}/dns/policies")
@@ -135,11 +135,7 @@ class DNSEndpoint:
         data.update(kwargs)
 
         response = await self._client._post(path, json_data=data)
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict):
-                return DNSPolicy.model_validate(result)
-        raise ValueError("Failed to create DNS policy")
+        return created_record(response, DNSPolicy, "DNS policy", id_key=None)
 
     async def update(
         self,
@@ -170,7 +166,8 @@ class DNSEndpoint:
             The updated DNS policy.
 
         Raises:
-            ValueError: If the policy update fails.
+            UniFiNotFoundError: If the follow-up ``get()`` finds no DNS policy.
+            UniFiResponseError: If the follow-up ``get()`` response fails validation.
 
         """
         path = self._client.build_api_path(f"/sites/{site_id}/dns/policies/{policy_id}")
@@ -189,12 +186,12 @@ class DNSEndpoint:
             data["ttlSeconds"] = ttl_seconds
         data.update(kwargs)
 
-        response = await self._client._put(path, json_data=data)
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict):
-                return DNSPolicy.model_validate(result)
-        raise ValueError("Failed to update DNS policy")
+        written = written_record(
+            await self._client._put(path, json_data=data), DNSPolicy, id_key=None
+        )
+        if written is not None:
+            return written
+        return await self.get(site_id, policy_id)
 
     async def delete(self, site_id: str, policy_id: str) -> bool:
         """

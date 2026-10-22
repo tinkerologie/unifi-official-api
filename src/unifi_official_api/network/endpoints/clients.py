@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from ...exceptions import UniFiResponseError
+from ...validation import require_record
 from ..models import Client
 
 if TYPE_CHECKING:
@@ -202,17 +203,15 @@ class ClientsEndpoint:
         Returns:
             The client.
 
+        Raises:
+            UniFiNotFoundError: If the response holds no client.
+            UniFiResponseError: If the client in the response fails validation.
+
         """
         path = self._client.build_api_path(f"/sites/{site_id}/clients/{client_id}")
-        response = await self._client._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return Client.model_validate(data)
-            if isinstance(data, list) and len(data) > 0:
-                return Client.model_validate(data[0])
-        raise ValueError(f"Client {client_id} not found")
+        return require_record(
+            await self._client._get(path), Client, f"Client {client_id}", id_key=None
+        )
 
     async def _stamgr_command(
         self,

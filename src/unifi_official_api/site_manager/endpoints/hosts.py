@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ...validation import parse_record, require_record
 from ..models.host import Host, HostListResponse
 
 if TYPE_CHECKING:
@@ -27,13 +28,9 @@ class HostsEndpoint:
             params["nextToken"] = next_token
         response = await self._client._get("/v1/hosts", params=params)
         if isinstance(response, dict):
-            return HostListResponse.model_validate(response)
+            return parse_record(HostListResponse, response, "Host list")
         return HostListResponse()
 
     async def get(self, host_id: str) -> Host:
         response = await self._client._get(f"/v1/hosts/{host_id}")
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict) and "id" in data:
-                return Host.model_validate(data)
-        raise ValueError(f"Host {host_id} not found")
+        return require_record(response, Host, f"Host {host_id}")

@@ -7,8 +7,7 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
-from ...exceptions import UniFiNotFoundError, UniFiResponseError
-from ...validation import sanitized_validation_fields
+from ...validation import require_record, written_record
 
 if TYPE_CHECKING:
     from ..client import UniFiProtectClient
@@ -107,17 +106,9 @@ class ProtectDeviceEndpoint(Generic[_ModelT]):
 
         """
         path = self._client.build_api_path(f"/{self._resource}/{resource_id}", site_id)
-        record = _resource_record(await self._client._get(path))
-        if record is None:
-            raise UniFiNotFoundError(f"{self._resource} {resource_id} not found", status_code=200)
-        try:
-            return self._model.model_validate(record)
-        except ValidationError as err:
-            fields = sanitized_validation_fields(err)
-        # Raised outside the except block: the ValidationError quotes the
-        # rejected input, so it is neither chained nor kept as context.
-        msg = f"{self._resource} {resource_id} response failed validation ({fields})"
-        raise UniFiResponseError(msg, status_code=200)
+        return require_record(
+            await self._client._get(path), self._model, f"{self._resource} {resource_id}"
+        )
 
     async def update(
         self,
@@ -157,25 +148,7 @@ class ProtectDeviceEndpoint(Generic[_ModelT]):
             )
             raise TypeError(msg)
         path = self._client.build_api_path(f"/{self._resource}/{resource_id}", site_id)
-        record = _resource_record(await self._client._patch(path, json_data=kwargs))
-        if record is not None:
-            try:
-                return self._model.model_validate(record)
-            except ValidationError:
-                pass
+        written = written_record(await self._client._patch(path, json_data=kwargs), self._model)
+        if written is not None:
+            return written
         return await self.get(resource_id, site_id)
-
-
-def _resource_record(response: Any) -> dict[str, Any] | None:
-    """Return the single resource in a response, or None when it holds none with an ``id``."""
-    if isinstance(response, list):
-        data: Any = response
-    elif isinstance(response, dict):
-        data = response.get("data", response)
-    else:
-        return None
-    if isinstance(data, list) and data:
-        data = data[0]
-    if isinstance(data, dict) and data.get("id"):
-        return data
-    return None

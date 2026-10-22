@@ -6,7 +6,7 @@ import pytest
 from aioresponses import aioresponses
 
 from unifi_official_api import ConnectionType, LocalAuth
-from unifi_official_api.exceptions import UniFiNotFoundError
+from unifi_official_api.exceptions import UniFiNotFoundError, UniFiResponseError
 from unifi_official_api.protect import (
     AlarmHub,
     ArmProfile,
@@ -446,12 +446,16 @@ class TestProtectExtendedEndpoints:
         mock_aioresponse.patch(
             "https://192.168.1.1/proxy/protect/integration/v1/alarm-hubs/bad-id", payload={}
         )
+        # The empty PATCH body makes update() re-fetch the hub.
+        mock_aioresponse.get(
+            "https://192.168.1.1/proxy/protect/integration/v1/alarm-hubs/bad-id", payload={}
+        )
 
         async with client:
             assert await client.alarm_hubs.get_all() == []
-            with pytest.raises(ValueError, match="not found"):
+            with pytest.raises(UniFiNotFoundError):
                 await client.alarm_hubs.get("bad-id")
-            with pytest.raises(ValueError, match="Failed to update"):
+            with pytest.raises(UniFiNotFoundError):
                 await client.alarm_hubs.update("bad-id", name="x")
 
     async def test_arm_profiles_and_alarm(
@@ -496,16 +500,16 @@ class TestProtectExtendedEndpoints:
             assert len(profiles) == 1
             assert isinstance(profiles[0], ArmProfile)
 
-            created = await client.arm_profiles.create({"name": "Away Mode"})
+            created = await client.arm_profiles.create(name="Away Mode")
             assert created.id == "arm-2"
 
             settings = await client.arm_profiles.update_settings(
-                {"activeProfileId": "arm-1", "isArmed": True}
+                activeProfileId="arm-1", isArmed=True
             )
             assert isinstance(settings, ArmProfileSettings)
             assert settings.is_armed is True
 
-            updated = await client.arm_profiles.update("arm-1", {"name": "Night Mode Updated"})
+            updated = await client.arm_profiles.update("arm-1", name="Night Mode Updated")
             assert updated.name == "Night Mode Updated"
 
             await client.arm_profiles.enable()
@@ -529,15 +533,19 @@ class TestProtectExtendedEndpoints:
         mock_aioresponse.patch(
             "https://192.168.1.1/proxy/protect/integration/v1/arm-profiles/arm-x", payload={}
         )
+        # The empty PATCH body makes update() search the listing for the profile.
+        mock_aioresponse.get(
+            "https://192.168.1.1/proxy/protect/integration/v1/arm-profiles", payload=None
+        )
 
         async with client:
             assert await client.arm_profiles.get_all() == []
-            with pytest.raises(ValueError, match="Failed to create"):
-                await client.arm_profiles.create({"name": "Bad"})
-            with pytest.raises(ValueError, match="Failed to update"):
-                await client.arm_profiles.update_settings({})
-            with pytest.raises(ValueError, match="Failed to update"):
-                await client.arm_profiles.update("arm-x", {})
+            with pytest.raises(UniFiResponseError):
+                await client.arm_profiles.create(name="Bad")
+            # An accepted settings write without a settings body still succeeded.
+            assert await client.arm_profiles.update_settings() is True
+            with pytest.raises(UniFiNotFoundError):
+                await client.arm_profiles.update("arm-x")
 
     async def test_users_and_pos(
         self, client: UniFiProtectClient, mock_aioresponse: aioresponses
@@ -626,8 +634,8 @@ class TestProtectExtendedEndpoints:
 
         async with client:
             assert await client.users.get_users() == []
-            with pytest.raises(ValueError, match="not found"):
+            with pytest.raises(UniFiNotFoundError):
                 await client.users.get_user("bad-id")
             assert await client.ulp_users.get_all() == []
-            with pytest.raises(ValueError, match="not found"):
+            with pytest.raises(UniFiNotFoundError):
                 await client.ulp_users.get("bad-id")

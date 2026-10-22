@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ...validation import created_record
 from ..models.pos import (
     POSTransactionRequest,
     PosTransactionRequest,
@@ -39,8 +40,11 @@ class POSEndpoint:
             The POS transaction ingestion response.
 
         Raises:
-            ValueError: If the camera ID is invalid or response cannot be parsed.
+            ValueError: If the camera ID is empty; no request is made.
             TypeError: If the transaction is not a PosTransactionRequest or dict.
+            UniFiResponseError: If the console accepted the transaction but the
+                response holds no valid ingestion result.
+
         """
         if not isinstance(camera_id, str) or not camera_id.strip():
             msg = "Camera ID must be a non-empty string"
@@ -61,13 +65,12 @@ class POSEndpoint:
             raise TypeError(msg)
 
         response = await self._client._post(path, json_data=payload)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return PosTransactionResponse.model_validate(data)
-        msg = f"Failed to ingest POS transaction for camera {camera_id}"
-        raise ValueError(msg)
+        return created_record(
+            response,
+            PosTransactionResponse,
+            f"POS transaction for camera {camera_id}",
+            id_key=None,
+        )
 
 
 PosEndpoint = POSEndpoint

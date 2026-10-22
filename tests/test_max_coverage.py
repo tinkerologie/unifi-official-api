@@ -13,6 +13,7 @@ from unifi_official_api.carrier_fabric.models import HostLinkResponse, Subscribe
 from unifi_official_api.exceptions import (
     UniFiConnectionError,
     UniFiError,
+    UniFiNotFoundError,
     UniFiResponseError,
     UniFiTimeoutError,
     UniFiValidationError,
@@ -284,10 +285,7 @@ class TestMaxCoverage:
             b_updated = await prot_client.bridges.update("br-1", name="Bridge Patched")
             assert b_updated.name == "Bridge Patched"
 
-            h_updated = await prot_client.alarm_hubs.update(
-                "hub-1",
-                {"name": "Hub Patched"},
-            )
+            h_updated = await prot_client.alarm_hubs.update("hub-1", name="Hub Patched")
             assert h_updated.name == "Hub Patched"
 
     async def test_innerspace_models_and_endpoints(
@@ -333,14 +331,14 @@ class TestMaxCoverage:
                 "https://192.168.1.1/proxy/innerspace/integration/v1/info",
                 payload={"data": "invalid"},
             )
-            with pytest.raises(ValueError, match="Unable to retrieve InnerSpace application info"):
+            with pytest.raises(UniFiNotFoundError):
                 await innerspace_client.application.get_info()
 
             mock_aioresponse.get(
                 "https://192.168.1.1/proxy/innerspace/integration/v1/info",
                 payload=None,
             )
-            with pytest.raises(ValueError, match="Unable to retrieve InnerSpace application info"):
+            with pytest.raises(UniFiNotFoundError):
                 await innerspace_client.application.get_info()
 
             # floor_plans.get_project
@@ -418,10 +416,11 @@ class TestMaxCoverage:
                 "https://192.168.1.1/proxy/innerspace/integration/v1/binary-data-404",
                 status=404,
             )
-            with pytest.raises(UniFiConnectionError, match="HTTP 404"):
+            with pytest.raises(UniFiResponseError) as not_found:
                 await innerspace_client.get_binary(
                     "/proxy/innerspace/integration/v1/binary-data-404"
                 )
+            assert not_found.value.status_code == 404
 
             # get_binary timeout
             with patch.object(aiohttp.ClientSession, "get", side_effect=TimeoutError()):
@@ -478,7 +477,7 @@ class TestMaxCoverage:
             assert await mobility_client.workspaces.get_admins("ws-1") == []
             assert await mobility_client.clients.get_all("ws-1", "dev-1") == []
             assert await mobility_client.devices.get_all("ws-1") == []
-            with pytest.raises(ValueError, match="not found in workspace"):
+            with pytest.raises(UniFiNotFoundError):
                 await mobility_client.devices.get("ws-1", "dev-missing")
 
             await mobility_client.devices.update_name(
@@ -525,24 +524,24 @@ class TestMaxCoverage:
             configs = await site_manager_client.sd_wan.get_configs()
             assert configs == []
 
-            with pytest.raises(ValueError, match="SD-WAN config cfg-missing not found"):
+            with pytest.raises(UniFiNotFoundError):
                 await site_manager_client.sd_wan.get_config("cfg-missing")
 
             mock_aioresponse.get(
                 "https://api.ui.com/v1/sd-wan-configs/cfg-none",
                 payload=None,
             )
-            with pytest.raises(ValueError, match="SD-WAN config cfg-none not found"):
+            with pytest.raises(UniFiNotFoundError):
                 await site_manager_client.sd_wan.get_config("cfg-none")
 
-            with pytest.raises(ValueError, match="SD-WAN status for cfg-missing not found"):
+            with pytest.raises(UniFiNotFoundError):
                 await site_manager_client.sd_wan.get_status("cfg-missing")
 
             mock_aioresponse.get(
                 "https://api.ui.com/v1/sd-wan-configs/cfg-none/status",
                 payload=None,
             )
-            with pytest.raises(ValueError, match="SD-WAN status for cfg-none not found"):
+            with pytest.raises(UniFiNotFoundError):
                 await site_manager_client.sd_wan.get_status("cfg-none")
 
     async def test_network_models_and_switching(
@@ -594,19 +593,19 @@ class TestMaxCoverage:
         )
 
         async with net_client:
-            with pytest.raises(ValueError, match="LAG lag-missing not found"):
+            with pytest.raises(UniFiNotFoundError):
                 await net_client.switching.get_lag("default", "lag-missing")
 
             mc_page = await net_client.switching.get_mc_lag_domains("default", offset=10)
             assert mc_page.data == []
 
-            with pytest.raises(ValueError, match="MC-LAG domain mclag-missing not found"):
+            with pytest.raises(UniFiNotFoundError):
                 await net_client.switching.get_mc_lag_domain("default", "mclag-missing")
 
             stacks_page = await net_client.switching.get_switch_stacks("default", offset=10)
             assert stacks_page.data == []
 
-            with pytest.raises(ValueError, match="Switch stack stack-missing not found"):
+            with pytest.raises(UniFiNotFoundError):
                 await net_client.switching.get_switch_stack("default", "stack-missing")
 
             assert (await net_client.switching.get_lags("default")).data == []
@@ -617,7 +616,7 @@ class TestMaxCoverage:
             assert port_metrics.poe_ports == {}
 
         # Vouchers _validate_voucher invalid
-        with pytest.raises(ValueError, match="Invalid voucher data"):
+        with pytest.raises(UniFiResponseError):
             _validate_voucher({"quota": "invalid_number_type"})
 
         # NAT rules is_predefined_nat_rule

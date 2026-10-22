@@ -197,11 +197,11 @@ async def test_clients_get_pins_spec_request_and_branches() -> None:
     assert res3.id == "client-1"
 
     # 4. Empty list in data -> raises ValueError
-    with pytest.raises(ValueError, match="Client client-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.clients.get("default", "client-1")
 
     # 5. Non-dict response -> raises ValueError
-    with pytest.raises(ValueError, match="Client client-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.clients.get("default", "client-1")
 
 
@@ -298,11 +298,11 @@ async def test_devices_get_pins_spec_request_and_branches() -> None:
     assert res3.id == "dev-1"
 
     # 4. Empty list in data -> raises ValueError
-    with pytest.raises(ValueError, match="Device dev-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.devices.get("default", "dev-1")
 
     # 5. Non-dict response -> raises ValueError
-    with pytest.raises(ValueError, match="Device dev-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.devices.get("default", "dev-1")
 
 
@@ -693,7 +693,7 @@ async def test_lags_get_pins_spec_request_and_branches() -> None:
     res3 = await client.lags.get("default", "lag-1")
     assert res3.id == "lag-1"
 
-    with pytest.raises(ValueError, match="LAG lag-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.lags.get("default", "lag-1")
 
     with pytest.raises(UniFiNotFoundError):
@@ -755,7 +755,7 @@ async def test_lags_mc_lag_domains_pins_spec_requests_and_branches() -> None:
     assert res3.id == "mc-1"
 
     # 4. get_mc_lag_domain empty -> ValueError
-    with pytest.raises(ValueError, match="MC-LAG domain mc-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.lags.get_mc_lag_domain("default", "mc-1")
 
     # 5. Error mapping
@@ -835,7 +835,7 @@ async def test_stacks_get_pins_spec_request_and_branches() -> None:
     res3 = await client.stacks.get("default", "stack-1")
     assert res3.id == "stack-1"
 
-    with pytest.raises(ValueError, match="Switch stack stack-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.stacks.get("default", "stack-1")
 
     with pytest.raises(UniFiNotFoundError):
@@ -1003,7 +1003,7 @@ async def test_routes_extract_routes_list_and_get_route_branches() -> None:
     assert res3[0].id == "rt-ok"
 
     # 4. get_route not found raises ValueError
-    with pytest.raises(ValueError, match="Policy-Based Route rt-missing not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.routes.get_route("default", "rt-missing")
 
     for request, path in zip(
@@ -1114,7 +1114,7 @@ async def test_vouchers_get_pins_spec_request_and_branches() -> None:
     res3 = await client.vouchers.get("default", "v-1")
     assert res3.id == "v-1"
 
-    with pytest.raises(ValueError, match="Voucher v-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.vouchers.get("default", "v-1")
 
     with pytest.raises(UniFiNotFoundError):
@@ -1539,7 +1539,7 @@ async def test_vpn_clients_extract_networkconf_and_get_vpn_client_branches() -> 
     assert res2[0]["id"] == "vpn-single"
 
     # 3. get_vpn_client not found raises ValueError
-    with pytest.raises(ValueError, match="VPN Client vpn-missing not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.vpn_clients.get_vpn_client("default", "vpn-missing")
 
     # 4. get_vpn_client fallback hit in list_vpn_clients with bare list response
@@ -1594,10 +1594,10 @@ async def test_wifi_extract_payload_branches() -> None:
     )
     client = _client(session)
 
-    with pytest.raises(ValueError, match="WiFi network wifi-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.wifi.get("default", "wifi-1")
 
-    with pytest.raises(ValueError, match="WiFi network wifi-2 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.wifi.get("default", "wifi-2")
 
     for request, wifi_id in zip(session.requests, ["wifi-1", "wifi-2"], strict=True):
@@ -1648,7 +1648,7 @@ async def test_wifi_create_response_branches() -> None:
     assert len(session.requests) == 1
 
     # 2. Non-dict response -> ValueError
-    with pytest.raises(ValueError, match="Failed to create WiFi network"):
+    with pytest.raises(UniFiResponseError):
         await client.wifi.create("default", name="Fail", ssid="Fail", security=WifiSecurity.OPEN)
 
 
@@ -1661,11 +1661,12 @@ async def test_wifi_update_pins_spec_request_and_branches() -> None:
             # 1. Update with response payload
             {"data": current_wifi},
             {"data": updated_wifi},
-            # 2. Update when current_payload is missing -> ValueError
+            # 2. Update when current_payload is missing -> UniFiNotFoundError
             None,
-            # 3. Update when PUT returns empty/None response -> fallback to sent payload
+            # 3. Update when PUT returns empty/None response -> re-fetched with get()
             {"data": current_wifi},
             None,
+            {"data": updated_wifi},
         ]
     )
     client = _client(session)
@@ -1682,17 +1683,17 @@ async def test_wifi_update_pins_spec_request_and_branches() -> None:
     )
     assert req_put1["json"] == _wifi_document("New Name")
 
-    # 2. Update when current payload is missing -> ValueError
-    with pytest.raises(ValueError, match="WiFi network wifi-1 not found"):
+    # 2. Update when current payload is missing -> UniFiNotFoundError
+    with pytest.raises(UniFiNotFoundError):
         await client.wifi.update("default", "wifi-1", name="New Name")
 
-    # 3. Update when PUT returns empty response
+    # 3. Update when PUT returns empty response, so the network is re-fetched
     res3 = await client.wifi.update("default", "wifi-1", name="New Name")
     assert isinstance(res3, WifiNetwork)
     assert res3.id == "wifi-1"
     assert res3.name == "New Name"
 
-    for index in [0, 2, 3]:
+    for index in [0, 2, 3, 5]:
         _assert_request(
             session.requests[index],
             "GET",

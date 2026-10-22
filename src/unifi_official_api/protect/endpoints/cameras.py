@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Literal, get_args
 
 from pydantic import ValidationError
 
+from ...validation import created_record, require_record, written_record
 from ..models import Camera, RecordingMode
 from ..models.files import RTSPSStream, TalkbackSession
 
@@ -90,17 +91,13 @@ class CamerasEndpoint:
         Returns:
             The camera.
 
+        Raises:
+            UniFiNotFoundError: If the response holds no camera with an ``id``.
+            UniFiResponseError: If the camera in the response fails validation.
+
         """
         path = self._client.build_api_path(f"/cameras/{camera_id}", site_id)
-        response = await self._client._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return Camera.model_validate(data)
-            if isinstance(data, list) and len(data) > 0:
-                return Camera.model_validate(data[0])
-        raise ValueError(f"Camera {camera_id} not found")
+        return require_record(await self._client._get(path), Camera, f"Camera {camera_id}")
 
     async def update(
         self,
@@ -119,15 +116,16 @@ class CamerasEndpoint:
         Returns:
             The updated camera.
 
+        Raises:
+            UniFiNotFoundError: If the follow-up ``get()`` finds no camera.
+            UniFiResponseError: If the follow-up ``get()`` response fails validation.
+
         """
         path = self._client.build_api_path(f"/cameras/{camera_id}", site_id)
-        response = await self._client._patch(path, json_data=kwargs)
-
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict):
-                return Camera.model_validate(result)
-        raise ValueError("Failed to update camera")
+        written = written_record(await self._client._patch(path, json_data=kwargs), Camera)
+        if written is not None:
+            return written
+        return await self.get(camera_id, site_id)
 
     async def set_recording_mode(
         self,
@@ -174,6 +172,12 @@ class CamerasEndpoint:
 
         Raises:
             ValueError: If the channel is not ``"main"`` or ``"package"``.
+            UniFiAuthenticationError: If the console answers 401 or 403.
+            UniFiNotFoundError: If the console answers 404.
+            UniFiRateLimitError: If the console still answers 429 after one retry.
+            UniFiResponseError: If the console answers any other 4xx or 5xx status,
+                e.g. 400 when the camera cannot take the requested snapshot.
+            UniFiConnectionError: If the console cannot be reached.
 
         """
         if channel is not None and channel not in _SNAPSHOT_CHANNELS:
@@ -316,16 +320,20 @@ class CamerasEndpoint:
         Returns:
             RTSPS stream configuration.
 
+        Raises:
+            UniFiNotFoundError: If the response holds no stream configuration and
+                the follow-up ``get_rtsps_stream()`` finds none either.
+            UniFiResponseError: If the follow-up response fails validation.
+
         """
         path = self._client.build_api_path(f"/cameras/{camera_id}/rtsps-stream", site_id)
         body = {"qualities": qualities or ["high"]}
-        response = await self._client._post(path, json_data=body)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return RTSPSStream.model_validate(data)
-        raise ValueError("Failed to create RTSPS stream")
+        written = written_record(
+            await self._client._post(path, json_data=body), RTSPSStream, id_key=None
+        )
+        if written is not None:
+            return written
+        return await self.get_rtsps_stream(camera_id, site_id)
 
     async def get_rtsps_stream(
         self,
@@ -342,15 +350,18 @@ class CamerasEndpoint:
         Returns:
             RTSPS stream configuration.
 
+        Raises:
+            UniFiNotFoundError: If the response holds no stream configuration.
+            UniFiResponseError: If the stream configuration fails validation.
+
         """
         path = self._client.build_api_path(f"/cameras/{camera_id}/rtsps-stream", site_id)
-        response = await self._client._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return RTSPSStream.model_validate(data)
-        raise ValueError("RTSPS stream not found")
+        return require_record(
+            await self._client._get(path),
+            RTSPSStream,
+            f"RTSPS stream for camera {camera_id}",
+            id_key=None,
+        )
 
     async def delete_rtsps_stream(
         self,
@@ -391,15 +402,16 @@ class CamerasEndpoint:
         Returns:
             Talkback session configuration with URL and audio settings.
 
+        Raises:
+            UniFiResponseError: If the console accepted the request but the response
+                holds no valid talkback session.
+
         """
         path = self._client.build_api_path(f"/cameras/{camera_id}/talkback-session", site_id)
         response = await self._client._post(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return TalkbackSession.model_validate(data)
-        raise ValueError("Failed to create talkback session")
+        return created_record(
+            response, TalkbackSession, f"Talkback session for camera {camera_id}", id_key=None
+        )
 
     async def disable_mic_permanently(
         self,
@@ -418,15 +430,16 @@ class CamerasEndpoint:
         Returns:
             The updated camera with microphone disabled.
 
+        Raises:
+            UniFiNotFoundError: If the follow-up ``get()`` finds no camera.
+            UniFiResponseError: If the follow-up ``get()`` response fails validation.
+
         """
         path = self._client.build_api_path(f"/cameras/{camera_id}/disable-mic-permanently", site_id)
-        response = await self._client._post(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return Camera.model_validate(data)
-        raise ValueError("Failed to disable microphone")
+        written = written_record(await self._client._post(path), Camera)
+        if written is not None:
+            return written
+        return await self.get(camera_id, site_id)
 
     async def set_hdr_mode(
         self,

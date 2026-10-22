@@ -16,6 +16,7 @@ from unifi_official_api.const import (
     CARRIER_FABRIC_PATH,
 )
 from unifi_official_api.exceptions import UniFiResponseError
+from unifi_official_api.validation import parse_record
 
 from .models import HostLinkResponse, ServicePlan, Subscriber
 
@@ -182,7 +183,7 @@ class ServicePlansEndpoint:
         if data is None:
             msg = f"{path} returned unexpected response"
             raise UniFiResponseError(msg, status_code=200)
-        return ServicePlan.model_validate(data)
+        return parse_record(ServicePlan, data, path)
 
 
 class SubscribersEndpoint:
@@ -329,7 +330,7 @@ class SubscribersEndpoint:
         if data is None:
             msg = f"{path} returned unexpected response"
             raise UniFiResponseError(msg, status_code=200)
-        return Subscriber.model_validate(data)
+        return parse_record(Subscriber, data, path)
 
     async def suspend(self, subscriber_id: str, reason: str | None = None) -> Subscriber | None:
         """

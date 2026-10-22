@@ -13,7 +13,7 @@ from ...exceptions import (
     UniFiResponseError,
     UniFiValidationError,
 )
-from ...validation import sanitized_validation_fields
+from ...validation import parse_record, sanitized_validation_fields, written_record
 from ..models.traffic_rule import TrafficRule
 
 if TYPE_CHECKING:
@@ -139,7 +139,7 @@ class TrafficRulesEndpoint:
         current = next((i for i in items if (i.get("_id") or i.get("id")) == rule_id), None)
         if current is None:
             msg = f"Traffic rule {rule_id} not found"
-            raise UniFiNotFoundError(msg, status_code=404)
+            raise UniFiNotFoundError(msg, status_code=200)
 
         payload = dict(current)
         payload["enabled"] = enabled
@@ -149,6 +149,7 @@ class TrafficRulesEndpoint:
         )
         put_items = self._extract_items(await self._client._put(put_path, json_data=payload))
         if put_items and (put_items[0].get("_id") or put_items[0].get("id")) == rule_id:
-            return TrafficRule.model_validate(put_items[0])
-
-        return TrafficRule.model_validate(payload)
+            written = written_record(put_items[0], TrafficRule, id_key=None)
+            if written is not None:
+                return written
+        return parse_record(TrafficRule, payload, f"Traffic rule {rule_id}")

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from ...exceptions import UniFiResponseError
+from ...validation import parse_record
 from ..models import InnerSpaceProject
 
 if TYPE_CHECKING:
@@ -64,7 +65,7 @@ class ProjectEndpoint:
             msg = "/v1/project returned a malformed response"
             raise UniFiResponseError(msg, status_code=200)
 
-        return InnerSpaceProject.model_validate(payload)
+        return parse_record(InnerSpaceProject, payload, "/v1/project")
 
 
 __all__ = ["ProjectEndpoint"]

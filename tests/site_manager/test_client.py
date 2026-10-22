@@ -6,6 +6,7 @@ import pytest
 from aioresponses import aioresponses
 
 from unifi_official_api import ApiKeyAuth
+from unifi_official_api.exceptions import UniFiNotFoundError
 from unifi_official_api.site_manager import (
     DeviceListResponse,
     Host,
@@ -78,7 +79,7 @@ class TestUniFiSiteManagerClient:
             assert isinstance(host, Host)
             assert host.hardware_id == "HW-12345"
 
-            with pytest.raises(ValueError, match="Host bad-id not found"):
+            with pytest.raises(UniFiNotFoundError):
                 await client.hosts.get("bad-id")
 
     async def test_sites_endpoints(
@@ -228,10 +229,10 @@ class TestUniFiSiteManagerClient:
             empty_configs = await client.sd_wan.get_configs()
             assert empty_configs == []
 
-            with pytest.raises(ValueError, match="SD-WAN config bad-id not found"):
+            with pytest.raises(UniFiNotFoundError):
                 await client.sd_wan.get_config("bad-id")
 
-            with pytest.raises(ValueError, match="SD-WAN status for bad-id not found"):
+            with pytest.raises(UniFiNotFoundError):
                 await client.sd_wan.get_status("bad-id")
 
     async def test_connector_proxy(

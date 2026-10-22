@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ...validation import parse_records
 from ..models.workspace import AdminSummary, WorkspaceSummary
 
 if TYPE_CHECKING:
@@ -28,13 +29,16 @@ class WorkspacesEndpoint:
 
         Returns:
             List of WorkspaceSummary objects.
+
+        Raises:
+            UniFiResponseError: If an item in the response fails validation.
         """
         response = await self._client._get("/v1/mobility/workspaces")
         if response is None:
             return []
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [WorkspaceSummary.model_validate(item) for item in data]
+            return parse_records(WorkspaceSummary, data, "Mobility workspace")
         return []
 
     async def get_admins(self, workspace_id: str) -> list[AdminSummary]:
@@ -46,11 +50,14 @@ class WorkspacesEndpoint:
 
         Returns:
             List of AdminSummary objects.
+
+        Raises:
+            UniFiResponseError: If an item in the response fails validation.
         """
         response = await self._client._get(f"/v1/mobility/workspaces/{workspace_id}/admins")
         if response is None:
             return []
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [AdminSummary.model_validate(item) for item in data]
+            return parse_records(AdminSummary, data, "Mobility workspace admin")
         return []

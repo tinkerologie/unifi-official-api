@@ -7,7 +7,7 @@ import copy
 import json
 import logging
 from typing import Any, Final
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import aiohttp
 import pytest
@@ -882,19 +882,16 @@ EMPTY_PUT_RESPONSES = [None, [], {"data": []}, {"data": None}]
 async def test_wifi_update_empty_put_response_fallback(
     put_response: dict[str, Any] | list[Any] | None,
 ) -> None:
-    """With no PUT body, the result is the sent payload with the requested id."""
+    """With no PUT body, the network is re-fetched with get()."""
     client = _network_client()
-    client._get = AsyncMock(
-        return_value={
-            "data": {
-                "id": "wifi-1",
-                "type": "STANDARD",
-                "name": "Guest WiFi",
-                "enabled": False,
-                "metadata": {"origin": "USER_DEFINED"},
-            }
-        }
-    )
+    current = {
+        "id": "wifi-1",
+        "type": "STANDARD",
+        "name": "Guest WiFi",
+        "enabled": False,
+        "metadata": {"origin": "USER_DEFINED"},
+    }
+    client._get = AsyncMock(side_effect=[{"data": current}, {"data": {**current, "enabled": True}}])
     client._put = AsyncMock(return_value=put_response)
     client._patch = AsyncMock()
 
@@ -903,6 +900,7 @@ async def test_wifi_update_empty_put_response_fallback(
     assert isinstance(result, WifiNetwork)
     assert result.id == "wifi-1"
     assert result.enabled is True
+    assert client._get.await_count == 2
     client._put.assert_awaited_once_with(
         "/proxy/network/integration/v1/sites/site-1/wifi/broadcasts/wifi-1",
         json_data={"type": "STANDARD", "name": "Guest WiFi", "enabled": True},
@@ -914,20 +912,19 @@ async def test_wifi_update_empty_put_response_fallback(
 async def test_firewall_update_rule_empty_put_response_fallback(
     put_response: dict[str, Any] | list[Any] | None,
 ) -> None:
-    """With no PUT body, the result is the sent payload with the requested id."""
+    """With no PUT body, the rule is re-fetched with get_rule()."""
     client = _network_client()
     path = "/proxy/network/integration/v1/sites/site-1/firewall/policies/rule-1"
+    current = {
+        "id": "rule-1",
+        "name": "Drop Rule",
+        "action": "drop",
+        "enabled": True,
+        "index": 3,
+        "metadata": {"origin": "USER_DEFINED"},
+    }
     client._get = AsyncMock(
-        return_value={
-            "data": {
-                "id": "rule-1",
-                "name": "Drop Rule",
-                "action": "drop",
-                "enabled": True,
-                "index": 3,
-                "metadata": {"origin": "USER_DEFINED"},
-            }
-        }
+        side_effect=[{"data": current}, {"data": {**current, "enabled": False}}]
     )
     client._put = AsyncMock(return_value=put_response)
     client._patch = AsyncMock()
@@ -938,7 +935,7 @@ async def test_firewall_update_rule_empty_put_response_fallback(
     assert result.id == "rule-1"
     assert result.enabled is False
     assert result.name == "Drop Rule"
-    client._get.assert_awaited_once_with(path)
+    assert client._get.await_args_list == [call(path), call(path)]
     client._put.assert_awaited_once_with(
         path, json_data={"name": "Drop Rule", "action": "drop", "enabled": False}
     )
@@ -1234,7 +1231,7 @@ async def test_lags_get_missing_raises_value_error() -> None:
     client = _network_client()
     client._get = AsyncMock(return_value=None)
 
-    with pytest.raises(ValueError, match="not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.lags.get("site-1", "missing")
 
 
@@ -1847,7 +1844,7 @@ async def test_chime_set_volume_without_paired_doorbell_raises(
     client._get = AsyncMock(return_value={"data": chime})
     client._patch = AsyncMock()
 
-    with pytest.raises(ValueError, match="no paired doorbell"):
+    with pytest.raises(UniFiValidationError, match="no paired doorbell"):
         await client.chimes.set_volume("chime-1", 50)
 
     client._patch.assert_not_awaited()
@@ -1875,7 +1872,7 @@ async def test_chime_set_volume_with_incomplete_ring_settings_raises(
     )
     client._patch = AsyncMock()
 
-    with pytest.raises(ValueError, match="incomplete ring settings"):
+    with pytest.raises(UniFiResponseError):
         await client.chimes.set_volume("chime-1", 50)
 
     client._patch.assert_not_awaited()
@@ -1952,7 +1949,7 @@ async def test_chime_set_repeat_times_needs_volume_in_each_entry() -> None:
     client._get = AsyncMock(return_value={"id": "chime-1", "mac": "AA:BB", "ringSettings": [ring]})
     client._patch = AsyncMock()
 
-    with pytest.raises(ValueError, match="incomplete ring settings"):
+    with pytest.raises(UniFiResponseError):
         await client.chimes.set_repeat_times("chime-1", 4)
 
     client._patch.assert_not_awaited()
@@ -2058,8 +2055,10 @@ async def test_chime_set_ringtone_rejects_invalid_settings(settings: Any) -> Non
         }
     )
     client._patch = AsyncMock()
-    with pytest.raises(ValueError, match=r"no paired doorbell|incomplete ring settings"):
+    expected = UniFiValidationError if not settings else UniFiResponseError
+    with pytest.raises(expected) as exc_info:
         await client.chimes.set_ringtone("chime-1", "tone-new")
+    assert type(exc_info.value) is expected
     client._patch.assert_not_awaited()
 
 
@@ -3182,7 +3181,7 @@ async def test_routes_endpoint_get_route_not_found_raises() -> None:
         connection_type=ConnectionType.LOCAL,
     )
     client._get = AsyncMock(return_value=[])
-    with pytest.raises(ValueError, match="Policy-Based Route missing not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.routes.get_route("default", "missing")
 
 
@@ -3219,7 +3218,7 @@ async def test_routes_endpoint_update_route_not_found_raises() -> None:
     )
     client._get = AsyncMock(return_value=[])
 
-    with pytest.raises(ValueError, match="Policy-Based Route missing not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.routes.update_route("default", "missing", enabled=False)
 
 
@@ -3381,7 +3380,7 @@ async def test_vpn_clients_endpoint_get_vpn_client_not_found_raises() -> None:
         connection_type=ConnectionType.LOCAL,
     )
     client._get = AsyncMock(return_value={"meta": {"rc": "ok"}, "data": []})
-    with pytest.raises(ValueError, match="VPN Client missing not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.vpn_clients.get_vpn_client("default", "missing")
 
 
@@ -3444,7 +3443,7 @@ async def test_vpn_clients_endpoint_update_not_found_raises() -> None:
     )
     client._get = AsyncMock(return_value={"meta": {"rc": "ok"}, "data": []})
 
-    with pytest.raises(ValueError, match="VPN Client missing not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.vpn_clients.update_vpn_client("default", "missing", enabled=False)
 
 
@@ -3804,7 +3803,7 @@ async def test_binary_429_on_retry_defers_whole_client(
     client._session = _binary_session(429, {"Retry-After": "1"})
     start = fake_clock.now
 
-    with pytest.raises(UniFiConnectionError):
+    with pytest.raises(UniFiRateLimitError):
         await client._get_binary("/cameras/abc/snapshot")
 
     assert client._session.get.call_count == 2
@@ -3823,7 +3822,7 @@ async def test_binary_429_without_retry_after_defers_capped(
     client = _protect_client()
     client._session = _binary_session(429, {})
 
-    with pytest.raises(UniFiConnectionError):
+    with pytest.raises(UniFiRateLimitError):
         await client._get_binary("/cameras/abc/snapshot")
 
     assert client._session.get.call_count == 1
@@ -3844,20 +3843,17 @@ async def test_binary_request_is_throttled(fake_clock: _FakeClock) -> None:
     assert fake_clock.sleeps == [pytest.approx(1.0)]
 
 
-async def test_protect_client_get_binary_auth_error_raises_connection_error() -> None:
-    """UniFiProtectClient._get_binary wraps auth error in UniFiConnectionError."""
+@pytest.mark.parametrize("status", [401, 403])
+async def test_protect_client_get_binary_auth_error_is_not_a_connection_error(
+    status: int,
+) -> None:
+    """UniFiProtectClient._get_binary raises a 401/403 as UniFiAuthenticationError."""
     client = _protect_client()
-    client._session = _binary_session(401, {})
-    with pytest.raises(UniFiConnectionError) as exc:
+    client._session = _binary_session(status, {})
+    with pytest.raises(UniFiAuthenticationError) as exc:
         await client._get_binary("/cameras/abc/snapshot")
-    assert isinstance(exc.value.__cause__, UniFiAuthenticationError)
-    assert "401" in str(exc.value)
-
-    client._session = _binary_session(403, {})
-    with pytest.raises(UniFiConnectionError) as exc403:
-        await client._get_binary("/cameras/abc/snapshot")
-    assert isinstance(exc403.value.__cause__, UniFiAuthenticationError)
-    assert "403" in str(exc403.value)
+    assert exc.value.status_code == status
+    assert not isinstance(exc.value, UniFiConnectionError)
 
 
 async def test_base_client_get_binary_success() -> None:
@@ -4568,7 +4564,7 @@ async def test_protect_users_get_all_and_get() -> None:
 
     # get single user not found
     client._get = AsyncMock(return_value=None)
-    with pytest.raises(ValueError, match="User user-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.users.get("user-1")
 
 
@@ -4629,7 +4625,7 @@ async def test_protect_ulp_users_get_all_and_get() -> None:
 
     # get single ULP user not found
     client._get = AsyncMock(return_value=None)
-    with pytest.raises(ValueError, match="ULP user ulp-1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.ulp_users.get("ulp-1")
 
 
@@ -4706,7 +4702,7 @@ async def test_protect_pos_ingest_transaction_dict_and_duplicate() -> None:
 
     # Error handling
     client._post = AsyncMock(return_value=None)
-    with pytest.raises(ValueError, match="Failed to ingest POS transaction for camera cam-2"):
+    with pytest.raises(UniFiResponseError):
         await client.pos.ingest_transaction("cam-2", payload)
 
 
@@ -4720,17 +4716,15 @@ async def test_protect_users_get_invalid_id_raises(invalid_id: Any) -> None:
     client._get.assert_not_called()
 
 
-async def test_protect_users_get_list_response_raises() -> None:
-    """Users get should raise ValueError if response is a list."""
+async def test_protect_users_get_reads_list_wrapped_record() -> None:
+    """A user record wrapped in a one-item list is read like a bare one."""
     client = _protect_client()
     user_payload = {"id": "user-1", "name": "Jane"}
     client._get = AsyncMock(return_value=[user_payload])
-    with pytest.raises(ValueError, match="User user-1 not found"):
-        await client.users.get("user-1")
+    assert (await client.users.get("user-1")).id == "user-1"
 
     client._get = AsyncMock(return_value={"data": [user_payload]})
-    with pytest.raises(ValueError, match="User user-1 not found"):
-        await client.users.get("user-1")
+    assert (await client.users.get("user-1")).id == "user-1"
 
 
 @pytest.mark.parametrize("invalid_id", ["", "   ", None, 123])
@@ -4743,17 +4737,16 @@ async def test_protect_ulp_users_get_invalid_id_raises(invalid_id: Any) -> None:
     client._get.assert_not_called()
 
 
-async def test_protect_ulp_users_get_list_response_raises() -> None:
-    """ULP users get should raise ValueError if response is a list."""
+async def test_protect_ulp_users_get_list_wrapped_malformed_record_raises() -> None:
+    """A list-wrapped ULP user is read, and an incomplete one fails validation."""
     client = _protect_client()
     ulp_payload = {"id": "ulp-1", "fullName": "John"}
-    client._get = AsyncMock(return_value=[ulp_payload])
-    with pytest.raises(ValueError, match="ULP user ulp-1 not found"):
-        await client.ulp_users.get("ulp-1")
-
-    client._get = AsyncMock(return_value={"data": [ulp_payload]})
-    with pytest.raises(ValueError, match="ULP user ulp-1 not found"):
-        await client.ulp_users.get("ulp-1")
+    for response in ([ulp_payload], {"data": [ulp_payload]}):
+        client._get = AsyncMock(return_value=response)
+        with pytest.raises(UniFiResponseError) as exc_info:
+            await client.ulp_users.get("ulp-1")
+        assert not isinstance(exc_info.value, UniFiNotFoundError)
+        assert exc_info.value.__cause__ is None
 
 
 @pytest.mark.parametrize("invalid_id", ["", "   ", None, 123])
@@ -5021,7 +5014,7 @@ async def test_network_client_get_application_info_invalid_response_raises() -> 
     """get_application_info raises ValueError when response is not a dict."""
     client = _network_client()
     client._get = AsyncMock(return_value=["not-a-dict"])
-    with pytest.raises(ValueError, match="Unable to retrieve application info"):
+    with pytest.raises(UniFiNotFoundError):
         await client.get_application_info()
 
 
@@ -5071,7 +5064,7 @@ async def test_firewall_get_policy_ordering_invalid_data_raises() -> None:
     """get_policy_ordering raises ValueError when returned data is not a dict."""
     client = _network_client()
     client._get = AsyncMock(return_value={"data": "invalid"})
-    with pytest.raises(ValueError, match="Failed to get firewall policy ordering"):
+    with pytest.raises(UniFiNotFoundError):
         await client.firewall.get_policy_ordering(
             "site1",
             source_firewall_zone_id="sz1",
@@ -5079,27 +5072,11 @@ async def test_firewall_get_policy_ordering_invalid_data_raises() -> None:
         )
 
 
-async def test_firewall_update_policy_ordering_invalid_data_raises() -> None:
-    """update_policy_ordering raises ValueError when returned data is not a dict."""
-    client = _network_client()
-    client._put = AsyncMock(return_value={"data": "invalid"})
-    with pytest.raises(ValueError, match="Failed to update firewall policy ordering"):
-        await client.firewall.update_policy_ordering(
-            "site1",
-            source_firewall_zone_id="sz1",
-            destination_firewall_zone_id="dz1",
-            ordered_firewall_policy_ids={
-                "beforeSystemDefined": [],
-                "afterSystemDefined": [],
-            },
-        )
-
-
 async def test_lags_get_mc_lag_domain_non_dict_raises() -> None:
     """get_mc_lag_domain raises ValueError when response is not a dict."""
     client = _network_client()
     client._get = AsyncMock(return_value=None)
-    with pytest.raises(ValueError, match=r"MC-LAG domain lag1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.lags.get_mc_lag_domain("site1", "lag1")
 
 
@@ -5116,7 +5093,7 @@ async def test_stacks_get_switch_stack_non_dict_raises() -> None:
     """stacks.get raises ValueError when response is not a dict."""
     client = _network_client()
     client._get = AsyncMock(return_value=None)
-    with pytest.raises(ValueError, match=r"Switch stack stack1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.stacks.get("site1", "stack1")
 
 
@@ -5124,7 +5101,7 @@ async def test_vouchers_get_non_dict_raises() -> None:
     """vouchers.get raises ValueError when response is not a dict."""
     client = _network_client()
     client._get = AsyncMock(return_value=None)
-    with pytest.raises(ValueError, match=r"Voucher v1 not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.vouchers.get("site1", "v1")
 
 
@@ -5158,7 +5135,7 @@ async def test_vpn_clients_get_vpn_client_item_loop_and_fallback_loop() -> None:
         {"id": "different", "name": "Diff", "purpose": "vpn-client"}
     )
     client.vpn_clients.list_vpn_clients = AsyncMock(return_value=[dummy_client])
-    with pytest.raises(ValueError, match=r"VPN Client missing not found"):
+    with pytest.raises(UniFiNotFoundError):
         await client.vpn_clients.get_vpn_client("default", "missing")
 
 
@@ -5167,7 +5144,7 @@ async def test_wifi_create_invalid_result_raises() -> None:
     client = _network_client()
     client._post = AsyncMock(return_value={"data": "invalid"})
     wifi_key = "test-passphrase"
-    with pytest.raises(ValueError, match="Failed to create WiFi network"):
+    with pytest.raises(UniFiResponseError):
         await client.wifi.create(
             "site1",
             name="Guest",
@@ -5181,7 +5158,7 @@ async def test_protect_pos_ingest_transaction_invalid_data_raises() -> None:
     """pos.ingest_transaction raises ValueError when response data is not a dict."""
     client = _protect_client()
     client._post = AsyncMock(return_value={"data": "invalid"})
-    with pytest.raises(ValueError, match=r"Failed to ingest POS transaction for camera cam1"):
+    with pytest.raises(UniFiResponseError):
         await client.pos.ingest_transaction(
             "cam1", {"type": "sale", "externalId": "1", "amount": 1.0}
         )

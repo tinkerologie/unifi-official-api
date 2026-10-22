@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ...validation import parse_records
 from ..models.client import MobilityDeviceClient
 
 if TYPE_CHECKING:
@@ -32,6 +33,9 @@ class ClientsEndpoint:
 
         Returns:
             List of MobilityDeviceClient objects.
+
+        Raises:
+            UniFiResponseError: If an item in the response fails validation.
         """
         response = await self._client._get(
             f"/v1/mobility/workspaces/{workspace_id}/devices/{device_id}/clients"
@@ -40,5 +44,5 @@ class ClientsEndpoint:
             return []
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [MobilityDeviceClient.model_validate(item) for item in data]
+            return parse_records(MobilityDeviceClient, data, "Mobility device client")
         return []

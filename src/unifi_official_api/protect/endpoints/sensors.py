@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
 
+from ...validation import require_record, written_record
 from ..models import Sensor
 
 if TYPE_CHECKING:
@@ -79,17 +80,13 @@ class SensorsEndpoint:
         Returns:
             The sensor.
 
+        Raises:
+            UniFiNotFoundError: If the response holds no sensor with an ``id``.
+            UniFiResponseError: If the sensor in the response fails validation.
+
         """
         path = self._client.build_api_path(f"/sensors/{sensor_id}", site_id)
-        response = await self._client._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return Sensor.model_validate(data)
-            if isinstance(data, list) and len(data) > 0:
-                return Sensor.model_validate(data[0])
-        raise ValueError(f"Sensor {sensor_id} not found")
+        return require_record(await self._client._get(path), Sensor, f"Sensor {sensor_id}")
 
     async def update(
         self,
@@ -108,15 +105,16 @@ class SensorsEndpoint:
         Returns:
             The updated sensor.
 
+        Raises:
+            UniFiNotFoundError: If the follow-up ``get()`` finds no sensor.
+            UniFiResponseError: If the follow-up ``get()`` response fails validation.
+
         """
         path = self._client.build_api_path(f"/sensors/{sensor_id}", site_id)
-        response = await self._client._patch(path, json_data=kwargs)
-
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict):
-                return Sensor.model_validate(result)
-        raise ValueError("Failed to update sensor")
+        written = written_record(await self._client._patch(path, json_data=kwargs), Sensor)
+        if written is not None:
+            return written
+        return await self.get(sensor_id, site_id)
 
     async def set_status_led(
         self,

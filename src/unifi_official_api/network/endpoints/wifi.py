@@ -4,6 +4,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ...exceptions import UniFiNotFoundError
+from ...validation import (
+    created_record,
+    parse_records,
+    require_record,
+    response_record,
+    written_record,
+)
 from ..models import WifiNetwork, WifiSecurity
 
 if TYPE_CHECKING:
@@ -33,18 +41,8 @@ class WifiEndpoint:
         response: dict[str, Any] | list[Any] | None,
     ) -> dict[str, Any] | None:
         """Extract a WiFi broadcast payload from API responses."""
-        if response is None:
-            return None
-
-        data = response.get("data", response) if isinstance(response, dict) else response
-
-        if isinstance(data, dict):
-            return dict(data)
-
-        if isinstance(data, list) and data and isinstance(data[0], dict):
-            return dict(data[0])
-
-        return None
+        record = response_record(response, id_key=None)
+        return dict(record) if record is not None else None
 
     def __init__(self, client: UniFiNetworkClient) -> None:
         """
@@ -103,6 +101,9 @@ class WifiEndpoint:
         Returns:
             List of WiFi networks.
 
+        Raises:
+            UniFiResponseError: If an item in the response fails validation.
+
         """
         params: dict[str, Any] = {}
         if offset is not None:
@@ -120,7 +121,7 @@ class WifiEndpoint:
 
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [WifiNetwork.model_validate(item) for item in data]
+            return parse_records(WifiNetwork, data, "WiFi network")
         return []
 
     async def get(self, site_id: str, wifi_id: str) -> WifiNetwork:
@@ -134,13 +135,14 @@ class WifiEndpoint:
         Returns:
             The WiFi network.
 
+        Raises:
+            UniFiNotFoundError: If the response holds no WiFi network.
+            UniFiResponseError: If the WiFi network in the response fails validation.
+
         """
         path = self._client.build_api_path(f"/sites/{site_id}/wifi/broadcasts/{wifi_id}")
         response = await self._client._get(path)
-        payload = self._extract_wifi_payload(response)
-        if payload is not None:
-            return WifiNetwork.model_validate(payload)
-        raise ValueError(f"WiFi network {wifi_id} not found")
+        return require_record(response, WifiNetwork, f"WiFi network {wifi_id}", id_key=None)
 
     async def create(
         self,
@@ -169,6 +171,12 @@ class WifiEndpoint:
 
         Returns:
             The created WiFi network.
+
+        Raises:
+            ValueError: If ``ssid`` differs from ``name`` or the security settings are
+                invalid; no request is made.
+            UniFiResponseError: If the console accepted the request but the response
+                holds no valid WiFi network. The network may have been created.
 
         """
         path = self._client.build_api_path(f"/sites/{site_id}/wifi/broadcasts")
@@ -208,11 +216,7 @@ class WifiEndpoint:
         data.update(kwargs)
 
         response = await self._client._post(path, json_data=data)
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict):
-                return WifiNetwork.model_validate(result)
-        raise ValueError("Failed to create WiFi network")
+        return created_record(response, WifiNetwork, "WiFi network", id_key=None)
 
     async def update(
         self,
@@ -231,11 +235,18 @@ class WifiEndpoint:
         Returns:
             The updated WiFi network.
 
+        Raises:
+            UniFiNotFoundError: If the current WiFi network read, or the follow-up
+                ``get()`` after a ``PUT`` acknowledged without a valid network,
+                holds no network.
+            UniFiResponseError: If the follow-up ``get()`` response fails validation.
+
         """
         path = self._client.build_api_path(f"/sites/{site_id}/wifi/broadcasts/{wifi_id}")
         current_payload = self._extract_wifi_payload(await self._client._get(path))
         if current_payload is None:
-            raise ValueError(f"WiFi network {wifi_id} not found")
+            msg = f"WiFi network {wifi_id} not found"
+            raise UniFiNotFoundError(msg, status_code=200)
 
         # UniFi Network expects a full WiFi broadcast document via PUT rather than
         # a partial PATCH payload for updates on current controller versions.
@@ -244,11 +255,10 @@ class WifiEndpoint:
         current_payload.update(kwargs)
 
         response = await self._client._put(path, json_data=current_payload)
-        result = self._extract_wifi_payload(response)
-        if result is not None:
-            return WifiNetwork.model_validate(result)
-        # No body: return what was sent, with the id the PUT body can't carry.
-        return WifiNetwork.model_validate({**current_payload, "id": wifi_id})
+        written = written_record(response, WifiNetwork, id_key=None)
+        if written is not None:
+            return written
+        return await self.get(site_id, wifi_id)
 
     async def delete(self, site_id: str, wifi_id: str) -> bool:
         """

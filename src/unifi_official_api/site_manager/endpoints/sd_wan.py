@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ...validation import parse_records, require_record
 from ..models.sd_wan import SDWanConfig, SDWanConfigDetail, SDWanStatus
 
 if TYPE_CHECKING:
@@ -22,21 +23,13 @@ class SDWanEndpoint:
             return []
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [SDWanConfig.model_validate(item) for item in data]
+            return parse_records(SDWanConfig, data, "SD-WAN config")
         return []
 
     async def get_config(self, config_id: str) -> SDWanConfigDetail:
         response = await self._client._get(f"/v1/sd-wan-configs/{config_id}")
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict) and "id" in data:
-                return SDWanConfigDetail.model_validate(data)
-        raise ValueError(f"SD-WAN config {config_id} not found")
+        return require_record(response, SDWanConfigDetail, f"SD-WAN config {config_id}")
 
     async def get_status(self, config_id: str) -> SDWanStatus:
         response = await self._client._get(f"/v1/sd-wan-configs/{config_id}/status")
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict) and "id" in data:
-                return SDWanStatus.model_validate(data)
-        raise ValueError(f"SD-WAN status for {config_id} not found")
+        return require_record(response, SDWanStatus, f"SD-WAN status for {config_id}")

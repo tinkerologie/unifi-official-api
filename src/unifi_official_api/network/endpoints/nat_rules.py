@@ -14,7 +14,7 @@ from ...exceptions import (
     UniFiRuleNotEditableError,
     UniFiValidationError,
 )
-from ...validation import sanitized_validation_fields
+from ...validation import parse_record, sanitized_validation_fields, written_record
 from ..models.nat_rule import (
     NatRule,
     is_predefined_nat_rule,
@@ -143,7 +143,7 @@ class NatRulesEndpoint:
         current = next((i for i in items if (i.get("_id") or i.get("id")) == rule_id), None)
         if current is None:
             msg = f"NAT rule {rule_id} not found"
-            raise UniFiNotFoundError(msg, status_code=404)
+            raise UniFiNotFoundError(msg, status_code=200)
 
         if is_predefined_nat_rule(current):
             raise UniFiRuleNotEditableError(f"NAT rule {rule_id} is managed by the console")
@@ -156,6 +156,7 @@ class NatRulesEndpoint:
         )
         put_items = self._extract_items(await self._client._put(put_path, json_data=payload))
         if put_items and (put_items[0].get("_id") or put_items[0].get("id")) == rule_id:
-            return NatRule.model_validate(put_items[0])
-
-        return NatRule.model_validate(payload)
+            written = written_record(put_items[0], NatRule, id_key=None)
+            if written is not None:
+                return written
+        return parse_record(NatRule, payload, f"NAT rule {rule_id}")

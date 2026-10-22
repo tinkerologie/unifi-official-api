@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ...validation import require_record
 from ..models import NVR
 
 if TYPE_CHECKING:
@@ -33,14 +34,10 @@ class NVREndpoint:
         Returns:
             The NVR information.
 
+        Raises:
+            UniFiNotFoundError: If the response holds no NVR with an ``id``.
+            UniFiResponseError: If the NVR in the response fails validation.
+
         """
         path = self._client.build_api_path("/nvrs", site_id)
-        response = await self._client._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return NVR.model_validate(data)
-            if isinstance(data, list) and len(data) > 0:
-                return NVR.model_validate(data[0])
-        raise ValueError("NVR not found")
+        return require_record(await self._client._get(path), NVR, "NVR")

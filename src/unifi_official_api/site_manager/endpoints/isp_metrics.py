@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ...validation import parse_record, parse_records
 from ..models.isp_metric import ISPMetric, ISPMetricQuery, ISPMetricQueryResult
 
 if TYPE_CHECKING:
@@ -39,6 +40,9 @@ class ISPMetricsEndpoint:
 
         Returns:
             List of ISPMetric data points.
+
+        Raises:
+            UniFiResponseError: If an item in the response fails validation.
         """
         params: dict[str, Any] = {}
         if host_id:
@@ -52,7 +56,7 @@ class ISPMetricsEndpoint:
             return []
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [ISPMetric.model_validate(item) for item in data]
+            return parse_records(ISPMetric, data, "ISP metric")
         return []
 
     async def query(
@@ -69,6 +73,9 @@ class ISPMetricsEndpoint:
 
         Returns:
             ISPMetricQueryResult containing matching metrics.
+
+        Raises:
+            UniFiResponseError: If the query result in the response fails validation.
         """
         payload = (
             query_data.model_dump(by_alias=True, exclude_none=True)
@@ -81,5 +88,5 @@ class ISPMetricsEndpoint:
         if isinstance(response, dict):
             data = response.get("data", response)
             if isinstance(data, dict):
-                return ISPMetricQueryResult.model_validate(data)
+                return parse_record(ISPMetricQueryResult, data, "ISP metric query")
         return ISPMetricQueryResult()

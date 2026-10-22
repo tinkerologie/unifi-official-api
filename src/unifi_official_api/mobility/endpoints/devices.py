@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ...validation import parse_records, require_record
 from ..models.config import UpdateDeviceNameReq
 from ..models.device import MobilityDeviceDetail, MobilityDeviceSummary
 
@@ -23,18 +24,16 @@ class DevicesEndpoint:
             return []
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [MobilityDeviceSummary.model_validate(item) for item in data]
+            return parse_records(MobilityDeviceSummary, data, "Mobility device")
         return []
 
     async def get(self, workspace_id: str, device_id: str) -> MobilityDeviceDetail:
         response = await self._client._get(
             f"/v1/mobility/workspaces/{workspace_id}/devices/{device_id}"
         )
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict) and "id" in data:
-                return MobilityDeviceDetail.model_validate(data)
-        raise ValueError(f"Device {device_id} not found in workspace {workspace_id}")
+        return require_record(
+            response, MobilityDeviceDetail, f"Device {device_id} in workspace {workspace_id}"
+        )
 
     async def update_name(
         self,

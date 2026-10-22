@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ...validation import parse_records
 from ..models.resources import (
     DeviceTag,
     RADIUSProfile,
@@ -51,6 +52,9 @@ class ResourcesEndpoint:
         Returns:
             List of WAN interfaces.
 
+        Raises:
+            UniFiResponseError: If an item in the response fails validation.
+
         """
         params: dict[str, Any] = {}
         if offset is not None:
@@ -66,7 +70,7 @@ class ResourcesEndpoint:
 
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [WANInterface.model_validate(item) for item in data]
+            return parse_records(WANInterface, data, "WAN interface")
         return []
 
     # VPN Tunnels
@@ -91,6 +95,9 @@ class ResourcesEndpoint:
         Returns:
             List of VPN tunnels.
 
+        Raises:
+            UniFiResponseError: If an item in the response fails validation.
+
         """
         params: dict[str, Any] = {}
         if offset is not None:
@@ -108,7 +115,7 @@ class ResourcesEndpoint:
 
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [VPNTunnel.model_validate(item) for item in data]
+            return parse_records(VPNTunnel, data, "VPN tunnel")
         return []
 
     # VPN Servers
@@ -133,6 +140,9 @@ class ResourcesEndpoint:
         Returns:
             List of VPN servers.
 
+        Raises:
+            UniFiResponseError: If an item in the response fails validation.
+
         """
         params: dict[str, Any] = {}
         if offset is not None:
@@ -150,7 +160,7 @@ class ResourcesEndpoint:
 
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [VPNServer.model_validate(item) for item in data]
+            return parse_records(VPNServer, data, "VPN server")
         return []
 
     # RADIUS Profiles
@@ -175,6 +185,9 @@ class ResourcesEndpoint:
         Returns:
             List of RADIUS profiles.
 
+        Raises:
+            UniFiResponseError: If an item in the response fails validation.
+
         """
         params: dict[str, Any] = {}
         if offset is not None:
@@ -192,7 +205,7 @@ class ResourcesEndpoint:
 
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [RADIUSProfile.model_validate(item) for item in data]
+            return parse_records(RADIUSProfile, data, "RADIUS profile")
         return []
 
     # Device Tags
@@ -217,6 +230,9 @@ class ResourcesEndpoint:
         Returns:
             List of device tags.
 
+        Raises:
+            UniFiResponseError: If an item in the response fails validation.
+
         """
         params: dict[str, Any] = {}
         if offset is not None:
@@ -234,5 +250,5 @@ class ResourcesEndpoint:
 
         data = response.get("data", response) if isinstance(response, dict) else response
         if isinstance(data, list):
-            return [DeviceTag.model_validate(item) for item in data]
+            return parse_records(DeviceTag, data, "Device tag")
         return []

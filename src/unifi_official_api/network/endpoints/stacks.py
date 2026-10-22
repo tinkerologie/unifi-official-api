@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ...validation import require_record
 from ..models.stack import SwitchStack
 from .lags import _list_paginated
 
@@ -67,18 +68,16 @@ class StacksEndpoint:
             The switch stack.
 
         Raises:
-            ValueError: If the switch stack is not found.
+            UniFiNotFoundError: If the response holds no switch stack.
+            UniFiResponseError: If the switch stack in the response fails validation.
 
         """
         path = self._client.build_api_path(
             f"/sites/{site_id}/switching/switch-stacks/{switch_stack_id}"
         )
-        response = await self._client._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return SwitchStack.model_validate(data)
-            if isinstance(data, list) and len(data) > 0:
-                return SwitchStack.model_validate(data[0])
-        raise ValueError(f"Switch stack {switch_stack_id} not found")
+        return require_record(
+            await self._client._get(path),
+            SwitchStack,
+            f"Switch stack {switch_stack_id}",
+            id_key=None,
+        )

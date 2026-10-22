@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
 
+from ...validation import require_record, written_record
 from ..models.viewer import Viewer
 
 if TYPE_CHECKING:
@@ -79,17 +80,13 @@ class ViewersEndpoint:
         Returns:
             The viewer.
 
+        Raises:
+            UniFiNotFoundError: If the response holds no viewer with an ``id``.
+            UniFiResponseError: If the viewer in the response fails validation.
+
         """
         path = self._client.build_api_path(f"/viewers/{viewer_id}", site_id)
-        response = await self._client._get(path)
-
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return Viewer.model_validate(data)
-            if isinstance(data, list) and len(data) > 0:
-                return Viewer.model_validate(data[0])
-        raise ValueError(f"Viewer {viewer_id} not found")
+        return require_record(await self._client._get(path), Viewer, f"Viewer {viewer_id}")
 
     async def update(
         self,
@@ -108,15 +105,16 @@ class ViewersEndpoint:
         Returns:
             The updated viewer.
 
+        Raises:
+            UniFiNotFoundError: If the follow-up ``get()`` finds no viewer.
+            UniFiResponseError: If the follow-up ``get()`` response fails validation.
+
         """
         path = self._client.build_api_path(f"/viewers/{viewer_id}", site_id)
-        response = await self._client._patch(path, json_data=kwargs)
-
-        if isinstance(response, dict):
-            result = response.get("data", response)
-            if isinstance(result, dict):
-                return Viewer.model_validate(result)
-        raise ValueError("Failed to update viewer")
+        written = written_record(await self._client._patch(path, json_data=kwargs), Viewer)
+        if written is not None:
+            return written
+        return await self.get(viewer_id, site_id)
 
     async def set_liveview(
         self,

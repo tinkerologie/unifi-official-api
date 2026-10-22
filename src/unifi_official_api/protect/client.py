@@ -17,12 +17,6 @@ from ..const import (
     PROTECT_RATE_LIMIT_WINDOW,
     ConnectionType,
 )
-from ..exceptions import (
-    UniFiAuthenticationError,
-    UniFiConnectionError,
-    UniFiRateLimitError,
-    UniFiResponseError,
-)
 from .endpoints import (
     AlarmHubsEndpoint,
     AlarmManagerEndpoint,
@@ -348,7 +342,8 @@ class UniFiProtectClient(BaseUniFiClient):
             The host ID (NVR ID).
 
         Raises:
-            ValueError: If NVR info cannot be retrieved.
+            UniFiNotFoundError: If the NVR response holds no NVR.
+            UniFiResponseError: If the NVR response fails validation.
 
         Example:
             ```python
@@ -382,16 +377,13 @@ class UniFiProtectClient(BaseUniFiClient):
             Binary response data.
 
         Raises:
-            UniFiConnectionError: If connection fails.
+            UniFiAuthenticationError: If the console answers 401 or 403.
+            UniFiNotFoundError: If the console answers 404.
+            UniFiRateLimitError: If the console still answers 429 after one retry.
+            UniFiResponseError: If the console answers any other 4xx or 5xx status.
+            UniFiConnectionError: If the console cannot be reached.
             UniFiTimeoutError: If request times out.
 
         """
-        try:
-            data, _ = await self._get_binary_with_content_type(path, params=params)
-            return data
-        except UniFiAuthenticationError as err:
-            msg = f"Failed to fetch binary data: {err.status_code} - {err.message}"
-            raise UniFiConnectionError(msg) from err
-        except (UniFiRateLimitError, UniFiResponseError) as err:
-            msg = f"Failed to fetch binary data: {err.status_code} - {err.response_body}"
-            raise UniFiConnectionError(msg) from err
+        data, _ = await self._get_binary_with_content_type(path, params=params)
+        return data
