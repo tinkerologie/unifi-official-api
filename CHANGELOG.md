@@ -13,7 +13,7 @@ A breaking release (#44, #45, #46, #47). Upgrading from 2.x:
 
 - Drop calls to the Protect methods that never worked against a console (listed under **Removed**); use `ptz_goto_preset()` / `ptz_patrol_*()` for PTZ and `websocket.subscribe_events()` for events.
 - Drop `width=` / `height=` from `cameras.get_snapshot()`; pass `channel="main"` or `channel="package"` instead.
-- Catch `UniFiNotFoundError` / `UniFiResponseError` / `UniFiError` where you caught `ValueError` or pydantic `ValidationError` from an API call, and `UniFiResponseError` where you caught `UniFiConnectionError` for an HTTP error on a snapshot or download.
+- Catch `UniFiNotFoundError` / `UniFiResponseError` / `UniFiError` where you caught `ValueError` or pydantic `ValidationError` from an API call, and `UniFiResponseError` plus `UniFiAuthenticationError` (or simply `UniFiError`) where you caught `UniFiConnectionError` for an HTTP error on a snapshot or download: a 401 or 403 raises `UniFiAuthenticationError`, which is not a `UniFiResponseError`.
 - Pass device, alarm hub and arm profile settings as keyword arguments, never as a dict in the `site_id` position.
 - Create `TalkbackStream(session, url, loop=...)` or `executor=...` by keyword, and read `media_source` instead of `media_url`.
 
