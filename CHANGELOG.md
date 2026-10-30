@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A scheduled workflow checks developer.ui.com on the 1st and 15th of each month for Network, Protect, InnerSpace, Mobility, Site Manager and Carrier Fabric API versions newer than the pinned `*_SPEC_VERSION` constants. It opens an issue labeled `bug` or `enhancement` only when the new OpenAPI spec differs in more than documentation, and never reports the same version twice (#64).
+
 ## [3.0.0] - 2026-10-22
 
 A breaking release (#44, #45, #46, #47). Upgrading from 2.x:
