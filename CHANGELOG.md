@@ -17,6 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The Network spec pin moves to 11.0.97: `NETWORK_SPEC_VERSION` is `"11.0.97"` and the conformance test checks against the vendored 11.0.97 document. No operation changed; the radio changes (`txPowerMode`, 0.9 GHz, `802.11ah`) pass through the untyped radio dictionaries unchanged (#66).
 - `FirewallEndpoint.patch_rule()`'s `logging_enabled` is now optional. Only the fields you pass are sent, and calling it with neither field raises `ValueError` before any request (#66).
+- One `SwitchStack` model now serves both `/switching/switch-stacks` endpoints: `network.models.switching` re-exports the classes from `network.models.stack`, so `switching.SwitchStack` and `stack.SwitchStack` are the same class. `switching.SwitchStack.lags` is now `list[SwitchStackLag]` instead of `list[dict[str, Any]]` (#68).
+
+### Deprecated
+
+- `SwitchStack.members` is the Network 10.4.57 shape. It still parses and defaults to an empty list, and it is removed in the next major release; read `SwitchStack.units` instead (#68).
+
+### Fixed
+
+- Switch stack models follow the Network 11.0.97 `IntegrationSwitchStackDto` shape: `SwitchStack.device_id` (`deviceId`) and the `units` list are typed by `SwitchStackUnit` (`id`, `mac_address`, `order`, `role` as `SwitchStackUnitRole`), and stack LAG members carry `unitId` / `unitMacAddress` beside `portIdxs`. A v11 response no longer leaves those fields as untyped extras (#68).
 
 ## [3.0.0] - 2026-10-22
 

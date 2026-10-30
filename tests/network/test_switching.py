@@ -8,6 +8,7 @@ from aioresponses import aioresponses
 from unifi_official_api import ConnectionType, LocalAuth
 from unifi_official_api.exceptions import UniFiNotFoundError
 from unifi_official_api.network import UniFiNetworkClient
+from unifi_official_api.network.models.stack import SwitchStackUnitRole
 from unifi_official_api.network.models.switching import (
     Lag,
     LagPage,
@@ -209,3 +210,99 @@ class TestSwitchingEndpoint:
 
             with pytest.raises(UniFiNotFoundError):
                 await client.switching.get_switch_stack("default", "bad-id")
+
+    async def test_get_switch_stacks_v11_units(
+        self, client: UniFiNetworkClient, mock_aioresponse: aioresponses
+    ) -> None:
+        """Test get_switch_stacks with the Network 11.0.97 units shape."""
+        mock_aioresponse.get(
+            "https://192.168.1.1/proxy/network/integration/v1/sites/default/switching/switch-stacks?limit=10",
+            payload={
+                "data": [
+                    {
+                        "id": "stack-1",
+                        "name": "Stack 1",
+                        "deviceId": "dev-1",
+                        "units": [
+                            {
+                                "id": 1,
+                                "macAddress": "11:22:33:44:55:66",
+                                "order": 1,
+                                "role": "ACTIVE_CONTROLLER",
+                            }
+                        ],
+                        "lags": [
+                            {
+                                "id": "lag-1",
+                                "members": [
+                                    {
+                                        "unitId": 1,
+                                        "unitMacAddress": "11:22:33:44:55:66",
+                                        "portIdxs": [1, 2],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ],
+                "totalCount": 1,
+            },
+        )
+
+        async with client:
+            page = await client.switching.get_switch_stacks("default", limit=10)
+
+        assert isinstance(page, SwitchStackPage)
+        stack = page.data[0]
+        assert stack.device_id == "dev-1"
+        assert stack.units[0].mac_address == "11:22:33:44:55:66"
+        assert stack.units[0].role == SwitchStackUnitRole.ACTIVE_CONTROLLER
+        assert stack.members == []
+        member = stack.lags[0].members[0]
+        assert member.unit_id == 1
+        assert member.unit_mac_address == "11:22:33:44:55:66"
+        assert member.port_idxs == [1, 2]
+
+    async def test_get_switch_stack_v11_units(
+        self, client: UniFiNetworkClient, mock_aioresponse: aioresponses
+    ) -> None:
+        """Test get_switch_stack with the Network 11.0.97 units shape."""
+        mock_aioresponse.get(
+            "https://192.168.1.1/proxy/network/integration/v1/sites/default/switching/switch-stacks/stack-1",
+            payload={
+                "data": {
+                    "id": "stack-1",
+                    "name": "Stack 1",
+                    "deviceId": "dev-1",
+                    "units": [
+                        {
+                            "id": 2,
+                            "macAddress": "11:22:33:44:55:77",
+                            "order": 2,
+                            "role": "MEMBER",
+                        }
+                    ],
+                    "lags": [
+                        {
+                            "id": "lag-1",
+                            "members": [
+                                {
+                                    "unitId": 2,
+                                    "unitMacAddress": "11:22:33:44:55:77",
+                                    "portIdxs": [3],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            },
+        )
+
+        async with client:
+            stack = await client.switching.get_switch_stack("default", "stack-1")
+
+        assert isinstance(stack, SwitchStack)
+        assert stack.units[0].id == 2
+        assert stack.units[0].order == 2
+        assert stack.units[0].role == SwitchStackUnitRole.MEMBER
+        assert stack.lags[0].members[0].unit_id == 2
