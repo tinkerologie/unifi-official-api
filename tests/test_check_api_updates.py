@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import http.client
 import importlib.util
 import json
 import sys
@@ -221,3 +222,63 @@ def test_every_product_has_a_pinned_version() -> None:
 
     for product in mon.PRODUCTS:
         assert mon.VERSION_RE.match(constants[product.constant]), product.constant
+
+
+def test_shared_parameters_merge_with_mixed_and_empty_lists() -> None:
+    old = _base()
+    old["paths"]["/v1/things"]["parameters"] = [
+        {"$ref": "#/components/parameters/siteId"},
+        {"name": "x-trace", "in": "header"},
+    ]
+    old["paths"]["/v1/things"]["post"]["parameters"] = []
+    new = copy.deepcopy(old)
+    new["paths"]["/v1/things"]["get"]["parameters"].append({"name": "offset", "in": "query"})
+
+    result = mon.compare_specs(old, new)
+
+    assert list(result.operation_changes) == ["GET /v1/things"]
+    assert not result.breaking
+
+
+def test_open_retries_errors_raised_while_reading_the_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Response:
+        def __enter__(self) -> _Response:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def geturl(self) -> str:
+            return "https://developer.ui.com/network/v1.0.0/gettingstarted"
+
+        def read(self) -> bytes:
+            return b"{}"
+
+    calls: list[int] = []
+
+    def _urlopen(*_args: object, **_kwargs: object) -> _Response:
+        calls.append(1)
+        if len(calls) == 1:
+            raise http.client.IncompleteRead(b"")
+        if len(calls) == 2:
+            raise ConnectionResetError
+        return _Response()
+
+    monkeypatch.setattr(mon.urllib.request, "urlopen", _urlopen)
+    monkeypatch.setattr(mon.time, "sleep", lambda _seconds: None)
+
+    assert mon._open("https://developer.ui.com/network")[1] == b"{}"
+    assert len(calls) == 3
+
+
+def test_open_raises_fetch_error_after_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _urlopen(*_args: object, **_kwargs: object) -> None:
+        raise ConnectionResetError
+
+    monkeypatch.setattr(mon.urllib.request, "urlopen", _urlopen)
+    monkeypatch.setattr(mon.time, "sleep", lambda _seconds: None)
+
+    with pytest.raises(mon.FetchError):
+        mon._open("https://developer.ui.com/network")

@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import http.client
 import json
 import os
 import re
@@ -142,11 +143,20 @@ def normalize(node: Any, *, name_map: bool = False, key: str | None = None) -> A
     if isinstance(node, list):
         if key in UNORDERED_LIST_KEYS and all(not isinstance(i, dict | list) for i in node):
             return sorted({_sort_key(i): i for i in node}.values(), key=_sort_key)
+        if key == "parameters" and all(isinstance(i, dict) for i in node):
+            # Key each parameter by identity so shared and per-operation lists merge.
+            keyed: dict[str, Any] = {}
+            for i in node:
+                if set(i) == {"$ref"}:
+                    keyed[i["$ref"]] = {}
+                elif "name" in i and "in" in i:
+                    keyed[f"{i['in']}:{i['name']}"] = normalize(i)
+                else:
+                    keyed[_sort_key(i)] = normalize(i)
+            return keyed
         if node and all(isinstance(i, dict) and set(i) == {"$ref"} for i in node):
             # oneOf/anyOf/allOf of references: key by target so one new variant is one change.
             return {i["$ref"]: {} for i in node}
-        if node and all(isinstance(i, dict) and "name" in i and "in" in i for i in node):
-            return {f"{i['in']}:{i['name']}": normalize(i) for i in node}
         return [normalize(i) for i in node]
     return node
 
@@ -253,12 +263,13 @@ def _operations(spec: dict[str, Any]) -> dict[str, Any]:
     for path, item in spec.get("paths", {}).items():
         if not isinstance(item, dict):
             continue
-        shared = item.get("parameters", {})
+        shared = item.get("parameters")
         for method in HTTP_METHODS:
-            if method in item:
+            if isinstance(item.get(method), dict):
                 op = dict(item[method])
-                if shared:
-                    op["parameters"] = {**shared, **op.get("parameters", {})}
+                own = op.get("parameters")
+                if isinstance(shared, dict) and shared:
+                    op["parameters"] = {**shared, **(own if isinstance(own, dict) else {})}
                 ops[f"{method.upper()} {path}"] = op
     return ops
 
@@ -484,7 +495,8 @@ def _open(url: str, attempts: int = 3) -> tuple[str, bytes]:
             if err.code < 500 and err.code != 429:
                 raise FetchError(f"{url}: HTTP {err.code}") from err
             error = err
-        except (urllib.error.URLError, TimeoutError) as err:
+        except (http.client.HTTPException, OSError) as err:
+            # Covers URLError, timeouts, and resets or short reads while reading the body.
             error = err
         if attempt < attempts:
             time.sleep(5 * attempt)
@@ -537,6 +549,11 @@ def read_pinned_versions(const_path: Path = CONST_PATH) -> dict[str, str]:
         ):
             values[target.id] = value.value
     return values
+
+
+def _out(text: str) -> None:
+    """Write a line to stdout, where Actions reads ``::warning::`` and similar commands."""
+    sys.stdout.write(text + "\n")
 
 
 def version_tuple(version: str) -> tuple[int, ...]:
@@ -732,7 +749,7 @@ def main(argv: list[str] | None = None) -> int:
     constants = read_pinned_versions()
     missing = [p.constant for p in PRODUCTS if p.constant not in constants]
     if missing:
-        print(f"::error::Missing constants in const.py: {', '.join(missing)}")
+        _out(f"::error::Missing constants in const.py: {', '.join(missing)}")
         return 1
 
     reports: list[Report] = []
@@ -743,7 +760,7 @@ def main(argv: list[str] | None = None) -> int:
             report, line = check_product(product, constants[product.constant])
         except FetchError as err:
             failures += 1
-            print(f"::warning::{product.name}: skipped, {err}")
+            _out(f"::warning::{product.name}: skipped, {err}")
             status.append(f"{product.name}: skipped ({err})")
             continue
         status.append(line)
@@ -769,10 +786,10 @@ def main(argv: list[str] | None = None) -> int:
     elif reports and not args.apply:
         output += ["", "_Report only: no issues were opened or updated._"]
     text = "\n".join(output)
-    print(text)
+    _out(text)
     if args.show_body:
         for report in reports:
-            print(f"\n---\n{report.title}\nlabels: {report.label}\n\n{report.body()}")
+            _out(f"\n---\n{report.title}\nlabels: {report.label}\n\n{report.body()}")
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary_path:
         with Path(summary_path).open("a", encoding="utf-8") as handle:
@@ -780,7 +797,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Fail only when nothing could be checked, which points at a site change rather than a blip.
     if failures == len(PRODUCTS):
-        print("::error::Every product failed; developer.ui.com may have changed its layout.")
+        _out("::error::Every product failed; developer.ui.com may have changed its layout.")
         return 1
     return 0
 
