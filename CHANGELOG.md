@@ -9,7 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `FirewallRule.report_flow_enabled` (`reportFlowEnabled`, Network 11.0.97): whether Insights Flows reports traffic matched by the policy. It is `None` when the console does not report it, as on Network before 11.0.97 (#66).
+- `FirewallEndpoint.patch_rule()` takes `report_flow_enabled`. Pass `reportFlowEnabled=...` to `create_rule()` and `update_rule()` as before; `create_rule()` leaves it to the console, which defaults it to true (#66).
 - A scheduled workflow checks developer.ui.com on the 1st and 15th of each month for Network, Protect, InnerSpace, Mobility, Site Manager and Carrier Fabric API versions newer than the pinned `*_SPEC_VERSION` constants. It opens an issue labeled `bug` or `enhancement` only when the new OpenAPI spec differs in more than documentation, and never reports the same version twice (#64).
+
+### Changed
+
+- The Network spec pin moves to 11.0.97: `NETWORK_SPEC_VERSION` is `"11.0.97"` and the conformance test checks against the vendored 11.0.97 document. No operation changed; the radio changes (`txPowerMode`, 0.9 GHz, `802.11ah`) pass through the untyped radio dictionaries unchanged (#66).
+- `FirewallEndpoint.patch_rule()`'s `logging_enabled` is now optional. Only the fields you pass are sent, and calling it with neither field raises `ValueError` before any request (#66).
 
 ## [3.0.0] - 2026-10-22
 

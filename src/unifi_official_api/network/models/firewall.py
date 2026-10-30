@@ -60,6 +60,8 @@ class FirewallRule(BaseModel):
     index: int | None = None
     site_id: str | None = Field(default=None, alias="siteId")
     logging_enabled: bool = Field(default=False, alias="loggingEnabled")
+    # None when the console does not report it (Network before 11.0.97).
+    report_flow_enabled: bool | None = Field(default=None, alias="reportFlowEnabled")
     logging: bool = False
     action: FirewallAction | FirewallActionConfig | dict[str, Any] | str = FirewallAction.BLOCK
     protocol: str | None = Field(default=None)

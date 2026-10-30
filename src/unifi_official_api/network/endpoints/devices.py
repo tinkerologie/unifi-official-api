@@ -160,7 +160,7 @@ class DevicesEndpoint:
         Execute an adopted-device action.
 
         Spec: ``POST /v1/sites/{siteId}/devices/{deviceId}/actions`` with
-        ``{"action": ...}``; Network v10.6.106 defines only ``RESTART``.
+        ``{"action": ...}``; Network v11.0.97 defines only ``RESTART``.
         """
         if action not in DEVICE_ACTIONS:
             msg = f"Action must be one of: {', '.join(sorted(DEVICE_ACTIONS))}"
@@ -185,7 +185,7 @@ class DevicesEndpoint:
 
         Spec:
         ``POST /v1/sites/{siteId}/devices/{deviceId}/interfaces/ports/``
-        ``{portIdx}/actions`` with ``{"action": ...}``; Network v10.6.106
+        ``{portIdx}/actions`` with ``{"action": ...}``; Network v11.0.97
         defines only ``POWER_CYCLE``.
         """
         if action not in PORT_ACTIONS:

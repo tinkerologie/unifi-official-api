@@ -84,6 +84,7 @@ OVERRIDES: dict[str, dict[str, Any]] = {
     "devices.set_outlet_state": {"current_device": {"outlet_table": [{"index": 1}]}},
     "dns.create": {"domain": "example.com", "ipv4_address": "192.0.2.1"},
     "firewall.create_rule": {"source_zone_id": "id-zone", "destination_zone_id": "id-zone"},
+    "firewall.patch_rule": {"logging_enabled": True},
     "traffic.create_list": {"entries": ["443"]},
     "wifi.create": {"ssid": "id-name", "passphrase": "passphrase"},
 }
