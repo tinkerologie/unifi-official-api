@@ -2073,6 +2073,13 @@ def test_firewall_rule_report_flow_enabled_field() -> None:
     assert rule.model_dump(by_alias=True)["reportFlowEnabled"] is False
 
 
+def test_firewall_rule_report_flow_enabled_keeps_camel_case_access() -> None:
+    """rule.reportFlowEnabled still works, as it did through extra="allow" before."""
+    rule = FirewallRule.model_validate({"id": "r", "name": "R", "reportFlowEnabled": False})
+    assert rule.reportFlowEnabled is False
+    assert FirewallRule(id="r", name="R").reportFlowEnabled is None
+
+
 async def test_firewall_policy_ordering_pins_spec_request_and_branches() -> None:
     """firewall.get_policy_ordering and update_policy_ordering pin requests."""
     ordering_data = {

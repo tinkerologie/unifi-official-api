@@ -108,6 +108,14 @@ class FirewallRule(BaseModel):
         """CamelCase alias for logging_enabled."""
         return self.logging_enabled
 
+    @property
+    def reportFlowEnabled(self) -> bool | None:
+        """CamelCase alias for report_flow_enabled.
+
+        Before the field was typed, ``extra="allow"`` exposed the key under this name.
+        """
+        return self.report_flow_enabled
+
 
 class FirewallZone(BaseModel):
     """Model representing a UniFi Network v1 firewall zone."""
