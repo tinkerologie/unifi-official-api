@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -43,7 +43,7 @@ class ACLMetadata(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
-    origin: MetadataOrigin | str = Field(..., description="Rule origin")
+    origin: MetadataOrigin | str = Field(..., description="Rule origin", union_mode="left_to_right")
 
 
 class ACLDeviceFilter(BaseModel):
@@ -100,11 +100,11 @@ class ACLRule(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
     id: str | None = None
-    type: ACLRuleType | str = ACLRuleType.IPV4
+    type: ACLRuleType | str = Field(default=ACLRuleType.IPV4, union_mode="left_to_right")
     name: str
     description: str | None = None
     enabled: bool = True
-    action: ACLAction | str
+    action: ACLAction | str = Field(union_mode="left_to_right")
     index: int | None = None
     enforcing_device_ids: list[str] = Field(default_factory=list, alias="enforcingDeviceIds")
     enforcing_device_filter: ACLDeviceFilter | None = Field(
@@ -116,9 +116,13 @@ class ACLRule(BaseModel):
     destination_filter: ACLDestinationFilter | ACLTrafficSource | dict[str, Any] | None = Field(
         default=None, alias="destinationFilter"
     )
-    protocol_filter: list[ACLProtocol | str] = Field(default_factory=list, alias="protocolFilter")
+    protocol_filter: list[Annotated[ACLProtocol | str, Field(union_mode="left_to_right")]] = Field(
+        default_factory=list, alias="protocolFilter"
+    )
     network_id_filter: str | None = Field(default=None, alias="networkIdFilter")
-    metadata: ACLMetadata | dict[str, Any] | None = None
+    # The model branch stays first; it is inexact once a nested field has a
+    # union mode, so left-to-right keeps parsing dicts into ACLMetadata (#70).
+    metadata: ACLMetadata | dict[str, Any] | None = Field(default=None, union_mode="left_to_right")
 
     @property
     def display_name(self) -> str:

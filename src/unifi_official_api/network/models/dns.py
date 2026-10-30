@@ -54,7 +54,8 @@ class DNSPolicy(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
     id: str | None = None
-    type: DNSPolicyType | str
+    # Recognised values become enum members; unknown firmware values stay str.
+    type: DNSPolicyType | str = Field(union_mode="left_to_right")
     enabled: bool = True
     domain: str | None = None
     ipv4_address: str | None = Field(default=None, alias="ipv4Address")

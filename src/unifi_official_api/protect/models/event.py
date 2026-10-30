@@ -39,7 +39,7 @@ class Event(BaseModel):
     """Model representing a UniFi Protect event."""
 
     id: str
-    type: EventType | str
+    type: EventType | str = Field(union_mode="left_to_right")
     start: datetime | None = None
     end: datetime | None = None
     score: int | None = None

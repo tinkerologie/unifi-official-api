@@ -25,7 +25,9 @@ class WANInterface(BaseModel):
 
     id: str = Field(..., description="Interface identifier")
     name: str = Field(..., description="Interface name")
-    status: WANStatus | str | None = Field(None, description="Interface status")
+    status: WANStatus | str | None = Field(
+        None, description="Interface status", union_mode="left_to_right"
+    )
     ip_address: str | None = Field(None, alias="ipAddress")
     gateway: str | None = Field(None, description="Gateway address")
     dns: list[str] | None = Field(None, description="DNS servers")
@@ -51,7 +53,9 @@ class VPNTunnel(BaseModel):
 
     id: str = Field(..., description="Tunnel identifier")
     name: str | None = Field(None, description="Tunnel name")
-    status: VPNTunnelStatus | str | None = Field(None, description="Tunnel status")
+    status: VPNTunnelStatus | str | None = Field(
+        None, description="Tunnel status", union_mode="left_to_right"
+    )
     local_network: str | None = Field(None, alias="localNetwork")
     remote_network: str | None = Field(None, alias="remoteNetwork")
     remote_ip: str | None = Field(None, alias="remoteIp")
@@ -73,7 +77,9 @@ class VPNServer(BaseModel):
 
     id: str = Field(..., description="Server identifier")
     name: str | None = Field(None, description="Server name")
-    type: VPNServerType | str | None = Field(None, description="Server type")
+    type: VPNServerType | str | None = Field(
+        None, description="Server type", union_mode="left_to_right"
+    )
     enabled: bool = Field(True, description="Whether server is enabled")
     port: int | None = Field(None, description="Server port")
     network: str | None = Field(None, description="VPN network CIDR")
