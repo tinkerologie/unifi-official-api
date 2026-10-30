@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Deprecated
 
-- `SwitchStack.members` is the Network 10.4.57 shape. It still parses and defaults to an empty list, and it is removed in the next major release; read `SwitchStack.units` instead (#68).
+- `SwitchStack.members` is the Network 10.4.57 shape. It still parses and defaults to an empty list, and it will be removed in the next major release; read `SwitchStack.units` instead (#68).
 
 ### Fixed
 

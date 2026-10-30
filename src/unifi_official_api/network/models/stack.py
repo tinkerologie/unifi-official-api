@@ -60,8 +60,9 @@ class SwitchStackMember(BaseModel):
     """
     A device that is a member of a switch stack.
 
-    Covers the legacy 10.4.57 ``members`` entry as well as the stacked switch
-    fields a stack unit reports.
+    Covers the legacy 10.4.57 ``members`` entry (``deviceId``) plus the
+    ``switchMac``, ``role`` and ``state`` fields the former
+    ``switching.SwitchStackMember`` declared.
     """
 
     device_id: str | None = Field(default=None, alias="deviceId")
