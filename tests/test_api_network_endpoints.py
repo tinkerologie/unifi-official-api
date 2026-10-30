@@ -22,7 +22,7 @@ from unifi_official_api.network import (
     VpnClient,
 )
 from unifi_official_api.network.models.client import Client
-from unifi_official_api.network.models.device import Device
+from unifi_official_api.network.models.device import Device, DeviceInterfaces
 from unifi_official_api.network.models.firewall import FirewallRule
 from unifi_official_api.network.models.site import Site
 from unifi_official_api.network.models.voucher import Voucher
@@ -94,6 +94,23 @@ def _client(session: _Session) -> UniFiNetworkClient:
 # -----------------------------------------------------------------------------
 # Scope 1: Never run by any test (highest priority)
 # -----------------------------------------------------------------------------
+
+
+async def test_network_11_radio_values_pass_through() -> None:
+    """Network 11.0.97 radio values reach callers unchanged: radios stay untyped dicts."""
+    radio = {
+        "frequencyGHz": 0.9,
+        "wlanStandard": "802.11ah",
+        "txPowerMode": "CUSTOM",
+        "channelWidthMHz": 1,
+    }
+    device = Device.model_validate({"id": "dev-1", "interfaces": {"radios": [radio]}})
+    assert isinstance(device.interfaces, DeviceInterfaces)
+    assert device.interfaces.radios == [radio]
+
+    stats = {"interfaces": {"radios": [{"frequencyGHz": 0.9, "txRetriesPct": 1.5}]}}
+    session = _Session([{"data": stats}])
+    assert await _client(session).devices.get_statistics("default", "dev-1") == stats
 
 
 async def test_devices_get_statistics_pins_spec_request_and_response() -> None:

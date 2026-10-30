@@ -123,7 +123,7 @@ def _assert_request(
 
 
 def _wifi_document(name: str) -> dict[str, Any]:
-    """Required STANDARD broadcast fields from Network v10.6.106's schema."""
+    """Required STANDARD broadcast fields from Network v11.0.97's schema."""
     return {
         "type": "STANDARD",
         "name": name,

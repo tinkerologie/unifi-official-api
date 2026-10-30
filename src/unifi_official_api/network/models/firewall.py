@@ -60,6 +60,8 @@ class FirewallRule(BaseModel):
     index: int | None = None
     site_id: str | None = Field(default=None, alias="siteId")
     logging_enabled: bool = Field(default=False, alias="loggingEnabled")
+    # None when the console does not report it (Network before 11.0.97).
+    report_flow_enabled: bool | None = Field(default=None, alias="reportFlowEnabled")
     logging: bool = False
     action: FirewallAction | FirewallActionConfig | dict[str, Any] | str = FirewallAction.BLOCK
     protocol: str | None = Field(default=None)
@@ -105,6 +107,14 @@ class FirewallRule(BaseModel):
     def loggingEnabled(self) -> bool:
         """CamelCase alias for logging_enabled."""
         return self.logging_enabled
+
+    @property
+    def reportFlowEnabled(self) -> bool | None:
+        """CamelCase alias for report_flow_enabled.
+
+        Before the field was typed, ``extra="allow"`` exposed the key under this name.
+        """
+        return self.report_flow_enabled
 
 
 class FirewallZone(BaseModel):

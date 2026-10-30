@@ -1994,6 +1994,92 @@ async def test_firewall_patch_rule_pins_spec_request_and_branches() -> None:
         await client.firewall.patch_rule("default", "rule-1", logging_enabled=True)
 
 
+@pytest.mark.parametrize(
+    ("kwargs", "body"),
+    [
+        pytest.param({"logging_enabled": False}, {"loggingEnabled": False}, id="logging-false"),
+        pytest.param(
+            {"report_flow_enabled": True}, {"reportFlowEnabled": True}, id="report-flow-true"
+        ),
+        pytest.param(
+            {"report_flow_enabled": False}, {"reportFlowEnabled": False}, id="report-flow-false"
+        ),
+        pytest.param(
+            {"logging_enabled": True, "report_flow_enabled": False},
+            {"loggingEnabled": True, "reportFlowEnabled": False},
+            id="both-mixed",
+        ),
+        pytest.param(
+            {"logging_enabled": False, "report_flow_enabled": False},
+            {"loggingEnabled": False, "reportFlowEnabled": False},
+            id="both-false",
+        ),
+    ],
+)
+async def test_firewall_patch_rule_sends_only_given_fields(
+    kwargs: dict[str, bool], body: dict[str, bool]
+) -> None:
+    """patch_rule sends each field that is not None, including False."""
+    session = _Session([{"data": {"id": "rule-1", "name": "Rule 1"}}])
+
+    await _client(session).firewall.patch_rule("default", "rule-1", **kwargs)
+
+    assert [r["method"] for r in session.requests] == ["PATCH"]
+    assert session.requests[0]["json"] == body
+
+
+async def test_firewall_patch_rule_rejects_an_empty_patch_before_io() -> None:
+    """patch_rule with no field raises ValueError and sends nothing."""
+    session = _Session([])
+
+    with pytest.raises(ValueError, match="No firewall rule fields to patch"):
+        await _client(session).firewall.patch_rule("default", "rule-1")
+
+    assert session.requests == []
+
+
+async def test_firewall_patch_rule_report_flow_refetches_on_empty_ack() -> None:
+    """An empty PATCH acknowledgement re-fetches the rule with GET."""
+    session = _Session(
+        [None, {"data": {"id": "rule-1", "name": "Rule 1", "reportFlowEnabled": False}}]
+    )
+
+    result = await _client(session).firewall.patch_rule(
+        "default", "rule-1", report_flow_enabled=False
+    )
+
+    assert [r["method"] for r in session.requests] == ["PATCH", "GET"]
+    assert session.requests[0]["json"] == {"reportFlowEnabled": False}
+    assert result.report_flow_enabled is False
+
+
+def test_firewall_rule_report_flow_enabled_field() -> None:
+    """reportFlowEnabled is optional, aliased, and None when the console omits it."""
+    assert FirewallRule(id="r", name="R").report_flow_enabled is None
+    assert (
+        FirewallRule.model_validate(
+            {"id": "r", "name": "R", "reportFlowEnabled": True}
+        ).report_flow_enabled
+        is True
+    )
+    assert (
+        FirewallRule.model_validate(
+            {"id": "r", "name": "R", "reportFlowEnabled": False}
+        ).report_flow_enabled
+        is False
+    )
+    rule = FirewallRule(id="r", name="R", report_flow_enabled=False)
+    assert rule.report_flow_enabled is False
+    assert rule.model_dump(by_alias=True)["reportFlowEnabled"] is False
+
+
+def test_firewall_rule_report_flow_enabled_keeps_camel_case_access() -> None:
+    """rule.reportFlowEnabled still works, as it did through extra="allow" before."""
+    rule = FirewallRule.model_validate({"id": "r", "name": "R", "reportFlowEnabled": False})
+    assert rule.reportFlowEnabled is False
+    assert FirewallRule(id="r", name="R").reportFlowEnabled is None
+
+
 async def test_firewall_policy_ordering_pins_spec_request_and_branches() -> None:
     """firewall.get_policy_ordering and update_policy_ordering pin requests."""
     ordering_data = {
@@ -2341,7 +2427,7 @@ async def test_resources_wan_filter_pins_spec_request() -> None:
     assert session.requests[0]["params"] == {"offset": 0, "limit": 10}
 
 
-# UUIDs and payloads below follow Network v10.6.106 response schemas.
+# UUIDs and payloads below follow Network v11.0.97 response schemas.
 _MODEL_ID = "ffcdb32c-6278-4364-8947-df4f77118df8"
 _DEVICE_ID = "dfb21062-8ea0-4dca-b1d8-1eb3da00e58b"
 _METADATA = {"origin": "USER_DEFINED"}
@@ -2702,7 +2788,7 @@ def test_models_parse_legacy_field_aliases(
     """
     Characterization only, not a spec check.
 
-    These aliases aren't in the Network v10.6.106 spec and no integration code
+    These aliases aren't in the Network v11.0.97 spec and no integration code
     reads them. The test pins what the models accept today, so dropping an alias
     in a later cleanup is a deliberate change. Delete the matching case when one
     is removed.
@@ -2918,7 +3004,7 @@ async def test_firewall_create_rule_rejects_invalid_inputs(
 
 async def test_firewall_create_rule_spec_overrides() -> None:
     """Explicit nested spec fields override all defaults, including legacy zones."""
-    session = _Session([{"id": "rule", "name": "Rule"}])
+    session = _Session([{"id": "rule", "name": "Rule", "reportFlowEnabled": False}])
     overrides = {
         "action": {"type": "ALLOW", "allowReturnTraffic": True},
         "source": {"zoneId": "new-source"},
@@ -2926,10 +3012,11 @@ async def test_firewall_create_rule_spec_overrides() -> None:
         "ipProtocolScope": {"ipVersion": "IPV6"},
         "enabled": False,
         "loggingEnabled": True,
+        "reportFlowEnabled": False,
     }
     # The named action argument also accepts spec objects for ALLOW options.
     action_override = overrides.pop("action")
-    await _client(session).firewall.create_rule(
+    rule = await _client(session).firewall.create_rule(
         "default",
         name="Rule",
         action=action_override,
@@ -2948,6 +3035,7 @@ async def test_firewall_create_rule_spec_overrides() -> None:
         "action": action_override,
         **overrides,
     }
+    assert rule.report_flow_enabled is False
 
 
 async def test_firewall_create_rule_nested_allow_default() -> None:

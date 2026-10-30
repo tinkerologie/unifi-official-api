@@ -347,7 +347,9 @@ class FirewallEndpoint:
             protocol: Only all is supported; use ipProtocolScope for other protocols.
             source_zone_id: Source zone ID.
             destination_zone_id: Destination zone ID.
-            **kwargs: Additional parameters.
+            **kwargs: Additional parameters, sent as given in camelCase, such as
+                ``reportFlowEnabled=False``. The console defaults
+                ``reportFlowEnabled`` to true when it is omitted.
 
         Returns:
             The created firewall rule.
@@ -422,12 +424,14 @@ class FirewallEndpoint:
 
         Full policy updates require a complete policy document via PUT.
         Use ``patch_rule`` for the partial update the spec supports
-        (``loggingEnabled``).
+        (``loggingEnabled`` and ``reportFlowEnabled``).
 
         Args:
             site_id: The site ID.
             rule_id: The rule ID.
-            **kwargs: Parameters to update.
+            **kwargs: Parameters to update, in camelCase, such as
+                ``reportFlowEnabled=False``. Fields left out keep their current
+                values.
 
         Returns:
             The updated firewall rule.
@@ -478,27 +482,40 @@ class FirewallEndpoint:
         site_id: str,
         rule_id: str,
         *,
-        logging_enabled: bool,
+        logging_enabled: bool | None = None,
+        report_flow_enabled: bool | None = None,
     ) -> FirewallRule:
         """
-        Patch a firewall rule's loggingEnabled, the only field the spec patches.
+        Patch a firewall rule's loggingEnabled and reportFlowEnabled.
 
-        Use ``update_rule`` for any other change.
+        These are the only fields the spec patches; only the arguments that are
+        not None are sent. Use ``update_rule`` for any other change.
 
         Args:
             site_id: The site ID.
             rule_id: The rule ID.
             logging_enabled: Whether logging is enabled for this policy.
+            report_flow_enabled: Whether Insights Flows reports traffic matched by
+                this policy. The console ignores it for the predefined Allow Return
+                Traffic policies and the other predefined policies it never reports.
 
         Returns:
             The updated firewall rule.
 
         Raises:
+            ValueError: If neither field is passed; no request is made.
             UniFiNotFoundError: If the follow-up ``get_rule()`` finds no firewall rule.
             UniFiResponseError: If the follow-up ``get_rule()`` response fails validation.
 
         """
-        data = {"loggingEnabled": logging_enabled}
+        data: dict[str, bool] = {}
+        if logging_enabled is not None:
+            data["loggingEnabled"] = logging_enabled
+        if report_flow_enabled is not None:
+            data["reportFlowEnabled"] = report_flow_enabled
+        if not data:
+            msg = "No firewall rule fields to patch"
+            raise ValueError(msg)
 
         path = self._client.build_api_path(f"/sites/{site_id}/firewall/policies/{rule_id}")
         written = written_record(

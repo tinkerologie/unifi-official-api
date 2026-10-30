@@ -392,7 +392,7 @@ async def test_sites_get_all_skips_malformed_items() -> None:
 
 
 def test_sites_has_no_get_method() -> None:
-    """The OpenAPI spec v10.6.106 has no GET /sites/{id} endpoint."""
+    """The OpenAPI spec v11.0.97 has no GET /sites/{id} endpoint."""
     client = _network_client()
     assert not hasattr(client.sites, "get")
 
@@ -922,6 +922,7 @@ async def test_firewall_update_rule_empty_put_response_fallback(
         "enabled": True,
         "index": 3,
         "metadata": {"origin": "USER_DEFINED"},
+        "reportFlowEnabled": True,
     }
     client._get = AsyncMock(
         side_effect=[{"data": current}, {"data": {**current, "enabled": False}}]
@@ -936,24 +937,52 @@ async def test_firewall_update_rule_empty_put_response_fallback(
     assert result.enabled is False
     assert result.name == "Drop Rule"
     assert client._get.await_args_list == [call(path), call(path)]
+    # reportFlowEnabled is kept from the current rule when the caller omits it.
     client._put.assert_awaited_once_with(
-        path, json_data={"name": "Drop Rule", "action": "drop", "enabled": False}
+        path,
+        json_data={
+            "name": "Drop Rule",
+            "action": "drop",
+            "enabled": False,
+            "reportFlowEnabled": True,
+        },
     )
+    assert result.report_flow_enabled is True
     client._patch.assert_not_awaited()
 
 
 async def test_firewall_update_rule_returns_put_response() -> None:
     """When the PUT returns the rule, that is what update_rule returns."""
     client = _network_client()
-    client._get = AsyncMock(return_value={"id": "rule-1", "name": "Drop Rule", "enabled": True})
+    client._get = AsyncMock(
+        return_value={
+            "id": "rule-1",
+            "name": "Drop Rule",
+            "enabled": True,
+            "reportFlowEnabled": True,
+        }
+    )
     client._put = AsyncMock(
-        return_value={"data": {"id": "rule-1", "name": "Drop Rule", "enabled": False, "index": 7}}
+        return_value={
+            "data": {
+                "id": "rule-1",
+                "name": "Drop Rule",
+                "enabled": False,
+                "index": 7,
+                "reportFlowEnabled": False,
+            }
+        }
     )
 
-    result = await client.firewall.update_rule("site-1", "rule-1", enabled=False)
+    result = await client.firewall.update_rule(
+        "site-1", "rule-1", enabled=False, reportFlowEnabled=False
+    )
 
     assert result.enabled is False
     assert result.index == 7
+    # An explicit reportFlowEnabled overwrites the current value.
+    assert client._put.await_args.kwargs["json_data"]["reportFlowEnabled"] is False
+    assert result.report_flow_enabled is False
 
 
 async def test_clients_get_all_paginates_automatically() -> None:
@@ -4157,7 +4186,7 @@ async def test_site_report_bucket_and_endpoint_local_and_remote() -> None:
 
 
 def test_devices_has_no_locate_method() -> None:
-    """The OpenAPI spec v10.6.106 has no /locate endpoint."""
+    """The OpenAPI spec v11.0.97 has no /locate endpoint."""
     client = _network_client()
     assert not hasattr(client.devices, "locate")
 
@@ -4432,7 +4461,7 @@ async def test_networks_update_uses_put() -> None:
 
 
 async def test_firewall_patch_rule() -> None:
-    """firewall.patch_rule() patches only loggingEnabled, per the spec."""
+    """firewall.patch_rule() patches loggingEnabled and reportFlowEnabled, per the spec."""
     client = _network_client()
     client._patch = AsyncMock(
         return_value={
