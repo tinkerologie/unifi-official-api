@@ -1,0 +1,873 @@
+#!/usr/bin/env python3
+"""
+Check developer.ui.com for UniFi API releases newer than the versions the library pins.
+
+For each product, the latest version is the one ``https://developer.ui.com/<slug>``
+redirects to. The pinned version is the ``*_SPEC_VERSION`` constant in
+``src/unifi_official_api/const.py``. When the latest version is newer, the script
+downloads both OpenAPI documents and compares them after removing documentation-only
+content (descriptions, examples, titles, tags, operation IDs and ``x-`` extensions).
+
+An issue is opened only when that comparison finds a real change, so a version bump
+that ships an identical spec stays silent. The issue is labeled ``bug`` when the
+change can break existing callers (a removed operation, field or enum value, a
+changed type, or a newly required request input) and ``enhancement`` otherwise.
+
+Each issue carries a hidden marker with the product and version. A version that
+already has an issue, open or closed, is never reported again. When a newer version
+arrives while an older issue is still open, that issue is updated instead of opening
+a second one.
+
+The script uses only the standard library. It talks to GitHub through the ``gh`` CLI,
+which needs ``GH_TOKEN`` and ``GITHUB_REPOSITORY`` in the environment.
+
+Usage:
+    python script/check_api_updates.py            # report only
+    python script/check_api_updates.py --apply    # also open or update issues
+"""
+
+from __future__ import annotations
+
+import argparse
+import ast
+import http.client
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.request
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parent.parent
+CONST_PATH = ROOT / "src" / "unifi_official_api" / "const.py"
+FIXTURES_DIR = ROOT / "tests" / "fixtures"
+DEVELOPER_SITE = "https://developer.ui.com"
+USER_AGENT = (
+    "unifi-official-api-update-monitor (+https://github.com/tinkerologie/unifi-official-api)"
+)
+
+TRACKING_LABEL = "upstream-api"
+# ``confirmed`` keeps the stale workflow from closing an issue before it is implemented.
+EXTRA_LABELS = ("confirmed",)
+MARKER_RE = re.compile(
+    r"<!-- unifi-api-monitor: product=(?P<product>[a-z-]+) version=(?P<version>[0-9.]+) -->"
+)
+VERSION_RE = re.compile(r"^\d+(?:\.\d+)*$")
+MAX_DETAIL_LINES = 150
+MAX_BODY_CHARS = 60_000
+
+
+@dataclass(frozen=True)
+class Product:
+    """A UniFi API published on developer.ui.com."""
+
+    slug: str
+    name: str
+    constant: str
+
+
+PRODUCTS: tuple[Product, ...] = (
+    Product("network", "UniFi Network API", "NETWORK_SPEC_VERSION"),
+    Product("protect", "UniFi Protect API", "PROTECT_SPEC_VERSION"),
+    Product("innerspace", "UniFi InnerSpace API", "INNERSPACE_SPEC_VERSION"),
+    Product("mobility", "UniFi Mobility API", "MOBILITY_SPEC_VERSION"),
+    Product("site-manager", "UniFi Site Manager API", "SITE_MANAGER_SPEC_VERSION"),
+    Product("carrier-fabric", "UniFi Carrier Fabric API", "CARRIER_FABRIC_SPEC_VERSION"),
+)
+
+# ---------------------------------------------------------------------------
+# Spec normalization and diffing
+# ---------------------------------------------------------------------------
+
+# Keywords that only affect rendered documentation.
+ANNOTATION_KEYS = frozenset(
+    {
+        "description",
+        "summary",
+        "example",
+        "examples",
+        "externalDocs",
+        "title",
+        "tags",
+        "operationId",
+    }
+)
+# Keys whose children are user-chosen names, not keywords. A property called
+# ``description`` must survive normalization.
+NAME_MAP_KEYS = frozenset(
+    {
+        "properties",
+        "patternProperties",
+        "$defs",
+        "definitions",
+        "schemas",
+        "parameters",
+        "requestBodies",
+        "responses",
+        "headers",
+        "content",
+        "paths",
+        "variables",
+        "securitySchemes",
+        "dependentSchemas",
+    }
+)
+# Keywords whose values are literal data and must not be normalized.
+LITERAL_KEYS = frozenset({"const", "default", "enum"})
+# Lists of alternative schemas; order carries no meaning.
+COMPOSITION_KEYS = frozenset({"allOf", "anyOf", "oneOf"})
+# Lists whose order carries no meaning.
+UNORDERED_LIST_KEYS = frozenset({"required", "enum", "type"})
+HTTP_METHODS = ("get", "put", "post", "delete", "patch", "head", "options", "trace")
+
+
+def _sort_key(value: Any) -> str:
+    return json.dumps(value, sort_keys=True)
+
+
+def normalize(node: Any, *, name_map: bool = False, key: str | None = None) -> Any:
+    """Return ``node`` without documentation-only content, in a stable shape."""
+    if isinstance(node, dict):
+        if name_map:
+            return {k: normalize(v) for k, v in node.items()}
+        out: dict[str, Any] = {}
+        for k, v in node.items():
+            if k in ANNOTATION_KEYS or k.startswith("x-") or k == "info":
+                continue
+            if k in LITERAL_KEYS:
+                # Literal data: a ``description`` inside a ``const`` is a value, not docs.
+                out[k] = normalize(v, key=k) if k == "enum" else v
+                continue
+            out[k] = normalize(v, name_map=k in NAME_MAP_KEYS and isinstance(v, dict), key=k)
+        return out
+    if key == "type" and isinstance(node, str):
+        node = [node]  # "string" and ["string"] mean the same; keep one shape
+    if isinstance(node, list):
+        if key in UNORDERED_LIST_KEYS and all(not isinstance(i, dict | list) for i in node):
+            return sorted({_sort_key(i): i for i in node}.values(), key=_sort_key)
+        items = [normalize(i) for i in node]
+        if key == "parameters" and all(isinstance(i, dict) for i in items):
+            # Key each parameter by identity so shared and per-operation lists merge.
+            keyed: dict[str, Any] = {}
+            for i in items:
+                if "$ref" in i:
+                    keyed[i["$ref"]] = {k: v for k, v in i.items() if k != "$ref"}
+                elif "name" in i and "in" in i:
+                    keyed[f"{i['in']}:{i['name']}"] = i
+                else:
+                    keyed[_sort_key(i)] = i
+            return keyed
+        return items
+    return node
+
+
+@dataclass(frozen=True)
+class Change:
+    """One leaf-level difference between two normalized documents."""
+
+    kind: str  # "added", "removed" or "changed"
+    path: tuple[str, ...]
+    old: Any = None
+    new: Any = None
+
+
+def _keyed_alternatives(items: list[Any]) -> dict[str, Any]:
+    keyed: dict[str, Any] = {}
+    for item in items:
+        if isinstance(item, dict) and "$ref" in item:
+            keyed[item["$ref"]] = {k: v for k, v in item.items() if k != "$ref"}
+        else:
+            keyed[f"inline {_sort_key(item)}"] = item
+    return keyed
+
+
+def diff(old: Any, new: Any, path: tuple[str, ...] = ()) -> list[Change]:
+    """Return the leaf-level changes from ``old`` to ``new``."""
+    if isinstance(old, dict) and isinstance(new, dict):
+        changes: list[Change] = []
+        for k in sorted(set(old) | set(new)):
+            if k not in old:
+                changes.append(Change("added", (*path, k), new=new[k]))
+            elif k not in new:
+                changes.append(Change("removed", (*path, k), old=old[k]))
+            else:
+                changes.extend(diff(old[k], new[k], (*path, k)))
+        return changes
+    both_lists = isinstance(old, list) and isinstance(new, list)
+    if both_lists and path and path[-1] in COMPOSITION_KEYS:
+        if sorted(map(_sort_key, old)) == sorted(map(_sort_key, new)):
+            return []  # same alternatives in another order
+        if len(old) == len(new):
+            # Usually one alternative changed in place; diff inside it.
+            return [
+                c
+                for i, (a, b) in enumerate(zip(old, new, strict=True))
+                for c in diff(a, b, (*path, str(i)))
+            ]
+        return diff(_keyed_alternatives(old), _keyed_alternatives(new), path)
+    is_scalar_list = both_lists and all(not isinstance(i, dict | list) for i in [*old, *new])
+    if is_scalar_list and path and path[-1] in UNORDERED_LIST_KEYS:
+        added = [Change("added", path, new=i) for i in new if i not in old]
+        removed = [Change("removed", path, old=i) for i in old if i not in new]
+        return removed + added
+    if old != new:
+        return [Change("changed", path, old=old, new=new)]
+    return []
+
+
+def _collect_refs(node: Any, refs: set[str]) -> None:
+    if isinstance(node, dict):
+        ref = node.get("$ref")
+        if isinstance(ref, str):
+            refs.add(ref)
+        for v in node.values():
+            _collect_refs(v, refs)
+    elif isinstance(node, list):
+        for i in node:
+            _collect_refs(i, refs)
+
+
+def request_schema_names(spec: dict[str, Any]) -> set[str]:
+    """Return the component schemas reachable from any operation's request body."""
+    components = spec.get("components", {})
+    schemas = components.get("schemas", {})
+    bodies = components.get("requestBodies", {})
+    pending: set[str] = set()
+    for item in spec.get("paths", {}).values():
+        for method in HTTP_METHODS:
+            body = item.get(method, {}).get("requestBody") if isinstance(item, dict) else None
+            if body:
+                _collect_refs(body, pending)
+    for body in bodies.values():
+        _collect_refs(body, pending)
+    prefix = "#/components/schemas/"
+    seen: set[str] = set()
+    while pending:
+        ref = pending.pop()
+        name = ref.removeprefix(prefix)
+        if not ref.startswith(prefix) or name in seen or name not in schemas:
+            continue
+        seen.add(name)
+        _collect_refs(schemas[name], pending)
+    return seen
+
+
+@dataclass
+class SpecDiff:
+    """Differences between the pinned and latest spec of one product."""
+
+    added_operations: list[str] = field(default_factory=list)
+    removed_operations: list[str] = field(default_factory=list)
+    operation_changes: dict[str, list[Change]] = field(default_factory=dict)
+    added_schemas: list[str] = field(default_factory=list)
+    removed_schemas: list[str] = field(default_factory=list)
+    schema_changes: dict[str, list[Change]] = field(default_factory=dict)
+    other_changes: list[Change] = field(default_factory=list)
+    breaking: list[str] = field(default_factory=list)
+
+    @property
+    def is_empty(self) -> bool:
+        return not (
+            self.added_operations
+            or self.removed_operations
+            or self.operation_changes
+            or self.added_schemas
+            or self.removed_schemas
+            or self.schema_changes
+            or self.other_changes
+        )
+
+
+def _operations(spec: dict[str, Any]) -> dict[str, Any]:
+    ops: dict[str, Any] = {}
+    for path, item in spec.get("paths", {}).items():
+        if not isinstance(item, dict):
+            continue
+        shared = item.get("parameters")
+        for method in HTTP_METHODS:
+            if isinstance(item.get(method), dict):
+                op = dict(item[method])
+                own = op.get("parameters")
+                # Always a dict, so a first new parameter is one keyed change, not a whole list.
+                op["parameters"] = {
+                    **(shared if isinstance(shared, dict) else {}),
+                    **(own if isinstance(own, dict) else {}),
+                }
+                ops[f"{method.upper()} {path}"] = op
+    return ops
+
+
+def _path_item_extras(spec: dict[str, Any]) -> dict[str, Any]:
+    """Return path-level fields other than operations and parameters, such as ``servers``."""
+    extras: dict[str, Any] = {}
+    for path, item in spec.get("paths", {}).items():
+        if isinstance(item, dict):
+            rest = {k: v for k, v in item.items() if k not in HTTP_METHODS and k != "parameters"}
+            if rest:
+                extras[path] = rest
+    return extras
+
+
+def _breaking_reason(change: Change, *, request_side: bool) -> str | None:
+    """Return why ``change`` can break existing callers, or ``None``."""
+    path = change.path
+    last = path[-1] if path else ""
+    parent = path[-2] if len(path) > 1 else ""
+    if change.kind == "removed" and parent == "properties":
+        return f"field `{last}` removed"
+    # A removed element narrows what is allowed; removing the whole keyword widens it.
+    if change.kind == "removed" and last == "enum" and not isinstance(change.old, list):
+        return f"enum value `{change.old}` removed at `{_fmt_path(path)}`"
+    if change.kind == "removed" and last == "type" and not isinstance(change.old, list):
+        return f"type `{change.old}` no longer allowed at `{_fmt_path(path[:-1]) or '(root)'}`"
+    if last == "requestBody" and change.kind == "added" and isinstance(change.new, dict):
+        if change.new.get("required") is True:
+            return "new required request body"
+        return None
+    if parent == "requestBody" and last == "required":
+        if change.kind in ("added", "changed") and change.new is True:
+            return "request body is now required"
+        return None
+    if change.kind == "added" and last == "required" and request_side:
+        return f"request field `{change.new}` is now required"
+    if parent == "parameters" and change.kind == "removed":
+        return f"parameter `{last}` removed"
+    is_new_param = parent == "parameters" and change.kind == "added"
+    if is_new_param and isinstance(change.new, dict) and change.new.get("required"):
+        return f"new required parameter `{last}`"
+    now_required = change.kind in ("added", "changed") and change.new is True
+    if len(path) > 2 and path[-3] == "parameters" and last == "required" and now_required:
+        return f"parameter `{path[-2]}` is now required"
+    return None
+
+
+def compare_specs(old_spec: dict[str, Any], new_spec: dict[str, Any]) -> SpecDiff:
+    """Compare two raw OpenAPI documents, ignoring documentation-only content."""
+    old, new = normalize(old_spec), normalize(new_spec)
+    result = SpecDiff()
+
+    old_ops, new_ops = _operations(old), _operations(new)
+    result.added_operations = sorted(set(new_ops) - set(old_ops))
+    result.removed_operations = sorted(set(old_ops) - set(new_ops))
+    result.breaking.extend(f"operation `{op}` removed" for op in result.removed_operations)
+    for op in sorted(set(old_ops) & set(new_ops)):
+        changes = diff(old_ops[op], new_ops[op])
+        if changes:
+            result.operation_changes[op] = changes
+            for change in changes:
+                reason = _breaking_reason(change, request_side="requestBody" in change.path)
+                if reason:
+                    result.breaking.append(f"`{op}`: {reason}")
+
+    old_schemas = old.get("components", {}).get("schemas", {})
+    new_schemas = new.get("components", {}).get("schemas", {})
+    request_schemas = request_schema_names(new_spec)
+    result.added_schemas = sorted(set(new_schemas) - set(old_schemas))
+    result.removed_schemas = sorted(set(old_schemas) - set(new_schemas))
+    result.breaking.extend(f"schema `{name}` removed" for name in result.removed_schemas)
+    for name in sorted(set(old_schemas) & set(new_schemas)):
+        changes = diff(old_schemas[name], new_schemas[name])
+        if changes:
+            result.schema_changes[name] = changes
+            for change in changes:
+                reason = _breaking_reason(change, request_side=name in request_schemas)
+                if reason:
+                    result.breaking.append(f"schema `{name}`: {reason}")
+
+    def _rest(spec: dict[str, Any]) -> dict[str, Any]:
+        rest = {k: v for k, v in spec.items() if k not in ("paths", "openapi")}
+        components = {k: v for k, v in rest.get("components", {}).items() if k != "schemas"}
+        if components:
+            rest["components"] = components
+        else:
+            rest.pop("components", None)
+        extras = _path_item_extras(spec)
+        if extras:
+            rest["paths"] = extras
+        return rest
+
+    result.other_changes = diff(_rest(old), _rest(new))
+    for change in result.other_changes:
+        # Reusable request bodies and parameters under ``components``.
+        request_side = change.path[:2] == ("components", "requestBodies")
+        reason = _breaking_reason(change, request_side=request_side)
+        if reason:
+            result.breaking.append(f"`{_fmt_path(change.path[:3])}`: {reason}")
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Rendering
+# ---------------------------------------------------------------------------
+
+
+def _fmt_path(path: tuple[str, ...]) -> str:
+    return "/".join(path)
+
+
+def _fmt_value(value: Any, limit: int = 140) -> str:
+    text = json.dumps(value, sort_keys=True, ensure_ascii=False)
+    text = text if len(text) <= limit else text[: limit - 1] + "…"
+    return text.replace("`", "'")
+
+
+def _fmt_change(change: Change) -> str:
+    where = f"`{_fmt_path(change.path) or '(root)'}`"
+    if change.kind == "added":
+        return f"  - added {where}: `{_fmt_value(change.new)}`"
+    if change.kind == "removed":
+        return f"  - removed {where}: `{_fmt_value(change.old)}`"
+    return f"  - changed {where}: `{_fmt_value(change.old)}` → `{_fmt_value(change.new)}`"
+
+
+def render_details(spec_diff: SpecDiff) -> list[str]:
+    """Return the Markdown lines that describe each change."""
+    lines: list[str] = []
+
+    def section(title: str, items: list[str]) -> None:
+        if items:
+            lines.extend(["", f"### {title}", "", *items])
+
+    section("Breaking changes", [f"- {b}" for b in spec_diff.breaking])
+    section("New operations", [f"- `{op}`" for op in spec_diff.added_operations])
+    section("Removed operations", [f"- `{op}`" for op in spec_diff.removed_operations])
+    changed_ops: list[str] = []
+    for op, op_changes in spec_diff.operation_changes.items():
+        changed_ops.append(f"- `{op}`")
+        changed_ops.extend(_fmt_change(c) for c in op_changes)
+    section("Changed operations", changed_ops)
+    section("New schemas", [f"- `{name}`" for name in spec_diff.added_schemas])
+    section("Removed schemas", [f"- `{name}`" for name in spec_diff.removed_schemas])
+    changed_schemas: list[str] = []
+    for name, schema_changes in spec_diff.schema_changes.items():
+        changed_schemas.append(f"- `{name}`")
+        changed_schemas.extend(_fmt_change(c) for c in schema_changes)
+    section("Changed schemas", changed_schemas)
+    section("Other changes", [_fmt_change(c).lstrip() for c in spec_diff.other_changes])
+
+    if len(lines) > MAX_DETAIL_LINES:
+        hidden = len(lines) - MAX_DETAIL_LINES
+        lines = [
+            *lines[:MAX_DETAIL_LINES],
+            "",
+            f"_…and {hidden} more lines. Diff the two specs for the rest._",
+        ]
+    return lines
+
+
+@dataclass(frozen=True)
+class Report:
+    """A product whose latest spec differs from the pinned one."""
+
+    product: Product
+    pinned: str
+    latest: str
+    docs_url: str
+    spec_diff: SpecDiff
+
+    @property
+    def label(self) -> str:
+        return "bug" if self.spec_diff.breaking else "enhancement"
+
+    @property
+    def title(self) -> str:
+        if self.spec_diff.breaking:
+            return f"[Bug]: {self.product.name} {self.latest} has breaking changes"
+        return f"[Enhancement]: Support {self.product.name} {self.latest}"
+
+    @property
+    def marker(self) -> str:
+        return _marker(self.product.slug, self.latest)
+
+    def body(self, history: tuple[str, ...] = ()) -> str:
+        """Return the issue body; ``history`` keeps the markers of versions already tracked."""
+        p, d = self.product, self.spec_diff
+        spec_url = f"{DEVELOPER_SITE}/{p.slug}/v{self.latest}/openapi.json"
+        pinned_url = f"{DEVELOPER_SITE}/{p.slug}/v{self.pinned}/openapi.json"
+        summary = (
+            f"{len(d.added_operations)} new and {len(d.removed_operations)} removed operations, "
+            f"{len(d.operation_changes)} changed operations, "
+            f"{len(d.added_schemas)} new, {len(d.removed_schemas)} removed and "
+            f"{len(d.schema_changes)} changed schemas, "
+            f"{len(d.breaking)} breaking changes."
+        )
+        lines = [
+            *(_marker(self.product.slug, v) for v in history if v != self.latest),
+            self.marker,
+            "",
+            f"UniFi published **{p.name} {self.latest}** on developer.ui.com. "
+            f"The library pins **{self.pinned}** "
+            f"(`{p.constant}` in `src/unifi_official_api/const.py`).",
+            "",
+            "| | Version | OpenAPI |",
+            "|---|---|---|",
+            f"| Pinned | {self.pinned} | [openapi.json]({pinned_url}) |",
+            f"| Latest | {self.latest} | [openapi.json]({spec_url}) |",
+            "",
+            f"Docs: {self.docs_url}",
+            "",
+            f"**Summary:** {summary}",
+            "",
+            "The comparison ignores documentation-only changes (descriptions, examples, titles, "
+            "tags, operation IDs and `x-` extensions).",
+            *render_details(d),
+            "",
+            "### Next steps",
+            "",
+            "- Review the changes against the library's models and endpoints.",
+            f"- Bump `{p.constant}` to `{self.latest}`. Where a spec fixture is vendored under "
+            "`tests/fixtures/`, replace it with the new document in the same change.",
+            "",
+            "_Opened by the UniFi API update monitor "
+            "(`.github/workflows/api-update-monitor.yml`)._",
+        ]
+        body = "\n".join(lines)
+        if len(body) > MAX_BODY_CHARS:
+            body = body[:MAX_BODY_CHARS] + "\n\n_Truncated. Diff the two specs for the rest._"
+        return body
+
+
+# ---------------------------------------------------------------------------
+# Fetching
+# ---------------------------------------------------------------------------
+
+
+class FetchError(Exception):
+    """developer.ui.com did not return what the monitor expects."""
+
+
+def _open(url: str, attempts: int = 3) -> tuple[str, bytes]:
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    error: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                return response.geturl(), response.read()
+        except urllib.error.HTTPError as err:
+            if err.code < 500 and err.code != 429:
+                raise FetchError(f"{url}: HTTP {err.code}") from err
+            error = err
+        except (http.client.HTTPException, OSError) as err:
+            # Covers URLError, timeouts, and resets or short reads while reading the body.
+            error = err
+        if attempt < attempts:
+            time.sleep(5 * attempt)
+    raise FetchError(f"{url}: {error}")
+
+
+def fetch_latest(product: Product) -> tuple[str, str]:
+    """Return the latest version of ``product`` and the docs URL it resolves to."""
+    final_url, _ = _open(f"{DEVELOPER_SITE}/{product.slug}")
+    match = re.match(
+        rf"^{re.escape(DEVELOPER_SITE)}/{re.escape(product.slug)}/v([0-9.]+)(?:/|$)", final_url
+    )
+    if not match or not VERSION_RE.match(match.group(1)):
+        raise FetchError(f"{product.slug}: no version in redirect target {final_url}")
+    return match.group(1), final_url
+
+
+def fetch_spec(product: Product, version: str) -> dict[str, Any]:
+    """Return the OpenAPI document of ``product`` at ``version``."""
+    fixture = FIXTURES_DIR / f"{product.slug.replace('-', '_')}_openapi_{version}.json"
+    if fixture.is_file():
+        raw = fixture.read_bytes()
+    else:
+        _, raw = _open(f"{DEVELOPER_SITE}/{product.slug}/v{version}/openapi.json")
+    try:
+        spec = json.loads(raw)
+    except json.JSONDecodeError as err:
+        raise FetchError(f"{product.slug} {version}: openapi.json is not JSON") from err
+    if (
+        not isinstance(spec, dict)
+        or "openapi" not in spec
+        or not isinstance(spec.get("paths"), dict)
+    ):
+        raise FetchError(f"{product.slug} {version}: openapi.json is not an OpenAPI document")
+    return spec
+
+
+def read_pinned_versions(const_path: Path = CONST_PATH) -> dict[str, str]:
+    """Return the string constants of ``const.py`` without importing the package."""
+    values: dict[str, str] = {}
+    for node in ast.parse(const_path.read_text()).body:
+        target: ast.expr | None = node.target if isinstance(node, ast.AnnAssign) else None
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+        value = node.value if isinstance(node, ast.Assign | ast.AnnAssign) else None
+        if (
+            isinstance(target, ast.Name)
+            and isinstance(value, ast.Constant)
+            and isinstance(value.value, str)
+        ):
+            values[target.id] = value.value
+    return values
+
+
+def _out(text: str) -> None:
+    """Write a line to stdout, where Actions reads ``::warning::`` and similar commands."""
+    sys.stdout.write(text + "\n")
+
+
+def _marker(product: str, version: str) -> str:
+    return f"<!-- unifi-api-monitor: product={product} version={version} -->"
+
+
+def version_tuple(version: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in version.split("."))
+
+
+# ---------------------------------------------------------------------------
+# Issue planning and GitHub
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class TrackedIssue:
+    """An issue opened by this monitor."""
+
+    number: int
+    state: str
+    product: str
+    version: str  # the newest version this issue tracks
+    labels: tuple[str, ...]
+    # Every version this issue has tracked, so an update never forgets one.
+    history: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class Action:
+    """What to do for one report."""
+
+    kind: str  # "skip", "create" or "update"
+    issue: TrackedIssue | None = None
+    reason: str = ""
+
+
+def plan_action(report: Report, issues: list[TrackedIssue]) -> Action:
+    """Decide whether ``report`` needs a new issue, an update, or nothing."""
+    mine = [i for i in issues if i.product == report.product.slug]
+    for issue in mine:
+        if report.latest in (issue.version, *issue.history):
+            return Action(
+                "skip", issue, f"#{issue.number} already tracks {report.latest} ({issue.state})"
+            )
+    open_issues = [i for i in mine if i.state == "open"]
+    if open_issues:
+        newest = max(open_issues, key=lambda i: version_tuple(i.version))
+        if version_tuple(newest.version) > version_tuple(report.latest):
+            return Action("skip", newest, f"#{newest.number} already tracks newer {newest.version}")
+        return Action("update", newest, f"#{newest.number} tracks older {newest.version}")
+    return Action("create", None, "no issue tracks this version")
+
+
+def _gh(*args: str, stdin: str | None = None) -> str:
+    result = subprocess.run(
+        ["gh", *args],
+        input=stdin,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"gh {' '.join(args[:2])} failed: {result.stderr.strip()}")
+    return result.stdout
+
+
+def load_tracked_issues(repo: str) -> list[TrackedIssue]:
+    """Return every issue (open or closed) that carries a monitor marker."""
+    out = _gh(
+        "api",
+        "--paginate",
+        f"repos/{repo}/issues?labels={TRACKING_LABEL}&state=all&per_page=100",
+        "--jq",
+        ".[] | select(.pull_request == null) | {number, state, body, labels: [.labels[].name]}",
+    )
+    issues: list[TrackedIssue] = []
+    for line in out.splitlines():
+        if not line.strip():
+            continue
+        item = json.loads(line)
+        matches = list(MARKER_RE.finditer(item.get("body") or ""))
+        if matches:
+            versions = tuple(m.group("version") for m in matches)
+            issues.append(
+                TrackedIssue(
+                    number=item["number"],
+                    state=item["state"],
+                    product=matches[0].group("product"),
+                    version=max(versions, key=version_tuple),
+                    labels=tuple(item["labels"]),
+                    history=versions,
+                )
+            )
+    return issues
+
+
+def ensure_label(repo: str) -> None:
+    try:
+        _gh("api", f"repos/{repo}/labels/{TRACKING_LABEL}")
+    except RuntimeError:
+        _gh(
+            "label",
+            "create",
+            TRACKING_LABEL,
+            "--repo",
+            repo,
+            "--color",
+            "1D76DB",
+            "--description",
+            "Change published in an official UniFi API spec",
+        )
+
+
+def apply_action(repo: str, report: Report, action: Action) -> str:
+    """Open or update the issue for ``report`` and return its URL or number."""
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as handle:
+        history = action.issue.history if action.issue else ()
+        handle.write(report.body(history))
+        body_file = handle.name
+    try:
+        labels = [report.label, TRACKING_LABEL, *EXTRA_LABELS]
+        if action.kind == "create":
+            args = [
+                "issue",
+                "create",
+                "--repo",
+                repo,
+                "--title",
+                report.title,
+                "--body-file",
+                body_file,
+            ]
+            for label in labels:
+                args += ["--label", label]
+            return _gh(*args).strip()
+        assert action.issue is not None
+        number = str(action.issue.number)
+        args = [
+            "issue",
+            "edit",
+            number,
+            "--repo",
+            repo,
+            "--title",
+            report.title,
+            "--body-file",
+            body_file,
+        ]
+        for label in labels:
+            args += ["--add-label", label]
+        stale_type = {"bug", "enhancement"} - {report.label}
+        for label in stale_type & set(action.issue.labels):
+            args += ["--remove-label", label]
+        _gh(*args)
+        _gh(
+            "issue",
+            "comment",
+            number,
+            "--repo",
+            repo,
+            "--body",
+            f"UniFi published {report.product.name} {report.latest}. This issue now tracks "
+            f"{report.latest} instead of {action.issue.version}; the description shows the "
+            f"changes since the pinned {report.pinned}.",
+        )
+        return f"#{number}"
+    finally:
+        Path(body_file).unlink()
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+
+def check_product(product: Product, pinned: str) -> tuple[Report | None, str]:
+    """Return a report when ``product`` has a newer spec with real changes, and a status line."""
+    latest, docs_url = fetch_latest(product)
+    if latest == pinned:
+        return None, f"{product.name}: up to date ({pinned})"
+    if version_tuple(latest) < version_tuple(pinned):
+        return None, f"{product.name}: latest {latest} is older than pinned {pinned}; ignored"
+    spec_diff = compare_specs(fetch_spec(product, pinned), fetch_spec(product, latest))
+    if spec_diff.is_empty:
+        return None, (
+            f"{product.name}: {latest} has the same spec as pinned {pinned}; "
+            f"no issue needed (bump {product.constant} when convenient)"
+        )
+    report = Report(product, pinned, latest, docs_url, spec_diff)
+    return report, f"{product.name}: {pinned} → {latest}, {report.label}"
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("--apply", action="store_true", help="open or update GitHub issues")
+    parser.add_argument("--show-body", action="store_true", help="print each issue body")
+    args = parser.parse_args(argv)
+
+    constants = read_pinned_versions()
+    missing = [p.constant for p in PRODUCTS if p.constant not in constants]
+    if missing:
+        _out(f"::error::Missing constants in const.py: {', '.join(missing)}")
+        return 1
+
+    reports: list[Report] = []
+    status: list[str] = []
+    failures = 0
+    for product in PRODUCTS:
+        try:
+            report, line = check_product(product, constants[product.constant])
+        except FetchError as err:
+            failures += 1
+            _out(f"::warning::{product.name}: skipped, {err}")
+            status.append(f"{product.name}: skipped ({err})")
+            continue
+        status.append(line)
+        if report:
+            reports.append(report)
+
+    actions: list[str] = []
+    if reports and args.apply:
+        repo = os.environ["GITHUB_REPOSITORY"]
+        ensure_label(repo)
+        issues = load_tracked_issues(repo)
+        for report in reports:
+            action = plan_action(report, issues)
+            if action.kind == "skip":
+                actions.append(f"{report.product.name}: {action.reason}")
+                continue
+            target = apply_action(repo, report, action)
+            actions.append(f"{report.product.name}: {action.kind}d {target} ({action.reason})")
+
+    output = ["## UniFi API update check", "", *(f"- {line}" for line in status)]
+    if actions:
+        output += ["", "### Issues", "", *(f"- {line}" for line in actions)]
+    elif reports and not args.apply:
+        output += ["", "_Report only: no issues were opened or updated._"]
+    text = "\n".join(output)
+    _out(text)
+    if args.show_body:
+        for report in reports:
+            _out(f"\n---\n{report.title}\nlabels: {report.label}\n\n{report.body()}")
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary_path:
+        with Path(summary_path).open("a", encoding="utf-8") as handle:
+            handle.write(text + "\n")
+
+    # Fail only when nothing could be checked, which points at a site change rather than a blip.
+    if failures == len(PRODUCTS):
+        _out("::error::Every product failed; developer.ui.com may have changed its layout.")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,62 @@
+name: API Update Monitor
+
+# Checks developer.ui.com for Network, Protect, InnerSpace, Mobility, Site Manager and
+# Carrier Fabric API releases newer than the versions pinned in const.py. It opens an
+# issue labeled bug or enhancement only when the new OpenAPI spec really differs from
+# the pinned one, and never reports the same version twice.
+# See script/check_api_updates.py.
+
+on:
+  schedule:
+    # The 1st and 15th of each month: about every 15 days.
+    - cron: 23 6 1,15 * *
+      timezone: Australia/Brisbane
+  # Report-only run when the monitor itself changes, so a PR proves it still works.
+  pull_request:
+    paths:
+      - .github/workflows/api-update-monitor.yml
+      - script/check_api_updates.py
+      - src/unifi_official_api/const.py
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Open or update issues (otherwise only write the job summary)
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  # Issue-writing runs on main share one group and queue instead of overlapping.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check developer.ui.com
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # read const.py and the vendored spec fixtures
+      issues: write # open, update and label API update issues
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+
+      - name: Check for API updates
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Only main writes issues, so runs on other branches cannot race it into duplicates.
+          APPLY: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || inputs.apply) }}
+        run: |
+          if [ "$APPLY" = "true" ]; then
+            python script/check_api_updates.py --apply
+          else
+            python script/check_api_updates.py
+          fi
