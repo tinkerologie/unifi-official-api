@@ -27,6 +27,7 @@ on:
 permissions: {}
 
 concurrency:
+  # Issue-writing runs on main share one group and queue instead of overlapping.
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
@@ -51,7 +52,8 @@ jobs:
       - name: Check for API updates
         env:
           GH_TOKEN: ${{ github.token }}
-          APPLY: ${{ github.event_name == 'schedule' || inputs.apply }}
+          # Only main writes issues, so runs on other branches cannot race it into duplicates.
+          APPLY: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || inputs.apply) }}
         run: |
           if [ "$APPLY" = "true" ]; then
             python script/check_api_updates.py --apply

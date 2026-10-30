@@ -282,3 +282,123 @@ def test_open_raises_fetch_error_after_retries(monkeypatch: pytest.MonkeyPatch) 
 
     with pytest.raises(mon.FetchError):
         mon._open("https://developer.ui.com/network")
+
+
+def _with_union(*alternatives: Any) -> dict[str, Any]:
+    spec = _base()
+    spec["components"]["schemas"]["ThingCreate"]["properties"]["kind"] = {
+        "oneOf": list(alternatives)
+    }
+    return spec
+
+
+def test_breaking_change_inside_a_composed_schema_is_a_bug() -> None:
+    inline = {"type": "object", "properties": {"value": {"type": "string"}}}
+    old = _with_union({"$ref": "#/components/schemas/Thing"}, inline)
+    new = copy.deepcopy(old)
+    new["components"]["schemas"]["ThingCreate"]["properties"]["kind"]["oneOf"][1]["properties"][
+        "value"
+    ]["type"] = "integer"
+
+    assert mon.compare_specs(old, new).breaking
+
+
+def test_reordered_alternatives_are_ignored() -> None:
+    inline = {"type": "string"}
+    old = _with_union({"$ref": "#/components/schemas/Thing"}, inline)
+    new = _with_union(inline, {"$ref": "#/components/schemas/Thing"})
+
+    assert mon.compare_specs(old, new).is_empty
+
+
+def test_description_beside_a_reference_is_ignored() -> None:
+    old = _with_union({"$ref": "#/components/schemas/Thing"})
+    new = _with_union({"$ref": "#/components/schemas/Thing", "description": "Docs."})
+
+    assert mon.compare_specs(old, new).is_empty
+
+
+def test_new_alternative_is_an_enhancement() -> None:
+    old = _with_union({"$ref": "#/components/schemas/Thing"})
+    new = _with_union({"$ref": "#/components/schemas/Thing"}, {"type": "string"})
+
+    result = mon.compare_specs(old, new)
+
+    assert not result.is_empty
+    assert not result.breaking
+
+
+def test_literal_values_are_not_treated_as_documentation() -> None:
+    old, new = _base(), _base()
+    old["components"]["schemas"]["Thing"]["properties"]["id"]["const"] = {"description": "a"}
+    new["components"]["schemas"]["Thing"]["properties"]["id"]["const"] = {"description": "b"}
+
+    assert not mon.compare_specs(old, new).is_empty
+
+
+@pytest.mark.parametrize("keyword", ["enum", "type"])
+def test_removing_a_whole_restriction_is_not_breaking(keyword: str) -> None:
+    old, new = _base(), _base()
+    del new["components"]["schemas"]["Thing"]["properties"]["mode"][keyword]
+
+    result = mon.compare_specs(old, new)
+
+    assert not result.is_empty
+    assert not result.breaking
+
+
+def test_first_required_parameter_is_a_bug() -> None:
+    old, new = _base(), _base()
+    new["paths"]["/v1/things"]["post"]["parameters"] = [
+        {"name": "site", "in": "query", "required": True}
+    ]
+
+    assert mon.compare_specs(old, new).breaking
+
+
+@pytest.mark.parametrize("was_optional", [True, False])
+def test_mandatory_request_body_is_a_bug(was_optional: bool) -> None:
+    old, new = _base(), _base()
+    get = old["paths"]["/v1/things"]["get"]
+    body = {"content": {"application/json": {"schema": {"type": "object"}}}}
+    if was_optional:
+        get["requestBody"] = {**body, "required": False}
+    new["paths"]["/v1/things"]["get"]["requestBody"] = {**body, "required": True}
+
+    assert mon.compare_specs(old, new).breaking
+
+
+def test_reusable_request_components_are_classified() -> None:
+    old = _base()
+    old["components"]["schemas"]["Shared"] = {
+        "type": "object",
+        "properties": {"name": {"type": "string"}},
+    }
+    old["components"]["requestBodies"] = {
+        "Body": {
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Shared"}}}
+        }
+    }
+    old["components"]["parameters"] = {"site": {"name": "site", "in": "query"}}
+    body_change, param_change = copy.deepcopy(old), copy.deepcopy(old)
+    body_change["components"]["schemas"]["Shared"]["required"] = ["name"]
+    param_change["components"]["parameters"]["site"]["required"] = True
+
+    assert mon.compare_specs(old, body_change).breaking
+    assert mon.compare_specs(old, param_change).breaking
+
+
+def test_path_level_servers_are_compared() -> None:
+    old, new = _base(), _base()
+    new["paths"]["/v1/things"]["servers"] = [{"url": "https://example.invalid"}]
+
+    assert not mon.compare_specs(old, new).is_empty
+
+
+def test_updated_issue_keeps_every_tracked_version() -> None:
+    body = _report("3.0.0").body(history=("2.0.0",))
+    versions = [m.group("version") for m in mon.MARKER_RE.finditer(body)]
+    issue = mon.TrackedIssue(1, "closed", "network", "3.0.0", (), tuple(versions))
+
+    assert versions == ["2.0.0", "3.0.0"]
+    assert mon.plan_action(_report("2.0.0"), [issue]).kind == "skip"

@@ -118,6 +118,10 @@ NAME_MAP_KEYS = frozenset(
         "dependentSchemas",
     }
 )
+# Keywords whose values are literal data and must not be normalized.
+LITERAL_KEYS = frozenset({"const", "default", "enum"})
+# Lists of alternative schemas; order carries no meaning.
+COMPOSITION_KEYS = frozenset({"allOf", "anyOf", "oneOf"})
 # Lists whose order carries no meaning.
 UNORDERED_LIST_KEYS = frozenset({"required", "enum", "type"})
 HTTP_METHODS = ("get", "put", "post", "delete", "patch", "head", "options", "trace")
@@ -136,6 +140,10 @@ def normalize(node: Any, *, name_map: bool = False, key: str | None = None) -> A
         for k, v in node.items():
             if k in ANNOTATION_KEYS or k.startswith("x-") or k == "info":
                 continue
+            if k in LITERAL_KEYS:
+                # Literal data: a ``description`` inside a ``const`` is a value, not docs.
+                out[k] = normalize(v, key=k) if k == "enum" else v
+                continue
             out[k] = normalize(v, name_map=k in NAME_MAP_KEYS and isinstance(v, dict), key=k)
         return out
     if key == "type" and isinstance(node, str):
@@ -143,21 +151,19 @@ def normalize(node: Any, *, name_map: bool = False, key: str | None = None) -> A
     if isinstance(node, list):
         if key in UNORDERED_LIST_KEYS and all(not isinstance(i, dict | list) for i in node):
             return sorted({_sort_key(i): i for i in node}.values(), key=_sort_key)
-        if key == "parameters" and all(isinstance(i, dict) for i in node):
+        items = [normalize(i) for i in node]
+        if key == "parameters" and all(isinstance(i, dict) for i in items):
             # Key each parameter by identity so shared and per-operation lists merge.
             keyed: dict[str, Any] = {}
-            for i in node:
-                if set(i) == {"$ref"}:
-                    keyed[i["$ref"]] = {}
+            for i in items:
+                if "$ref" in i:
+                    keyed[i["$ref"]] = {k: v for k, v in i.items() if k != "$ref"}
                 elif "name" in i and "in" in i:
-                    keyed[f"{i['in']}:{i['name']}"] = normalize(i)
+                    keyed[f"{i['in']}:{i['name']}"] = i
                 else:
-                    keyed[_sort_key(i)] = normalize(i)
+                    keyed[_sort_key(i)] = i
             return keyed
-        if node and all(isinstance(i, dict) and set(i) == {"$ref"} for i in node):
-            # oneOf/anyOf/allOf of references: key by target so one new variant is one change.
-            return {i["$ref"]: {} for i in node}
-        return [normalize(i) for i in node]
+        return items
     return node
 
 
@@ -169,6 +175,16 @@ class Change:
     path: tuple[str, ...]
     old: Any = None
     new: Any = None
+
+
+def _keyed_alternatives(items: list[Any]) -> dict[str, Any]:
+    keyed: dict[str, Any] = {}
+    for item in items:
+        if isinstance(item, dict) and "$ref" in item:
+            keyed[item["$ref"]] = {k: v for k, v in item.items() if k != "$ref"}
+        else:
+            keyed[f"inline {_sort_key(item)}"] = item
+    return keyed
 
 
 def diff(old: Any, new: Any, path: tuple[str, ...] = ()) -> list[Change]:
@@ -183,11 +199,19 @@ def diff(old: Any, new: Any, path: tuple[str, ...] = ()) -> list[Change]:
             else:
                 changes.extend(diff(old[k], new[k], (*path, k)))
         return changes
-    is_scalar_list = (
-        isinstance(old, list)
-        and isinstance(new, list)
-        and all(not isinstance(i, dict | list) for i in [*old, *new])
-    )
+    both_lists = isinstance(old, list) and isinstance(new, list)
+    if both_lists and path and path[-1] in COMPOSITION_KEYS:
+        if sorted(map(_sort_key, old)) == sorted(map(_sort_key, new)):
+            return []  # same alternatives in another order
+        if len(old) == len(new):
+            # Usually one alternative changed in place; diff inside it.
+            return [
+                c
+                for i, (a, b) in enumerate(zip(old, new, strict=True))
+                for c in diff(a, b, (*path, str(i)))
+            ]
+        return diff(_keyed_alternatives(old), _keyed_alternatives(new), path)
+    is_scalar_list = both_lists and all(not isinstance(i, dict | list) for i in [*old, *new])
     if is_scalar_list and path and path[-1] in UNORDERED_LIST_KEYS:
         added = [Change("added", path, new=i) for i in new if i not in old]
         removed = [Change("removed", path, old=i) for i in old if i not in new]
@@ -202,9 +226,7 @@ def _collect_refs(node: Any, refs: set[str]) -> None:
         ref = node.get("$ref")
         if isinstance(ref, str):
             refs.add(ref)
-        for k, v in node.items():
-            if isinstance(k, str) and k.startswith("#/"):
-                refs.add(k)  # normalized oneOf/anyOf keys
+        for v in node.values():
             _collect_refs(v, refs)
     elif isinstance(node, list):
         for i in node:
@@ -213,13 +235,17 @@ def _collect_refs(node: Any, refs: set[str]) -> None:
 
 def request_schema_names(spec: dict[str, Any]) -> set[str]:
     """Return the component schemas reachable from any operation's request body."""
-    schemas = spec.get("components", {}).get("schemas", {})
+    components = spec.get("components", {})
+    schemas = components.get("schemas", {})
+    bodies = components.get("requestBodies", {})
     pending: set[str] = set()
     for item in spec.get("paths", {}).values():
         for method in HTTP_METHODS:
             body = item.get(method, {}).get("requestBody") if isinstance(item, dict) else None
             if body:
                 _collect_refs(body, pending)
+    for body in bodies.values():
+        _collect_refs(body, pending)
     prefix = "#/components/schemas/"
     seen: set[str] = set()
     while pending:
@@ -268,10 +294,24 @@ def _operations(spec: dict[str, Any]) -> dict[str, Any]:
             if isinstance(item.get(method), dict):
                 op = dict(item[method])
                 own = op.get("parameters")
-                if isinstance(shared, dict) and shared:
-                    op["parameters"] = {**shared, **(own if isinstance(own, dict) else {})}
+                # Always a dict, so a first new parameter is one keyed change, not a whole list.
+                op["parameters"] = {
+                    **(shared if isinstance(shared, dict) else {}),
+                    **(own if isinstance(own, dict) else {}),
+                }
                 ops[f"{method.upper()} {path}"] = op
     return ops
+
+
+def _path_item_extras(spec: dict[str, Any]) -> dict[str, Any]:
+    """Return path-level fields other than operations and parameters, such as ``servers``."""
+    extras: dict[str, Any] = {}
+    for path, item in spec.get("paths", {}).items():
+        if isinstance(item, dict):
+            rest = {k: v for k, v in item.items() if k not in HTTP_METHODS and k != "parameters"}
+            if rest:
+                extras[path] = rest
+    return extras
 
 
 def _breaking_reason(change: Change, *, request_side: bool) -> str | None:
@@ -281,10 +321,19 @@ def _breaking_reason(change: Change, *, request_side: bool) -> str | None:
     parent = path[-2] if len(path) > 1 else ""
     if change.kind == "removed" and parent == "properties":
         return f"field `{last}` removed"
-    if change.kind == "removed" and last == "enum":
+    # A removed element narrows what is allowed; removing the whole keyword widens it.
+    if change.kind == "removed" and last == "enum" and not isinstance(change.old, list):
         return f"enum value `{change.old}` removed at `{_fmt_path(path)}`"
-    if change.kind == "removed" and last == "type":
+    if change.kind == "removed" and last == "type" and not isinstance(change.old, list):
         return f"type `{change.old}` no longer allowed at `{_fmt_path(path[:-1]) or '(root)'}`"
+    if last == "requestBody" and change.kind == "added" and isinstance(change.new, dict):
+        if change.new.get("required") is True:
+            return "new required request body"
+        return None
+    if parent == "requestBody" and last == "required":
+        if change.kind in ("added", "changed") and change.new is True:
+            return "request body is now required"
+        return None
     if change.kind == "added" and last == "required" and request_side:
         return f"request field `{change.new}` is now required"
     if parent == "parameters" and change.kind == "removed":
@@ -292,11 +341,9 @@ def _breaking_reason(change: Change, *, request_side: bool) -> str | None:
     is_new_param = parent == "parameters" and change.kind == "added"
     if is_new_param and isinstance(change.new, dict) and change.new.get("required"):
         return f"new required parameter `{last}`"
-    if len(path) > 2 and path[-3] == "parameters" and last == "required":
-        if change.kind == "changed" and change.new is True:
-            return f"parameter `{path[-2]}` is now required"
-        if change.kind == "added" and change.new is True:
-            return f"parameter `{path[-2]}` is now required"
+    now_required = change.kind in ("added", "changed") and change.new is True
+    if len(path) > 2 and path[-3] == "parameters" and last == "required" and now_required:
+        return f"parameter `{path[-2]}` is now required"
     return None
 
 
@@ -340,9 +387,18 @@ def compare_specs(old_spec: dict[str, Any], new_spec: dict[str, Any]) -> SpecDif
             rest["components"] = components
         else:
             rest.pop("components", None)
+        extras = _path_item_extras(spec)
+        if extras:
+            rest["paths"] = extras
         return rest
 
     result.other_changes = diff(_rest(old), _rest(new))
+    for change in result.other_changes:
+        # Reusable request bodies and parameters under ``components``.
+        request_side = change.path[:2] == ("components", "requestBodies")
+        reason = _breaking_reason(change, request_side=request_side)
+        if reason:
+            result.breaking.append(f"`{_fmt_path(change.path[:3])}`: {reason}")
     return result
 
 
@@ -427,9 +483,10 @@ class Report:
 
     @property
     def marker(self) -> str:
-        return f"<!-- unifi-api-monitor: product={self.product.slug} version={self.latest} -->"
+        return _marker(self.product.slug, self.latest)
 
-    def body(self) -> str:
+    def body(self, history: tuple[str, ...] = ()) -> str:
+        """Return the issue body; ``history`` keeps the markers of versions already tracked."""
         p, d = self.product, self.spec_diff
         spec_url = f"{DEVELOPER_SITE}/{p.slug}/v{self.latest}/openapi.json"
         pinned_url = f"{DEVELOPER_SITE}/{p.slug}/v{self.pinned}/openapi.json"
@@ -441,6 +498,7 @@ class Report:
             f"{len(d.breaking)} breaking changes."
         )
         lines = [
+            *(_marker(self.product.slug, v) for v in history if v != self.latest),
             self.marker,
             "",
             f"UniFi published **{p.name} {self.latest}** on developer.ui.com. "
@@ -556,6 +614,10 @@ def _out(text: str) -> None:
     sys.stdout.write(text + "\n")
 
 
+def _marker(product: str, version: str) -> str:
+    return f"<!-- unifi-api-monitor: product={product} version={version} -->"
+
+
 def version_tuple(version: str) -> tuple[int, ...]:
     return tuple(int(part) for part in version.split("."))
 
@@ -572,8 +634,10 @@ class TrackedIssue:
     number: int
     state: str
     product: str
-    version: str
+    version: str  # the newest version this issue tracks
     labels: tuple[str, ...]
+    # Every version this issue has tracked, so an update never forgets one.
+    history: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -589,7 +653,7 @@ def plan_action(report: Report, issues: list[TrackedIssue]) -> Action:
     """Decide whether ``report`` needs a new issue, an update, or nothing."""
     mine = [i for i in issues if i.product == report.product.slug]
     for issue in mine:
-        if issue.version == report.latest:
+        if report.latest in (issue.version, *issue.history):
             return Action(
                 "skip", issue, f"#{issue.number} already tracks {report.latest} ({issue.state})"
             )
@@ -629,15 +693,17 @@ def load_tracked_issues(repo: str) -> list[TrackedIssue]:
         if not line.strip():
             continue
         item = json.loads(line)
-        match = MARKER_RE.search(item.get("body") or "")
-        if match:
+        matches = list(MARKER_RE.finditer(item.get("body") or ""))
+        if matches:
+            versions = tuple(m.group("version") for m in matches)
             issues.append(
                 TrackedIssue(
                     number=item["number"],
                     state=item["state"],
-                    product=match.group("product"),
-                    version=match.group("version"),
+                    product=matches[0].group("product"),
+                    version=max(versions, key=version_tuple),
                     labels=tuple(item["labels"]),
+                    history=versions,
                 )
             )
     return issues
@@ -663,7 +729,8 @@ def ensure_label(repo: str) -> None:
 def apply_action(repo: str, report: Report, action: Action) -> str:
     """Open or update the issue for ``report`` and return its URL or number."""
     with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as handle:
-        handle.write(report.body())
+        history = action.issue.history if action.issue else ()
+        handle.write(report.body(history))
         body_file = handle.name
     try:
         labels = [report.label, TRACKING_LABEL, *EXTRA_LABELS]
