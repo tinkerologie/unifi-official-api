@@ -51,7 +51,7 @@ class Client(BaseModel):
 
     id: str
     name: str | None = None
-    type: ClientType | str | None = None
+    type: ClientType | str | None = Field(default=None, union_mode="left_to_right")
     ip: str | None = Field(default=None, alias="ipAddress")
     mac: str | None = Field(default=None, alias="macAddress")
     connected_at: datetime | str | None = Field(default=None, alias="connectedAt")

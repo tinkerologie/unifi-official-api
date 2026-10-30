@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class FirewallAction(StrEnum):
@@ -36,6 +36,22 @@ class FirewallActionConfig(BaseModel):
 
     type: FirewallAction | str = FirewallAction.BLOCK
     allow_return_traffic: bool | None = Field(default=None, alias="allowReturnTraffic")
+
+    @field_validator("type", mode="before")
+    @classmethod
+    def _normalize_type(cls, value: Any) -> Any:
+        """Turn a recognised action string into its ``FirewallAction`` member.
+
+        A field-level ``union_mode="left_to_right"`` would make this model
+        inexact for dict input, so the smart union on ``FirewallRule.action``
+        would start selecting its ``dict`` branch instead of this model (#70).
+        """
+        if isinstance(value, str):
+            try:
+                return FirewallAction(value)
+            except ValueError:
+                return value
+        return value
 
 
 class FirewallProtocol(StrEnum):
@@ -88,6 +104,22 @@ class FirewallRule(BaseModel):
         if "id" not in data and "_id" in data:
             data = {**data, "id": data["_id"]}
         return data
+
+    @field_validator("action", mode="before")
+    @classmethod
+    def _normalize_action(cls, value: Any) -> Any:
+        """Turn a recognised action string into its ``FirewallAction`` member.
+
+        The union stays in smart mode so that a ``dict`` keeps parsing exactly
+        as before, as a plain ``dict`` or a ``FirewallActionConfig``;
+        left-to-right union mode would turn every dict into a config model.
+        """
+        if isinstance(value, str):
+            try:
+                return FirewallAction(value)
+            except ValueError:
+                return value
+        return value
 
     @property
     def action_type(self) -> str:
