@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Switch stack models follow the Network 11.0.97 `IntegrationSwitchStackDto` shape: `SwitchStack.device_id` (`deviceId`) and the `units` list are typed by `SwitchStackUnit` (`id`, `mac_address`, `order`, `role` as `SwitchStackUnitRole`), and stack LAG members carry `unitId` / `unitMacAddress` beside `portIdxs`. A v11 response no longer leaves those fields as untyped extras (#68).
+- Enum-or-`str` model fields now validate known values into their `StrEnum` member instead of always keeping the plain string: a `Device.state` of `"ONLINE"` is a `DeviceState.ONLINE`, and unknown values still parse as `str` so newer firmware keeps working. The case-normalising `_missing_` hooks on `DNSPolicyType`, `ClientType`, `FirewallAction`, `InnerSpaceMountType` and `SwitchStackUnitRole` now run during validation, so `"a_record"` becomes `DNSPolicyType.A_RECORD`, which equals `"A_RECORD"`; code comparing a raw lowercase string to one of those fields sees the canonical value. `model_dump()` returns the enum member (equal to its string value), while `model_dump(mode="json")` and `model_dump_json()` still write plain strings. `FirewallRule.action` keeps its `dict` / `FirewallActionConfig` handling unchanged (#70).
 
 ## [3.0.0] - 2026-10-22
 
