@@ -7,6 +7,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .stack import SwitchStack, SwitchStackMember, SwitchStackPage
+
 
 class LagType(StrEnum):
     """Link aggregation group types."""
@@ -87,36 +89,15 @@ class McLagDomainPage(BaseModel):
     total_count: int = Field(default=0, alias="totalCount")
 
 
-class SwitchStackMember(BaseModel):
-    """Member device of a switch stack."""
-
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
-
-    device_id: str | None = Field(default=None, alias="deviceId")
-    switch_mac: str | None = Field(default=None, alias="switchMac")
-    role: str | None = None
-    state: str | None = None
-
-
-class SwitchStack(BaseModel):
-    """Switch Stack entity."""
-
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
-
-    id: str
-    name: str | None = None
-    members: list[SwitchStackMember] = Field(default_factory=list)
-    lags: list[dict[str, Any]] = Field(default_factory=list)
-    metadata: dict[str, Any] | None = None
-
-
-class SwitchStackPage(BaseModel):
-    """Paginated list of switch stacks."""
-
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
-
-    data: list[SwitchStack] = Field(default_factory=list)
-    count: int = 0
-    limit: int = 0
-    offset: int = 0
-    total_count: int = Field(default=0, alias="totalCount")
+__all__ = [
+    "Lag",
+    "LagMember",
+    "LagPage",
+    "LagType",
+    "McLagDomain",
+    "McLagDomainPage",
+    "McLagPeer",
+    "SwitchStack",
+    "SwitchStackMember",
+    "SwitchStackPage",
+]

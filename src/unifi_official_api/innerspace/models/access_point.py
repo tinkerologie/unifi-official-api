@@ -36,7 +36,9 @@ class InnerSpaceAccessPoint(InnerSpaceBaseModel):
     x: float | None = None
     y: float | None = None
     height: float | None = None
-    mount_type: InnerSpaceMountType | str | None = Field(default=None, alias="mountType")
+    mount_type: InnerSpaceMountType | str | None = Field(
+        default=None, alias="mountType", union_mode="left_to_right"
+    )
     orientation: float | None = None
     tx_power_2g: float | None = Field(default=None, alias="txPower2g")
     tx_power_5g: float | None = Field(default=None, alias="txPower5g")

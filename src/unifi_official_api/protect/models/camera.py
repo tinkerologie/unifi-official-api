@@ -121,8 +121,12 @@ class Camera(BaseModel):
     is_recording: bool = Field(default=False, alias="isRecording")
     is_motion_detected: bool = Field(default=False, alias="isMotionDetected")
     is_smart_detected: bool = Field(default=False, alias="isSmartDetected")
-    recording_mode: RecordingMode | str | None = Field(default=None, alias="recordingMode")
-    video_mode: VideoMode | str | None = Field(default=None, alias="videoMode")
+    recording_mode: RecordingMode | str | None = Field(
+        default=None, alias="recordingMode", union_mode="left_to_right"
+    )
+    video_mode: VideoMode | str | None = Field(
+        default=None, alias="videoMode", union_mode="left_to_right"
+    )
     hdr_mode: bool = Field(default=False, alias="hdrMode")
     mic_volume: int = Field(default=100, alias="micVolume")
     speaker_volume: int = Field(default=100, alias="speakerVolume")

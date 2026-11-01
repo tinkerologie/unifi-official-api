@@ -25,7 +25,7 @@ class Site(BaseModel):
     internal_reference: str | None = Field(default=None, alias="internalReference")
     description: str | None = None
     timezone: str | None = None
-    health: SiteHealth | str = SiteHealth.UNKNOWN
+    health: SiteHealth | str = Field(default=SiteHealth.UNKNOWN, union_mode="left_to_right")
     device_count: int = Field(default=0, alias="deviceCount")
     client_count: int = Field(default=0, alias="clientCount")
     guest_count: int = Field(default=0, alias="guestCount")

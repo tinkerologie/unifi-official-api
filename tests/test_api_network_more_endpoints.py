@@ -32,7 +32,7 @@ from unifi_official_api.network.models.report import (
     SiteReportBucket,
 )
 from unifi_official_api.network.models.site import Site
-from unifi_official_api.network.models.stack import SwitchStack
+from unifi_official_api.network.models.stack import SwitchStack, SwitchStackUnitRole
 from unifi_official_api.network.models.voucher import (
     Voucher,
     VoucherCreateRequest,
@@ -843,6 +843,61 @@ async def test_stacks_get_pins_spec_request_and_branches() -> None:
 
     with pytest.raises(UniFiResponseError):
         await client.stacks.get("default", "err-stack")
+
+
+async def test_stacks_v11_units_are_typed() -> None:
+    """stacks list and get parse the Network 11.0.97 units and stack LAG members."""
+    raw_stack = {
+        "id": "stack-1",
+        "name": "Stack-1",
+        "deviceId": "dev-1",
+        "metadata": {},
+        "units": [
+            {
+                "id": 1,
+                "macAddress": "aa:bb:cc:00:00:01",
+                "order": 1,
+                "role": "ACTIVE_CONTROLLER",
+            },
+            {"id": 2, "macAddress": "aa:bb:cc:00:00:02", "order": 2, "role": "MEMBER"},
+        ],
+        "lags": [
+            {
+                "id": "lag-1",
+                "metadata": {},
+                "members": [
+                    {"unitId": 1, "unitMacAddress": "aa:bb:cc:00:00:01", "portIdxs": [1, 2]}
+                ],
+            }
+        ],
+    }
+    session = _Session([{"data": [raw_stack]}, {"data": raw_stack}])
+    client = _client(session)
+
+    listed = await client.stacks.get_all("default", offset=0, limit=10)
+    stack = listed[0]
+    assert stack.device_id == "dev-1"
+    assert [unit.mac_address for unit in stack.units] == [
+        "aa:bb:cc:00:00:01",
+        "aa:bb:cc:00:00:02",
+    ]
+    assert stack.units[0].role is SwitchStackUnitRole.ACTIVE_CONTROLLER
+    assert stack.members == []
+    member = stack.lags[0].members[0]
+    assert member.unit_id == 1
+    assert member.unit_mac_address == "aa:bb:cc:00:00:01"
+    assert member.port_idxs == [1, 2]
+
+    single = await client.stacks.get("default", "stack-1")
+    assert single.id == "stack-1"
+    assert single.units[1].order == 2
+    assert single.units[1].role == SwitchStackUnitRole.MEMBER
+    assert single.lags[0].members[0].unit_id == 1
+    assert session.requests[1]["method"] == "GET"
+    assert (
+        session.requests[1]["url"]
+        == "https://192.168.1.1/proxy/network/integration/v1/sites/default/switching/switch-stacks/stack-1"
+    )
 
 
 # =============================================================================

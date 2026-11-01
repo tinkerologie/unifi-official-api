@@ -22,7 +22,9 @@ class UlpUser(BaseModel):
     last_name: str = Field(..., alias="lastName", description="Last name")
     full_name: str = Field(..., alias="fullName", description="Combined full name")
     email: str = Field(default="", description="Email address (may be empty if not set)")
-    status: UlpUserStatus | str = Field(..., description="Account status")
+    status: UlpUserStatus | str = Field(
+        ..., description="Account status", union_mode="left_to_right"
+    )
     model_key: str = Field(default="ulpUser", alias="modelKey")
 
     model_config = {"populate_by_name": True, "extra": "allow"}

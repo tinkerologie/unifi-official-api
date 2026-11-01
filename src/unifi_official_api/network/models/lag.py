@@ -42,7 +42,7 @@ class LAG(BaseModel):
     """
 
     id: str
-    type: LagType | str | None = None
+    type: LagType | str | None = Field(default=None, union_mode="left_to_right")
     members: list[LagMember] = Field(default_factory=list)
     metadata: dict[str, Any] | None = None
     mc_lag_domain_id: str | None = Field(default=None, alias="mcLagDomainId")
@@ -56,7 +56,7 @@ class McLagPeer(BaseModel):
 
     device_id: str | None = Field(default=None, alias="deviceId")
     link_port_idxs: list[int] = Field(default_factory=list, alias="linkPortIdxs")
-    role: McLagRole | str | None = None
+    role: McLagRole | str | None = Field(default=None, union_mode="left_to_right")
 
     model_config = {"populate_by_name": True, "extra": "allow"}
 

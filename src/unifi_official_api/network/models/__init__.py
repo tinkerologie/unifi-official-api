@@ -72,7 +72,15 @@ from .resources import (
 )
 from .routes import PolicyBasedRoute
 from .site import Site, SiteHealth
-from .stack import SwitchStack, SwitchStackLag, SwitchStackMember
+from .stack import (
+    SwitchStack,
+    SwitchStackLag,
+    SwitchStackLagMember,
+    SwitchStackMember,
+    SwitchStackPage,
+    SwitchStackUnit,
+    SwitchStackUnitRole,
+)
 from .static_route import StaticRoute
 from .traffic import (
     Country,
@@ -141,7 +149,11 @@ __all__ = [
     "McLagRole",
     "SwitchStack",
     "SwitchStackLag",
+    "SwitchStackLagMember",
     "SwitchStackMember",
+    "SwitchStackPage",
+    "SwitchStackUnit",
+    "SwitchStackUnitRole",
     # Network
     "Network",
     "NetworkPurpose",
