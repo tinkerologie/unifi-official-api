@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-11-01
+
 ### Added
 
 - `FirewallRule.report_flow_enabled` (`reportFlowEnabled`, Network 11.0.97): whether Insights Flows reports traffic matched by the policy. It is `None` when the console does not report it, as on Network before 11.0.97. `rule.reportFlowEnabled` keeps working as a read-only alias; `model_dump()` now writes the key as `report_flow_enabled` (pass `by_alias=True` for `reportFlowEnabled`), as it does for `logging_enabled` (#66).
