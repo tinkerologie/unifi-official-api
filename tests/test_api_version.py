@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import re
+
 from unifi_official_api._version import __version__ as version_from_module
 from unifi_official_api.const import (
     ACCESS_DOC_VERSION,
@@ -19,8 +21,9 @@ from unifi_official_api.const import (
 
 def test_api_version_drives_user_agent() -> None:
     """Test the public version in _version.py remains the user-agent source."""
-    assert version_from_module == "3.0.1"
-    assert __version__ == "3.0.1"
+    # Not a literal: bumping _version.py alone must pass, because that bump releases.
+    assert re.fullmatch(r"\d+\.\d+\.\d+", __version__)
+    assert version_from_module == __version__
     assert f"unifi-official-api/{__version__}" == USER_AGENT
 
 
