@@ -18,6 +18,10 @@ To maintain code quality, protect maintainer capacity, and prevent maintainer bu
 
 ## Development Workflow
 
+Before exploring the library, read the [domain glossary](GLOSSARY.md) and
+[architecture decisions](docs/adr/README.md). These describe current resource
+language and established contracts; propose changes through the issue workflow.
+
 All contributions—whether submitted by humans or AI agents—must adhere to this step-by-step workflow:
 
 ### 1. Open a GitHub Issue First

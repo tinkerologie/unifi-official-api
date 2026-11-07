@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added a domain glossary and six retrospective architecture decision records, with source and test references, covering transport ownership, application routing, typed models, response validation, rate limiting, and optional talkback workers. Contributor entry points link to both. Runtime behavior is unchanged (#73).
+
 ### Changed
 
 - Changing `__version__` on `main` now releases that version automatically, unless PyPI already has it.

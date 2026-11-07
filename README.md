@@ -260,6 +260,10 @@ client = UniFiProtectClient(
 
 ## Development
 
+Read the [domain glossary](GLOSSARY.md) for resource terminology and the
+[architecture decisions](docs/adr/README.md) for the library's existing design
+contracts and trade-offs.
+
 ### Setup
 
 ```bash
