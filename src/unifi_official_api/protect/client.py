@@ -7,7 +7,7 @@ from typing import Any, ClassVar
 import aiohttp
 
 from ..auth import ApiKeyAuth, LocalAuth
-from ..base import BaseUniFiClient
+from ..base import BaseUniFiClient, RequestBudget, _BudgetScope
 from ..const import (
     DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_TIMEOUT,
@@ -106,6 +106,7 @@ class UniFiProtectClient(BaseUniFiClient):
         session: aiohttp.ClientSession | None = None,
         timeout: int = DEFAULT_TIMEOUT,
         connect_timeout: int = DEFAULT_CONNECT_TIMEOUT,
+        request_budget: RequestBudget | None = None,
     ) -> None:
         """
         Initialize the UniFi Protect client.
@@ -119,6 +120,7 @@ class UniFiProtectClient(BaseUniFiClient):
             session: Optional aiohttp session to reuse.
             timeout: Request timeout in seconds.
             connect_timeout: Connection timeout in seconds.
+            request_budget: Optional budget for clients sharing this console and key.
 
         Raises:
             ValueError: If REMOTE connection type is used without console_id.
@@ -135,16 +137,16 @@ class UniFiProtectClient(BaseUniFiClient):
         if connection_type == ConnectionType.REMOTE and not console_id:
             raise ValueError("console_id is required for REMOTE connection type")
 
+        self._connection_type = connection_type
+        self._console_id = console_id
         super().__init__(
             auth=auth,
             base_url=base_url,
             session=session,
             timeout=timeout,
             connect_timeout=connect_timeout,
+            request_budget=request_budget,
         )
-
-        self._connection_type = connection_type
-        self._console_id = console_id
 
         # Initialize endpoints
         self._cameras = CamerasEndpoint(self)
@@ -168,6 +170,11 @@ class UniFiProtectClient(BaseUniFiClient):
         self._viewers = ViewersEndpoint(self)
         self._application = ApplicationEndpoint(self)
         self._websocket = ProtectWebSocket(self)
+
+    def _request_budget_scope(self) -> _BudgetScope:
+        """Scope remote quotas to their specific console."""
+        console_id = self._console_id if self._connection_type == ConnectionType.REMOTE else None
+        return ("protect", self._connection_type, str(self.base_url.origin()), console_id)
 
     @property
     def connection_type(self) -> ConnectionType:

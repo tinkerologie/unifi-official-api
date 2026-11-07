@@ -6,7 +6,7 @@ import re
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, NoReturn, TypeIs
 
 from ..auth import ApiKeyAuth
-from ..base import BaseUniFiClient
+from ..base import BaseUniFiClient, RequestBudget, _BudgetScope
 from ..const import (
     DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_TIMEOUT,
@@ -66,6 +66,7 @@ class UniFiMobilityClient(BaseUniFiClient):
         session: aiohttp.ClientSession | None = None,
         timeout: int = DEFAULT_TIMEOUT,
         connect_timeout: int = DEFAULT_CONNECT_TIMEOUT,
+        request_budget: RequestBudget | None = None,
     ) -> None:
         """Initialize the UniFi Mobility client."""
         super().__init__(
@@ -74,6 +75,7 @@ class UniFiMobilityClient(BaseUniFiClient):
             session=session,
             timeout=timeout,
             connect_timeout=connect_timeout,
+            request_budget=request_budget,
         )
 
         # Initialize endpoints
@@ -82,6 +84,10 @@ class UniFiMobilityClient(BaseUniFiClient):
         self._clients = ClientsEndpoint(self)
         self._network = NetworkEndpoint(self)
         self._wireless = WirelessEndpoint(self)
+
+    def _request_budget_scope(self) -> _BudgetScope:
+        """Scope a Mobility budget to its cloud service origin."""
+        return ("mobility", "remote", str(self.base_url.origin()), None)
 
     @property
     def workspaces(self) -> WorkspacesEndpoint:

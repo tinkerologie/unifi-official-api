@@ -17,6 +17,7 @@ from __future__ import annotations
 from ._version import __version__
 from .access import UniFiAccessClient
 from .auth import AccessTokenAuth, ApiKeyAuth, ApiKeyType, LocalAuth
+from .base import RequestBudget
 from .carrier_fabric import UniFiCarrierFabricClient
 from .const import ConnectionType
 from .exceptions import (
@@ -46,6 +47,7 @@ __all__ = [
     "ApiKeyAuth",
     "ApiKeyType",
     "LocalAuth",
+    "RequestBudget",
     # Clients
     "UniFiAccessClient",
     "UniFiCarrierFabricClient",

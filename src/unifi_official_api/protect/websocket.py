@@ -12,8 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 import aiohttp
 
-from unifi_official_api.base import parse_retry_after
-from unifi_official_api.const import RATE_LIMIT_MAX_RETRY_AFTER
+from unifi_official_api.base import _rate_limit_cooldown, parse_retry_after
 
 if TYPE_CHECKING:
     from .client import UniFiProtectClient
@@ -81,12 +80,8 @@ class ProtectWebSocket:
             return await session.ws_connect(url, headers=headers, heartbeat=30)
         except aiohttp.WSServerHandshakeError as err:
             if err.status == HTTPStatus.TOO_MANY_REQUESTS:
-                self._client._defer_after_rate_limit(
-                    min(
-                        parse_retry_after(err.headers or {}),
-                        RATE_LIMIT_MAX_RETRY_AFTER,
-                    )
-                )
+                cooldown = _rate_limit_cooldown(parse_retry_after(err.headers or {}))
+                self._client._defer_after_rate_limit(cooldown)
             raise
 
     @asynccontextmanager
@@ -253,10 +248,7 @@ class ProtectWebSocket:
                 raise
             except aiohttp.WSServerHandshakeError as err:
                 if err.status == HTTPStatus.TOO_MANY_REQUESTS:
-                    cooldown = min(
-                        parse_retry_after(err.headers or {}),
-                        RATE_LIMIT_MAX_RETRY_AFTER,
-                    )
+                    cooldown = _rate_limit_cooldown(parse_retry_after(err.headers or {}))
                     retry_delay = max(reconnect_delay, cooldown)
                     _LOGGER.debug(
                         "ProtectWebSocket: rate-limited %s handshake; requests deferred for %ss",
