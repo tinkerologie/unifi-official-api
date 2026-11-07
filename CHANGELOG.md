@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Protect and Mobility clients can share an explicit request budget across clients that use the same server quota. The budget coordinates request starts and short rate-limit cooldowns (#77).
 
-- Protect best-effort endpoints expose `get_all_result()` with a tuple of parsed records, skipped count, and completeness for each request, including overlapping reads (#76).
+- Protect listing endpoints can return a `ProtectListResult` from `get_all_result()`. Each result contains a tuple of records, the number of rejected records, and completeness for that request (#76).
 
 - Added a domain glossary and six retrospective architecture decision records, with source and test references, covering transport ownership, application routing, typed models, response validation, rate limiting, and optional talkback workers. Contributor entry points link to both. Runtime behavior is unchanged (#73).
 
