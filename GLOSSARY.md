@@ -288,6 +288,8 @@ connections and cellular service.
 
 Use gateway for a Network device that sends traffic between networks.
 
+Use mobile router for the devices that UniFi Mobility manages.
+
 #### Carrier Fabric organization
 
 An administrative group for subscribers and service plans in Carrier Fabric.
@@ -313,3 +315,49 @@ The relation between a Carrier Fabric subscriber and its gateway host.
 
 Use service plan for the service that an administrator can give to a
 subscriber.
+
+### Library behavior
+
+#### Cloud connector
+
+The UniFi cloud service that sends remote API requests to a console.
+The connector proxy is the API route that sends these requests.
+
+#### Transport
+
+The library code that sends HTTP requests, receives responses, and handles
+connection failures.
+
+#### Session ownership
+
+The rule that identifies who closes an HTTP session. The client closes
+sessions that it creates. The caller closes sessions that it supplies.
+
+#### Rate limiter
+
+The component that controls when a client can start a request. Clients that
+use the same request budget share these limits.
+
+#### Listing completeness
+
+The property that shows that a listing has a valid list shape and no
+rejected records.
+
+#### Firewall zone
+
+A group of networks to which a firewall policy can apply.
+
+#### MC-LAG domain
+
+A group of switches that use multi-chassis link aggregation.
+
+### Technical verbs
+
+- **Authenticate** means to use a credential to establish access.
+- **Paginate** means to get data one page at a time.
+- **Retry** means to send the same request again after a failure.
+- **Serialize** means to convert a value to a format for storage or transmission.
+- **Validate** means to examine data against its schema and field rules.
+- **Raise** means to signal a Python exception.
+- **Rebase** means to apply branch commits again on a different base.
+- **Run** means to start a command or check.

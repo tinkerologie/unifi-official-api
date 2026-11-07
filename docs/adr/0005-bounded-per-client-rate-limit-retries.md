@@ -9,9 +9,9 @@ returns HTTP 429, a short `Retry-After` delay permits one retry. A long or
 missing delay causes a `UniFiRateLimitError`. Protect WebSocket handshakes use
 the same request budget.
 
-The transport uses one policy for the endpoint calls. Unlimited retries
-would make calls take longer and hide rate-limit errors. Without a shared
-policy, each resource would need its own rules. The retry applies to a
+The transport uses one policy for the endpoint calls. Unlimited retries can
+make calls take longer and hide rate-limit errors. Without a shared policy,
+each resource needs its own rules. The retry applies to a
 request that the server rejects with HTTP 429.
 
 ## Consequences

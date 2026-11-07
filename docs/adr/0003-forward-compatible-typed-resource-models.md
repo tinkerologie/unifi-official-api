@@ -7,13 +7,12 @@ Python field name and an alias for the API field name. Many models keep
 fields that the library does not know. This lets an application read a field
 that a firmware update adds before the next library release.
 
-Some enum fields accept both known values and unknown strings. Each model
+Some enum fields accept known values and unknown strings. Each model
 specifies which fields can do this. Required fields and validators determine
 if a record is valid.
 
-If the library returned raw dictionaries, each caller would need to parse
-them. If the library refused all unknown fields, each new field would
-require a library release.
+With raw dictionaries, each caller must parse the response. If the library
+rejects all unknown fields, a new field needs a library release.
 
 ## Consequences
 

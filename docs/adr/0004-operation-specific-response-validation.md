@@ -20,8 +20,8 @@ already exist.
   including responses with HTTP 200.
 - `created_record` reports that the resource can already exist when the
   response gives no usable record.
-- `written_record` lets the update read the resource after an empty or partial
-  response.
+- `written_record` returns `None` if the response contains no usable record.
+  The caller can then read the resource by its known ID.
 - A strict listing raises an exception for an invalid record. Some listings
   skip invalid records. The legacy completeness flag can change between reads.
 

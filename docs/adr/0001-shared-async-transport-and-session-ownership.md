@@ -8,9 +8,8 @@ caller can supply an `aiohttp.ClientSession`. A client closes the sessions
 that it creates. The caller closes a session that it supplies.
 
 A framework can use its existing connection pool. A client can also run on
-its own. If each endpoint opened a session, the endpoints would share the
-work to manage sessions. If only the client could open a session, the
-caller could not use its existing connection pool.
+its own. A session in each endpoint divides session ownership among endpoints.
+A client that always creates a session cannot use the caller's connection pool.
 
 ## Consequences
 

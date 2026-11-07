@@ -5,7 +5,7 @@
 Protect talkback gets an audio destination from the camera. A worker runs
 the PyAV decode, resample, encode, and output operations. The event loop can
 continue to process other requests. The `talkback` extra installs PyAV.
-Talkback imports PyAV when it needs to send audio.
+Talkback imports PyAV when it starts to send audio.
 
 The caller can supply an executor. By default, talkback uses a dedicated
 daemon thread. With an optional dependency, applications that use other

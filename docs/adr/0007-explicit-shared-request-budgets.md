@@ -12,5 +12,5 @@ supersedes the ownership rule in
 Each budget applies to one application, connection mode, origin, and route
 prefix. For remote Protect, it also applies to one console ID. The caller
 groups clients with the same credential scope. One budget operates in one
-event loop in one process. The transport still uses the same rules for
+event loop in one process. The transport uses the same rules for
 session ownership and retries.
