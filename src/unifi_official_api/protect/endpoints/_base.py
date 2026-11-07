@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
-from ...validation import require_record, written_record
+from ...validation import require_record, sanitized_validation_fields, written_record
 
 if TYPE_CHECKING:
     from ..client import UniFiProtectClient
@@ -15,6 +15,37 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 _ModelT = TypeVar("_ModelT", bound=BaseModel)
+
+
+class _ListingState(Protocol):
+    last_result_complete: bool
+
+
+def _parse_lenient_list[ModelT: BaseModel](
+    endpoint: _ListingState,
+    model: type[ModelT],
+    response: object,
+    resource: str,
+    logger: logging.Logger,
+) -> list[ModelT]:
+    """Keep valid records and log only schema fields for rejected records."""
+    data = response.get("data", response) if isinstance(response, dict) else response
+    if not isinstance(data, list):
+        return []
+
+    records: list[ModelT] = []
+    for index, item in enumerate(data):
+        try:
+            records.append(model.model_validate(item))
+        except ValidationError as err:
+            endpoint.last_result_complete = False
+            logger.warning(
+                "Skipping %s at index %d that failed validation (fields: %s)",
+                resource,
+                index,
+                sanitized_validation_fields(err, model=model),
+            )
+    return records
 
 
 class ProtectDeviceEndpoint(Generic[_ModelT]):
@@ -67,27 +98,7 @@ class ProtectDeviceEndpoint(Generic[_ModelT]):
         path = self._client.build_api_path(f"/{self._resource}", site_id)
         self.last_result_complete = True
         response = await self._client._get(path, expected_unsupported=expected_unsupported)
-
-        if response is None:
-            return []
-
-        data = response.get("data", response) if isinstance(response, dict) else response
-        if not isinstance(data, list):
-            return []
-
-        items: list[_ModelT] = []
-        for item in data:
-            try:
-                items.append(self._model.model_validate(item))
-            except ValidationError as err:
-                self.last_result_complete = False
-                _LOGGER.warning(
-                    "Skipping %s that failed to parse (id=%s): %s",
-                    self._resource,
-                    item.get("id") if isinstance(item, dict) else "?",
-                    err,
-                )
-        return items
+        return _parse_lenient_list(self, self._model, response, self._resource, _LOGGER)
 
     async def get(self, resource_id: str, site_id: str | None = None) -> _ModelT:
         """

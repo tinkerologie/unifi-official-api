@@ -5,10 +5,9 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from pydantic import ValidationError
-
 from ...validation import require_record, written_record
 from ..models import Sensor
+from ._base import _parse_lenient_list
 
 if TYPE_CHECKING:
     from ..client import UniFiProtectClient
@@ -48,26 +47,7 @@ class SensorsEndpoint:
         path = self._client.build_api_path("/sensors", site_id)
         self.last_result_complete = True
         response = await self._client._get(path)
-
-        if response is None:
-            return []
-
-        data = response.get("data", response) if isinstance(response, dict) else response
-        if not isinstance(data, list):
-            return []
-
-        sensors: list[Sensor] = []
-        for item in data:
-            try:
-                sensors.append(Sensor.model_validate(item))
-            except ValidationError as err:
-                self.last_result_complete = False
-                _LOGGER.warning(
-                    "Skipping sensor that failed to parse (id=%s): %s",
-                    item.get("id") if isinstance(item, dict) else "?",
-                    err,
-                )
-        return sensors
+        return _parse_lenient_list(self, Sensor, response, "sensor", _LOGGER)
 
     async def get(self, sensor_id: str, site_id: str | None = None) -> Sensor:
         """

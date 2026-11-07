@@ -5,10 +5,9 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from pydantic import ValidationError
-
 from ...validation import require_record, written_record
 from ..models import Light, LightMode
+from ._base import _parse_lenient_list
 
 if TYPE_CHECKING:
     from ..client import UniFiProtectClient
@@ -51,26 +50,7 @@ class LightsEndpoint:
         path = self._client.build_api_path("/lights", site_id)
         self.last_result_complete = True
         response = await self._client._get(path)
-
-        if response is None:
-            return []
-
-        data = response.get("data", response) if isinstance(response, dict) else response
-        if not isinstance(data, list):
-            return []
-
-        lights: list[Light] = []
-        for item in data:
-            try:
-                lights.append(Light.model_validate(item))
-            except ValidationError as err:
-                self.last_result_complete = False
-                _LOGGER.warning(
-                    "Skipping light that failed to parse (id=%s): %s",
-                    item.get("id") if isinstance(item, dict) else "?",
-                    err,
-                )
-        return lights
+        return _parse_lenient_list(self, Light, response, "light", _LOGGER)
 
     async def get(self, light_id: str, site_id: str | None = None) -> Light:
         """

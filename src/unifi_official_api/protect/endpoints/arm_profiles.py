@@ -8,8 +8,6 @@ import logging
 from http import HTTPStatus
 from typing import TYPE_CHECKING, Any
 
-from pydantic import ValidationError
-
 from ...exceptions import (
     UniFiGlobalAlarmManagerError,
     UniFiNotFoundError,
@@ -17,6 +15,7 @@ from ...exceptions import (
 )
 from ...validation import created_record, parse_record, response_record, written_record
 from ..models import ArmProfile, ArmProfileSettings
+from ._base import _parse_lenient_list
 
 if TYPE_CHECKING:
     from ..client import UniFiProtectClient
@@ -111,18 +110,9 @@ class ArmProfilesEndpoint:
 
         """
         self.last_result_complete = True
-        profiles: list[ArmProfile] = []
-        for item in await self._get_raw_profiles(site_id):
-            try:
-                profiles.append(ArmProfile.model_validate(item))
-            except ValidationError as err:
-                self.last_result_complete = False
-                _LOGGER.warning(
-                    "Skipping arm profile that failed to parse (id=%s): %s",
-                    item.get("id") if isinstance(item, dict) else "?",
-                    err,
-                )
-        return profiles
+        return _parse_lenient_list(
+            self, ArmProfile, await self._get_raw_profiles(site_id), "arm profile", _LOGGER
+        )
 
     async def _get_raw_profiles(self, site_id: str | None) -> list[Any]:
         """Return the unvalidated items of the arm profile listing."""

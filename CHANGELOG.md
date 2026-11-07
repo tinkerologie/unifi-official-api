@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Changing `__version__` on `main` now releases that version automatically, unless PyPI already has it.
 
+### Fixed
+
+- Protect listing warnings report the item position and declared field names when a record fails validation. Returned records and completeness keep their existing behavior (#75).
+
 ## [3.0.1] - 2026-11-01
 
 ### Added
