@@ -3,27 +3,26 @@
 **Status:** Accepted. The per-client ownership rule is superseded by
 [ADR 0007](0007-explicit-shared-request-budgets.md).
 
-Rate-limited application clients pace their requests through a limiter in the
-shared transport. Protect and Mobility declare their budgets; a short server
-`Retry-After` permits one retry after HTTP 429, while a long or missing delay
-raises `UniFiRateLimitError` instead of blocking a call for a minute. Protect
-WebSocket handshakes consume the client's request budget as well.
+Protect and Mobility set the number of requests that their clients can start
+in a period. The shared transport applies these limits. When the server
+returns HTTP 429, a short `Retry-After` delay permits one retry. A long or
+missing delay causes a `UniFiRateLimitError`. Protect WebSocket handshakes use
+the same request budget.
 
-Keeping this policy in transport covers endpoint calls consistently. Unlimited
-retries would hide sustained quota contention and extend operation latency;
-leaving all pacing to consumers would duplicate policy across every resource.
-The retry is specifically for server-rejected rate-limited requests, not a
-general retry of writes after uncertain connection failures.
+The transport uses one policy for the endpoint calls. Unlimited retries
+would make calls take longer and hide rate-limit errors. Without a shared
+policy, each resource would need its own rules. The retry applies to a
+request that the server rejects with HTTP 429.
 
 ## Consequences
 
-- The current limiter is owned by one client instance. It does not coordinate
-  multiple clients or processes using the same server-side quota.
-- Only a bounded short delay is retried; callers still handle a rate-limit
-  exception when the delay is unsuitable or the retry is rejected.
-- HTTP-date and numeric retry headers are interpreted by one helper.
-- Stream reconnection remains the stream interface's responsibility; sharing
-  pacing does not make every WebSocket failure an HTTP retry.
+- In this decision, each client owns its budget. That budget cannot control
+  requests from other clients or processes.
+- The caller must handle a rate-limit exception if the delay is too long or
+  the retry fails.
+- One function reads numeric and HTTP-date retry headers.
+- The WebSocket interface controls reconnection. Request limits also apply
+  to the Protect handshake.
 
 ## Evidence
 

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- Add ASD-STE100 Issue 9 to the contributor guide. Update the glossary and the API usage guidance. (#81)
+
 ## [3.1.0] - 2026-11-07
 
 ### Added

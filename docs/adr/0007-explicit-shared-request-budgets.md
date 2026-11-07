@@ -2,15 +2,15 @@
 
 **Status:** Accepted on 2026-11-07.
 
-A server quota can cover several clients using the same credential scope.
-Protect and Mobility accept a caller-owned request budget so those clients
-coordinate request starts and short cooldowns. The client still creates an
-independent budget by default. The shared option supersedes the ownership rule
-in [ADR 0005](0005-bounded-per-client-rate-limit-retries.md).
+A server quota can apply to more than one client. Protect and Mobility
+clients can use a request budget that the caller supplies. The budget controls
+when these clients can start requests. It also shares short delays after
+HTTP 429 responses. By default, each client uses its own budget. This option
+supersedes the ownership rule in
+[ADR 0005](0005-bounded-per-client-rate-limit-retries.md).
 
-The budget binds to one application, origin and route prefix, with connection mode and
-remote Protect console identity where applicable. The caller groups clients
-that use the same credential scope. Explicit injection keeps ownership local
-to the application and avoids a process-wide credential registry. Requests
-share pacing and cooldowns on one event loop. Session ownership and bounded
-retry behavior follow the existing transport policy.
+Each budget applies to one application, connection mode, origin, and route
+prefix. For remote Protect, it also applies to one console ID. The caller
+groups clients with the same credential scope. One budget operates in one
+event loop in one process. The transport still uses the same rules for
+session ownership and retries.

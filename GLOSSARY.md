@@ -1,221 +1,315 @@
 # UniFi Official API
 
-This library exposes UniFi applications and cloud services to Python consumers.
-The glossary distinguishes their resources and identities without prescribing
-how an application represents them.
+UniFi Official API lets Python applications use UniFi applications and cloud
+services. This glossary gives definitions for the terms in the library.
 
 ## Language
 
 ### Applications and access
 
-**UniFi application**:
-A UniFi product with its own resources and capabilities, such as Network,
-Protect, Access, or InnerSpace.
-_Avoid_: domain without a qualifier.
+#### UniFi application
 
-**Console**:
-A UniFi system hosting applications, such as a Dream Machine, Cloud Key, or
-Protect NVR. A console can also perform a gateway role.
-_Avoid_: controller or gateway as a synonym for every console.
+A UniFi product with its own functions and access requirements. Network,
+Protect, Access, and InnerSpace are examples.
 
-**API client**:
-The library's connection to a UniFi application or cloud service on behalf of
-a consuming application.
-_Avoid_: client without a qualifier.
+Give the name of the application when it is known.
 
-**Local connection**:
-Access made directly to a console using credentials accepted by that console.
-_Avoid_: cloud connector connection.
+#### Console
 
-**Remote connection**:
-Access to a console application through UniFi's cloud connector.
-_Avoid_: Site Manager as a synonym for every remote operation.
+A UniFi system that runs applications. A Dream Machine, a Cloud Key, and a
+Protect NVR are examples. A console can also route network traffic.
 
-**Local API key**:
-A credential issued for access to a console's supported application APIs.
-_Avoid_: cloud API key or Access token as an interchangeable credential.
+Use gateway for the device that sends traffic between networks.
 
-**Cloud API key**:
-A credential for UniFi cloud services and permitted remote console access.
-_Avoid_: assuming one key grants every service or console permission.
+#### API client
 
-**Access token**:
+Software that an application uses to send requests to a UniFi application or
+cloud service.
+
+Use Network client for a device that uses the network.
+
+#### Local connection
+
+A direct connection to a console. It uses credentials that the console
+accepts.
+
+Use remote connection for access through the UniFi cloud connector.
+
+#### Remote connection
+
+A connection to a console application through the UniFi cloud connector.
+
+Use Site Manager for the cloud service that gives console and site data.
+
+#### Local API key
+
+A credential for the application APIs on one console.
+
+Use a cloud API key for cloud services and permitted remote connections.
+
+#### Cloud API key
+
+A credential for UniFi cloud services and permitted remote connections.
+
+A cloud API key can have access to a subset of services or consoles.
+
+#### Access token
+
 The bearer credential for the UniFi Access developer interface.
-_Avoid_: Network API key or Protect API key.
+
+Use API key for the credential of the Network or Protect API.
 
 ### Network
 
-**Network site**:
-An administrative grouping within a console's Network application, with an
-identity meaningful in that console's scope.
-_Avoid_: physical location, VLAN, console, or Site Manager site as a synonym.
+#### Network site
 
-**Classic site name**:
-The site reference used by the older Network controller interface.
-_Avoid_: assuming it is interchangeable with the Network Integration site ID.
+An administrative group in the Network application on one console. The site ID
+has meaning only on that console.
 
-**Network device**:
-Managed Network infrastructure, such as an access point, switch, gateway, or
-power distribution unit.
-_Avoid_: Network client.
+Use Site Manager site for the cloud site record.
 
-**Network client**:
-An endpoint using the network, such as a phone, computer, or connected guest.
-_Avoid_: client without a qualifier, API client, or Network device.
+#### Classic site name
 
-**Gateway**:
-A Network device routing traffic between networks, commonly including an
-internet connection.
-_Avoid_: console when only the routing role is meant.
+The site name that the Classic API uses.
 
-**Network**:
-A configured network segment with its addressing, VLAN, and related settings.
-_Avoid_: Network site or Wi-Fi network as an interchangeable concept.
+Use Network site ID for the identifier from the Network Integration API.
 
-**Wi-Fi network**:
-A configured wireless network through which Network clients can connect.
-_Avoid_: SSID when the complete configuration is meant.
+#### Network device
 
-**SSID**:
-The name identifying a Wi-Fi network to wireless clients.
-_Avoid_: site name or the entire Wi-Fi configuration.
+Equipment that the Network application manages. Access points, switches,
+gateways, and power distribution units are examples.
 
-**Uplink**:
-The connection from a device or client toward its upstream network attachment.
-_Avoid_: WAN when referring to another local device.
+Use Network client for a device that uses the network.
 
-**Voucher**:
-A hotspot access entitlement with a secret activation code and optional usage,
-duration, or guest limits.
-_Avoid_: subscriber service plan or general API credential.
+#### Network client
 
-**Firewall policy**:
-A Network rule controlling traffic between the zones to which it applies.
-_Avoid_: traffic rule, route, or ACL as an interchangeable rule family.
+A device that uses the network. A phone or a computer is an example.
 
-**ACL**:
-An access control list governing permitted traffic according to its supported
-matching criteria.
-_Avoid_: firewall policy as a universal synonym.
+Use API client for the software that sends requests to a UniFi application.
 
-**Switch stack**:
-A group of switch units represented and managed as one stack.
-_Avoid_: a single switch or a link aggregation group.
+#### Gateway
 
-**LAG**:
-A link aggregation group combining multiple network ports into one logical
+A Network device that sends traffic between networks. One of those networks is
+usually the internet.
+
+Use console for a system that runs UniFi applications.
+
+#### Network
+
+A network segment with its own addresses, VLAN, and settings.
+
+Use Network site for a group in the Network application.
+
+#### Wi-Fi network
+
+A wireless network that Network clients can connect to.
+
+Use SSID for the name of the network.
+
+#### SSID
+
+A service set identifier. It gives the name of a Wi-Fi network.
+
+Use Wi-Fi network for the full network configuration.
+
+#### Uplink
+
+A connection from a device to the network upstream of it.
+
+Use WAN for the gateway's connection to the upstream network.
+
+#### Voucher
+
+Permission to use a hotspot. A voucher has a secret activation code and can
+limit usage, time, or the number of guests.
+
+Use service plan for a service that an administrator can give to a Carrier
+Fabric subscriber.
+
+#### Firewall policy
+
+A Network rule that controls traffic between firewall zones.
+
+Use ACL for an access control list.
+
+#### ACL
+
+An access control list. It permits traffic that meets its matching criteria.
+
+Use firewall policy for a rule that controls traffic between zones.
+
+#### Switch stack
+
+A group of switch units that Network manages as one unit.
+
+Use LAG for a group of network ports.
+
+#### LAG
+
+A link aggregation group. It uses more than one network port as one logical
 connection.
-_Avoid_: switch stack.
 
-**Network Integration API**:
-The versioned Network interface for the application's supported integration
-resources and operations.
-_Avoid_: classic API when describing Integration API resources.
+Use switch stack for a group of switch units.
 
-**Classic API**:
-The older Network controller interfaces retained for supported operations not
-provided by the Network Integration API.
-_Avoid_: treating classic and Integration API site identities as interchangeable.
+#### Network Integration API
+
+The Network interface with versions for integration resources and operations.
+
+Use Classic API for the earlier Network interface.
+
+#### Classic API
+
+An older Network API for operations that the Network Integration API does
+not supply.
+
+Use Network Integration API for the interface with versions.
 
 ### Protect
 
-**Protect device**:
-Equipment managed by Protect, such as a camera, light, sensor, or viewer.
-_Avoid_: Network device as an interchangeable resource identity.
+#### Protect device
 
-**NVR**:
-The system hosting Protect's video recording and device management, whether
-dedicated hardware or part of a console with other roles.
-_Avoid_: camera or assuming it must be a separate appliance.
+Equipment that Protect manages. A camera, light, sensor, or viewer is an
+example.
 
-**Smart detection**:
-A Protect camera's classification of activity, such as a person, animal, or
-vehicle detection.
-_Avoid_: motion detection when a specific classification is meant.
+Use Network device for equipment that the Network application manages.
 
-**Liveview**:
-A named Protect layout assigning cameras to viewing slots.
-_Avoid_: a camera's individual video stream.
+#### NVR
 
-**Talkback session**:
-A camera-negotiated destination and audio format for transmitting sound to a
-Protect camera's speaker.
-_Avoid_: camera video stream or liveview.
+A network video recorder. It records video and manages Protect devices. An NVR
+can be separate equipment or part of a console.
+
+Use camera for the equipment that captures video.
+
+#### Smart detection
+
+A type of activity that a Protect camera identifies. A person, an animal, or a
+vehicle can cause a smart detection.
+
+Use motion detection when the camera reports movement without a specific type.
+
+#### Liveview
+
+A Protect layout that shows cameras in specified positions.
+
+Use video stream for the video from one camera.
+
+#### Talkback session
+
+The connection information and audio format that a Protect camera gives to
+send sound to its speaker.
+
+Use video stream for the video from a Protect camera.
 
 ### Access
 
-**Access door**:
-A managed entry point with its own access-control identity and optional
-physical-position information.
-_Avoid_: hub or reader as a synonym for the entry point.
+#### Access door
 
-**Access device**:
-Access equipment such as a hub, reader, or intercom associated with entry
-control.
-_Avoid_: Access door or Network device as an interchangeable resource.
+A door or gate that UniFi Access controls. It has an access control ID. UniFi
+Access can report its position.
 
-**Access user**:
-A person represented by UniFi Access with access-related identity and policy
-information.
-_Avoid_: Network client or cloud account as an interchangeable identity.
+Use hub or reader for the equipment that controls entry.
 
-**Lock relay state**:
-The locked or unlocked state of an Access door's lock control.
-_Avoid_: door position; an unlocked door can remain physically closed.
+#### Access device
 
-**Door position**:
-The physical open or closed state reported for an Access entry point.
-_Avoid_: lock relay state.
+Equipment that UniFi Access uses to control entry. A hub, reader, or intercom
+is an example.
+
+Use Access door for the entry point that UniFi Access controls.
+
+#### Access user
+
+A person with an identity and access rules in UniFi Access.
+
+Use Network client for a device that uses the network.
+
+#### Lock relay state
+
+The locked or unlocked state of the control that operates the lock for an
+Access door.
+
+An unlocked door can stay closed.
+
+#### Door position
+
+The physical position that UniFi Access reports for a door or gate. The
+position can be open or closed.
+
+Use lock relay state for the locked or unlocked state.
 
 ### InnerSpace
 
-**InnerSpace project**:
-A spatial project containing floor plans and UniFi product placements.
-_Avoid_: Network site or Mobility workspace.
+#### InnerSpace project
 
-**Floor plan**:
-An InnerSpace representation of a physical space on which UniFi products can
-be located.
-_Avoid_: network topology or Network site.
+An InnerSpace group that contains floor plans and the positions of UniFi
+products.
 
-**Placed product**:
-A UniFi product associated with a floor plan in an InnerSpace project.
-_Avoid_: assuming its InnerSpace identity is a Network or Protect device ID.
+Use Network site for a group in the Network application.
+
+#### Floor plan
+
+A drawing of a physical space in InnerSpace. InnerSpace can show the positions
+of UniFi products on this drawing.
+
+Use Network site for the group in the Network application.
+
+#### Placed product
+
+A UniFi product with a position on a floor plan in an InnerSpace project.
+
+Use the InnerSpace product ID for this product. Network and Protect have their
+own device IDs.
 
 ### Cloud services
 
-**Site Manager host**:
-A console represented in UniFi Site Manager, with cloud identity and reported
-state information.
-_Avoid_: hostname, physical location, or Network client.
+#### Site Manager host
 
-**Site Manager site**:
-A cloud site record associated with a Site Manager host.
-_Avoid_: assuming its identity can replace a Network site identity.
+A console that UniFi Site Manager identifies and reports data for.
 
-**Mobility workspace**:
-A UniFi Mobility administrative grouping for mobile routers and their
-administrators.
-_Avoid_: Network site or Carrier Fabric organization.
+Use hostname for the name used to find a system on the network.
 
-**Mobile router**:
-A router managed by UniFi Mobility, with connectivity and cellular-service
-information.
-_Avoid_: Network client or treating every Network gateway as a Mobility router.
+#### Site Manager site
 
-**Carrier Fabric organization**:
-The administrative scope for Carrier Fabric subscribers and service plans.
-_Avoid_: Network site or fabric as an interchangeable name.
+A cloud site record for a Site Manager host.
 
-**Subscriber**:
-A Carrier Fabric customer or service subscription with its own subscriber
-identity and optional service-plan and host associations.
-_Avoid_: device, Network client, or Network site.
+Use Network site for the site record from the Network application.
 
-**Service plan**:
-A Carrier Fabric service offering that can be assigned to subscribers.
-_Avoid_: subscriber or InnerSpace floor plan.
+#### Mobility workspace
 
-**Host assignment**:
-The association between a Carrier Fabric subscriber and its gateway host.
-_Avoid_: service-plan assignment; these are separate relationships.
+An administrative group for mobile routers and their administrators in UniFi
+Mobility.
+
+Use Carrier Fabric organization for the administrative group in Carrier
+Fabric.
+
+#### Mobile router
+
+A router that UniFi Mobility manages. Mobility reports the router's
+connections and cellular service.
+
+Use gateway for a Network device that sends traffic between networks.
+
+#### Carrier Fabric organization
+
+An administrative group for subscribers and service plans in Carrier Fabric.
+
+A fabric is a separate resource in Carrier Fabric.
+
+#### Subscriber
+
+A customer or service subscription with a subscriber ID in Carrier Fabric. A
+subscriber can have a service plan and a host.
+
+Use Network client for a device that uses the network.
+
+#### Service plan
+
+A Carrier Fabric service that an administrator can give to a subscriber.
+
+Use subscriber for the customer or service subscription.
+
+#### Host assignment
+
+The relation between a Carrier Fabric subscriber and its gateway host.
+
+Use service plan for the service that an administrator can give to a
+subscriber.

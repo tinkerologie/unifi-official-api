@@ -1,27 +1,26 @@
 # Shared async transport and explicit session ownership
 
-**Status:** Accepted; recorded retrospectively on 2026-11-07.
+**Status:** Accepted. The record date is 2026-11-07.
 
-Application clients share `BaseUniFiClient` for asynchronous HTTP requests,
-timeouts, response handling, and connection lifecycle. Callers can inject an
-`aiohttp.ClientSession`; the client closes sessions it creates and leaves
-caller-owned sessions open when it closes.
+All application clients use `BaseUniFiClient` for HTTP requests. It also
+controls timeouts, processes responses, and manages the HTTP session. The
+caller can supply an `aiohttp.ClientSession`. A client closes the sessions
+that it creates. The caller closes a session that it supplies.
 
-This gives standalone consumers a usable client while allowing frameworks to
-share their existing connection pools. Creating a session in each endpoint
-would scatter resource ownership; always creating one in the client would
-prevent a caller from controlling that resource. The ownership distinction is
-therefore part of the client interface, rather than endpoint-specific cleanup.
+A framework can use its existing connection pool. A client can also run on
+its own. If each endpoint opened a session, the endpoints would share the
+work to manage sessions. If only the client could open a session, the
+caller could not use its existing connection pool.
 
 ## Consequences
 
-- Consumers must close clients that create their own sessions, normally through
-  the asynchronous context manager.
-- Reusing a caller session does not transfer ownership. If the supplied session
-  is already closed when a request starts, the client creates and owns its
-  replacement.
-- Request-specific TLS behavior must account for an injected session's existing
-  connector; application clients provide overrides where needed.
+- Close clients that create their own sessions. You can use the asynchronous
+  context manager to close a client.
+- If the caller's session is closed when a request starts, the client creates
+  a replacement. The client owns the replacement.
+- The client must use Transport Layer Security (TLS) settings that agree with
+  the session connector. Some application clients can set TLS options for
+  each request.
 
 ## Evidence
 

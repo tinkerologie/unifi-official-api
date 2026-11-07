@@ -1,28 +1,24 @@
 # Optional talkback workers
 
-**Status:** Accepted; recorded retrospectively on 2026-11-07.
+**Status:** Accepted. The record date is 2026-11-07.
 
-Protect talkback negotiates an audio destination separately from streaming
-media. PyAV decoding, resampling, encoding, and output run in a worker rather
-than on the asynchronous event loop. The `talkback` extra supplies PyAV, which
-is imported when streaming is needed; consumers using other APIs do not need
-to install it. Callers can supply an executor instead of the default dedicated
-daemon thread.
+Protect talkback gets an audio destination from the camera. A worker runs
+the PyAV decode, resample, encode, and output operations. The event loop can
+continue to process other requests. The `talkback` extra installs PyAV.
+Talkback imports PyAV when it needs to send audio.
 
-This isolates a native media dependency and blocking work from ordinary API
-requests while supporting hosts with their own worker facilities. Making PyAV
-mandatory would impose media dependencies on every consumer; doing decoding
-in the event loop would couple unrelated requests to media I/O.
+The caller can supply an executor. By default, talkback uses a dedicated
+daemon thread. With an optional dependency, applications that use other
+APIs can run without PyAV.
 
 ## Consequences
 
-- A negotiated session is validated before streaming, and missing PyAV produces
-  a talkback-specific import error.
-- Stop is cooperative between frames. A blocked input open or read finishes
-  only when its configured I/O timeout expires; stop is not immediate worker
-  termination.
-- The accepted codecs, destination schemes, and audio parameters remain part
-  of the talkback interface rather than a generic HTTP transport capability.
+- The library makes sure that the talkback session is valid before it sends
+  audio. If PyAV is missing, it raises an import error for talkback.
+- The worker can stop between frames. If the worker waits for input, it can
+  wait until the configured input or output timeout expires.
+- The talkback interface specifies the codecs, destination schemes, and
+  audio parameters.
 
 ## Evidence
 
