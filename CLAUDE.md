@@ -20,3 +20,20 @@ Read `AGENTS.md` first. It is the source of truth for:
 ## Path-Specific Instructions
 
 See `.github/instructions/*.instructions.md` for path-based guidance.
+
+## Agent skills
+
+### Issue tracker
+
+Use this repository's GitHub Issues. Before ticket operations, read
+`docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the five canonical triage labels. Before triaging, read
+`docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Use a single-context domain layout. Before exploring domain concepts or
+architecture, read `docs/agents/domain.md`.
