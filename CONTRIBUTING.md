@@ -37,7 +37,7 @@ instructions and descriptions agree with the software.
 
 ## Development Workflow
 
-Before exploring the library, read the [domain glossary](GLOSSARY.md) and
+Before exploring the library, read the [glossary](GLOSSARY.md) and
 [architecture decisions](docs/adr/README.md). These describe current resource
 language and established contracts; propose changes through the issue workflow.
 

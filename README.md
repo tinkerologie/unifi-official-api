@@ -254,6 +254,8 @@ that share a budget. Use a budget in one event loop and one process.
 
 ## Configuration Options
 
+### Network client
+
 These examples show local and remote configurations for the Network client.
 
 ```python
