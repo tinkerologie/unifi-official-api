@@ -1,8 +1,8 @@
 # Architecture decisions
 
-These records describe the design of the library. Records 0001 through 0006 describe earlier
-decisions. Their sources are the code, tests, and changelog on 2026-11-07.
-Record 0007 describes the decision to let clients share a request budget.
+These records give the design decisions for the library. Records 0001
+through 0006 cover decisions before the record date. Their sources are the code, tests, and changelog on 2026-11-07.
+Record 0007 gives the rules for a shared request budget.
 
 See the [glossary](../../GLOSSARY.md) for project terms.
 

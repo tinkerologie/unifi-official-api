@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Complete the ASD-STE100 Issue 9 review of the core technical guides.
+- Correct the Python requirement, API inventory, and quick-start examples. (#81)
+
 ### Documentation
 
 - Add ASD-STE100 Issue 9 to the contributor guide. Update the glossary and the API usage guidance. (#81)

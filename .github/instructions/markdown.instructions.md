@@ -20,3 +20,5 @@ applyTo: "**/*.md"
 ## Consistency
 
 When editing docs tied to code behavior, ensure examples and command snippets match current code and tooling.
+
+- For English technical prose, use the [Issue 9 rules in the contributor guide](../../CONTRIBUTING.md#technical-documentation). Limit instructions to 20 words and descriptions to 25 words per sentence. Preserve literals.

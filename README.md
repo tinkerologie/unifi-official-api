@@ -1,7 +1,7 @@
 # UniFi Official API
 
 [![PyPI version](https://badge.fury.io/py/unifi-official-api.svg)](https://badge.fury.io/py/unifi-official-api)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.14+](https://img.shields.io/badge/python-3.14+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![codecov](https://codecov.io/gh/tinkerologie/unifi-official-api/branch/main/graph/badge.svg)](https://codecov.io/gh/tinkerologie/unifi-official-api)
 
@@ -13,17 +13,18 @@ This Python library sends asynchronous requests to these UniFi APIs.
 - **UniFi Site Manager API** (v1.0.0+)
 - **UniFi Mobility API** (v1.0.0+)
 - **UniFi Carrier Fabric API** (v1.0.0+)
+- **UniFi Access API**
 
 ## Features
 
 - The library uses `aiohttp` for asynchronous requests.
-- The library uses Pydantic v2 models and passes `mypy --strict`.
+- The library uses Pydantic v2 models. The type check uses `mypy --strict`.
 - Clients can connect to a local console or use the UniFi cloud connector.
 - Home Assistant and other Python applications can use these clients.
 
 ## Requirements
 
-- Python 3.11 or higher
+- Python 3.14 or a subsequent version
 - A local or cloud API key. Get a cloud key from
   [developer.ui.com](https://developer.ui.com). Get a local key on your console.
 
@@ -34,6 +35,10 @@ pip install unifi-official-api
 ```
 
 ## Quick Start
+
+**Warning.** Use a trusted certificate when possible. The examples with
+`verify_ssl=False` disable certificate verification. An attacker can then
+intercept the API key.
 
 ### 1. UniFi Network Client (Local / Cloud)
 
@@ -49,6 +54,8 @@ async def main():
         connection_type=ConnectionType.LOCAL,
     ) as client:
         sites = await client.sites.get_all()
+        if not sites:
+            return
         devices = await client.devices.get_all(sites[0].id)
         for device in devices:
             print(f"Device: {device.name} ({device.mac})")
@@ -110,7 +117,7 @@ async def main():
         hosts = await client.hosts.get_all()
         sites = await client.sites.get_all()
         metrics = await client.isp_metrics.get_metrics("latency", duration="24h")
-        print(f"Monitored {len(hosts.data)} consoles across {len(sites.data)} sites")
+        print(f"First pages: {len(hosts.data)} consoles and {len(sites.data)} sites")
 
 asyncio.run(main())
 ```
@@ -127,9 +134,11 @@ async def main():
         auth=ApiKeyAuth(api_key="your-cloud-api-key")
     ) as client:
         workspaces = await client.workspaces.get_all()
+        if not workspaces:
+            return
         ws_id = workspaces[0].workspace_id
         devices = await client.devices.get_all(ws_id)
-        print(f"Found {len(devices)} mobility gateways")
+        print(f"Found {len(devices)} mobile routers")
 
 asyncio.run(main())
 ```
@@ -147,7 +156,7 @@ async def main():
     ) as client:
         subscribers = await client.subscribers.get_all()
         plans = await client.service_plans.get_all()
-        print(f"Loaded {len(subscribers.data)} subscribers and {len(plans)} service plans")
+        print(f"Loaded {len(subscribers)} subscribers and {len(plans)} service plans")
 
 asyncio.run(main())
 ```
@@ -157,19 +166,24 @@ asyncio.run(main())
 | Client / API | Endpoints / Resources Covered |
 | -------------- | ------------------------------- |
 | **UniFiNetworkClient** | Sites, Devices, Clients, Networks, WiFi/SSIDs, Firewall & Zones, Vouchers, ACL Rules, Switching (LAGs, MC-LAG domains, Switch Stacks), Traffic Matching, Resources (WAN, VPN, RADIUS) |
-| **UniFiProtectClient** | Cameras (Streams, Snapshots, PTZ Presets & Patrols, Talkback), Sirens, Key Fobs, Relays, Speakers, Bridges, Link Stations, Alarm Hubs, Alarm Manager Webhooks, Arm Profiles, Local & Identity Users, POS Transaction Ingestion, Sensors, Lights, Chimes, NVR (read-only), LiveViews, Viewers, Real-time Device & Event WebSockets |
+| **UniFiProtectClient** | Cameras (streams, snapshots, PTZ, talkback), sirens, key fobs, relays, speakers, bridges, link stations, alarm hubs, Alarm Manager webhooks, and arm profiles.<br>Local and Identity users, POS transactions, sensors, lights, chimes, read-only NVR, liveviews, viewers, and device and event WebSockets. |
 | **UniFiInnerSpaceClient** | Full Project Data (Shapes, Walls, Attenuation), Floor Plans, Placed Access Points, Placed Switches, Unplaced Inventory, Blueprint Image Assets |
 | **UniFiSiteManagerClient** | Hosts/Consoles, Multi-site Aggregation, Cross-console Devices, ISP Performance Telemetry & Queries, SD-WAN Configs & Health Status, Cloud Connector Arbitrary Proxy |
-| **UniFiMobilityClient** | Workspaces, Workspace Admins, UMR Device Gateways & Location Coordinates, Connected Clients, Remote LAN/DHCP Configuration, Remote Wireless WiFi Configuration |
+| **UniFiMobilityClient** | Workspaces, Workspace Admins, Mobile routers and location coordinates, Connected Clients, Remote LAN/DHCP Configuration, Remote Wireless WiFi Configuration |
+| **UniFiAccessClient** | Doors and lock rules, device lists, emergency state, user PIN and status changes, webhooks, notification WebSocket |
 | **UniFiCarrierFabricClient** | Subscribers Lifecycle (Create, Update, Suspend, Resume), Gateway Host Attach/Detach, Service Plan Assignment, Bandwidth QoS Service Plans |
 
-`UniFiProtectClient` uses operations from the Protect OpenAPI specification.
-`PROTECT_SPEC_VERSION` gives the specification version (7.3.70). A test compares
-each public Protect method with the copy of the specification in this repository.
+Access uses its own bearer token. The default console port is 12445.
+
+An offline test compares the HTTP methods and paths from public Protect calls
+with the OpenAPI fixture for `PROTECT_SPEC_VERSION` (7.3.70). The test skips
+`client.close` and `chimes.play` because they send no requests. The test checks
+only methods and paths.
 
 ## Error Handling
 
-Use these exceptions to respond to errors.
+The library raises these exceptions for API errors. This example uses a
+Network client and a Network site ID.
 
 ```python
 from unifi_official_api import (
@@ -182,11 +196,13 @@ from unifi_official_api import (
 )
 
 try:
-    devices = await client.devices.get_all(host_id)
+    devices = await client.devices.get_all(site_id)
 except UniFiAuthenticationError:
-    print("Invalid API key")
+    print("The API key is invalid or lacks permission")
 except UniFiConnectionError:
     print("Failed to connect to API")
+except UniFiTimeoutError:
+    print("Request timed out")
 except UniFiRateLimitError as e:
     print(f"Rate limited. Retry after {e.retry_after} seconds")
 except UniFiNotFoundError:
@@ -211,9 +227,8 @@ these exceptions.
 | 429 | `UniFiRateLimitError` |
 | Other 4xx or 5xx | `UniFiResponseError` or a subclass |
 
-If the client cannot reach the console, it raises `UniFiConnectionError` or
-`UniFiTimeoutError`. Invalid arguments can cause `ValueError` or `TypeError`
-before the client sends the request.
+The client raises `UniFiConnectionError` if the connection fails. It raises
+`UniFiTimeoutError` if the request times out.
 
 ### Protect listing completeness
 
@@ -257,6 +272,7 @@ that share a budget. Use a budget in one event loop and one process.
 ### Network client
 
 These examples show local and remote configurations for the Network client.
+Remote Network discovery with `get_hosts()` needs no `console_id`.
 
 ```python
 from unifi_official_api import LocalAuth, ConnectionType
@@ -280,7 +296,7 @@ from unifi_official_api import ApiKeyAuth
 client = UniFiNetworkClient(
     auth=ApiKeyAuth(api_key="your-cloud-api-key"),
     connection_type=ConnectionType.REMOTE,
-    console_id="your-console-id",  # Required for REMOTE connections
+    console_id="your-console-id",  # Required for console paths in remote Network mode
     timeout=30,
     connect_timeout=10,
 )
@@ -289,6 +305,7 @@ client = UniFiNetworkClient(
 ### Local Protect Installation
 
 Use this configuration for a direct connection to a local Protect console.
+For a remote Protect connection, give `console_id` when you create the client.
 
 ```python
 from unifi_official_api import LocalAuth
@@ -343,12 +360,10 @@ The pre-commit hooks run these checks before each commit.
 - **Pyupgrade** - Python syntax modernization
 - **File checks** - YAML, TOML, JSON validation, trailing whitespace, etc.
 
-Use these commands to install the pre-commit hooks.
+The development extra installs pre-commit. Use these commands to install
+the Git hooks and run them on all files.
 
 ```bash
-# Install pre-commit
-pip install pre-commit
-
 # Install the git hooks
 pre-commit install
 

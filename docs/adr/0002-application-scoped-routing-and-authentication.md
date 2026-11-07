@@ -13,8 +13,8 @@ token.
 
 The shared transport manages HTTP requests. The application client selects
 the path, identifiers, and credentials. Without an application client, the
-caller would need to supply these details. Separate HTTP transport code for
-each application would repeat the connection and error rules.
+caller must supply these details. Separate HTTP code for each application
+repeats the connection and error rules.
 
 ## Consequences
 
