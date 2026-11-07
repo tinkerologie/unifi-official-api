@@ -182,7 +182,8 @@ only methods and paths.
 
 ## Error Handling
 
-Use these exceptions with a Network client and a Network site ID.
+The library raises these exceptions for API errors. This example uses a
+Network client and a Network site ID.
 
 ```python
 from unifi_official_api import (
