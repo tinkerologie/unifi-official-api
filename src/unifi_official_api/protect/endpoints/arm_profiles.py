@@ -15,7 +15,7 @@ from ...exceptions import (
 )
 from ...validation import created_record, parse_record, response_record, written_record
 from ..models import ArmProfile, ArmProfileSettings
-from ._base import _parse_lenient_list
+from ._listing import ProtectListResult, listing_items, parse_listing
 
 if TYPE_CHECKING:
     from ..client import UniFiProtectClient
@@ -110,24 +110,28 @@ class ArmProfilesEndpoint:
 
         """
         self.last_result_complete = True
-        return _parse_lenient_list(
-            self, ArmProfile, await self._get_raw_profiles(site_id), "arm profile", _LOGGER
+        response = await self._fetch_profiles(site_id)
+        return list(
+            parse_listing(ArmProfile, response, "arm profile", _LOGGER, legacy_state=self).records
         )
+
+    async def get_all_result(self, site_id: str | None = None) -> ProtectListResult[ArmProfile]:
+        """Return arm profiles and completeness from this request."""
+        response = await self._fetch_profiles(site_id)
+        return parse_listing(ArmProfile, response, "arm profile", _LOGGER)
 
     async def _get_raw_profiles(self, site_id: str | None) -> list[Any]:
         """Return the unvalidated items of the arm profile listing."""
+        return listing_items(await self._fetch_profiles(site_id)) or []
+
+    async def _fetch_profiles(self, site_id: str | None) -> dict[str, Any] | list[Any] | None:
+        """Fetch the response while preserving global alarm manager error mapping."""
         path = self._client.build_api_path("/arm-profiles", site_id)
         try:
-            response = await self._client._get(path)
+            return await self._client._get(path)
         except UniFiResponseError as err:
             _raise_for_global_alarm_manager(err)
             raise
-
-        if response is None:
-            return []
-
-        data = response.get("data", response) if isinstance(response, dict) else response
-        return data if isinstance(data, list) else []
 
     async def create(
         self,

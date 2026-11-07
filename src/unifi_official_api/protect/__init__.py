@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .client import UniFiProtectClient
+from .endpoints import ProtectListResult
 from .models import (
     NVR,
     AlarmHub,
@@ -78,6 +79,7 @@ from .talkback import (
 from .websocket import ProtectWebSocket
 
 __all__ = [
+    "ProtectListResult",
     "NVR",
     "AlarmHub",
     "ApplicationInfo",

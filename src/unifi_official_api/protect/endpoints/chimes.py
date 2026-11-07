@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 from ...exceptions import UniFiResponseError, UniFiUnsupportedError, UniFiValidationError
 from ...validation import require_record, written_record
 from ..models import Chime
-from ._base import _parse_lenient_list
+from ._listing import ProtectListResult, parse_listing
 
 if TYPE_CHECKING:
     from ..client import UniFiProtectClient
@@ -58,7 +58,15 @@ class ChimesEndpoint:
         path = self._client.build_api_path("/chimes", site_id)
         self.last_result_complete = True
         response = await self._client._get(path, expected_unsupported=expected_unsupported)
-        return _parse_lenient_list(self, Chime, response, "chime", _LOGGER)
+        return list(parse_listing(Chime, response, "chime", _LOGGER, legacy_state=self).records)
+
+    async def get_all_result(
+        self, site_id: str | None = None, *, expected_unsupported: bool = False
+    ) -> ProtectListResult[Chime]:
+        """Return parsed records and completeness from this request."""
+        path = self._client.build_api_path("/chimes", site_id)
+        response = await self._client._get(path, expected_unsupported=expected_unsupported)
+        return parse_listing(Chime, response, "chime", _LOGGER)
 
     async def get(self, chime_id: str, site_id: str | None = None) -> Chime:
         """

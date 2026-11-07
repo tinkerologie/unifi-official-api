@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ._base import ProtectDeviceEndpoint
+from ._listing import ProtectListResult
 from .alarm_hubs import AlarmHubsEndpoint
 from .alarm_manager import AlarmManagerEndpoint
 from .application import ApplicationEndpoint
@@ -25,6 +26,7 @@ from .users import UsersEndpoint
 from .viewers import ViewersEndpoint
 
 __all__ = [
+    "ProtectListResult",
     "AlarmHubsEndpoint",
     "AlarmManagerEndpoint",
     "ApplicationEndpoint",

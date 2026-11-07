@@ -87,7 +87,7 @@ ALLOWED: dict[tuple[str, str], str] = {
     ("network/endpoints/vpn_clients.py", "VpnClientsEndpoint.list_vpn_clients"): (
         "lenient listing: catches ValidationError and skips the client"
     ),
-    ("protect/endpoints/_base.py", "_parse_lenient_list"): (
+    ("protect/endpoints/_listing.py", "parse_listing"): (
         "lenient Protect listing: skip, mark incomplete, log schema fields only"
     ),
     ("protect/endpoints/pos.py", "POSEndpoint.ingest_transaction"): (
