@@ -4582,7 +4582,7 @@ async def test_protect_users_get_all_and_get() -> None:
     assert users[0].ucore_user_id == "ucore-1"
     assert users[0].display_name == "Jane Doe"
     client._get.assert_awaited_once_with(
-        client.build_api_path("/users"), expected_unsupported=False
+        client.build_api_path("/users"), expected_unsupported=False, log_body=False
     )
 
     # get single user
@@ -4642,7 +4642,7 @@ async def test_protect_ulp_users_get_all_and_get() -> None:
     assert ulp_users[0].status == UlpUserStatus.ACTIVE
     assert ulp_users[0].display_name == "John Smith"
     client._get.assert_awaited_once_with(
-        client.build_api_path("/ulp-users"), expected_unsupported=False
+        client.build_api_path("/ulp-users"), expected_unsupported=False, log_body=False
     )
 
     # get single ULP user (wrapped in data)

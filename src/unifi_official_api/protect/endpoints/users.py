@@ -42,7 +42,9 @@ class UsersEndpoint:
         """
         path = self._client.build_api_path("/users", site_id)
         self.last_result_complete = True
-        response = await self._client._get(path, expected_unsupported=expected_unsupported)
+        response = await self._client._get(
+            path, expected_unsupported=expected_unsupported, log_body=False
+        )
         return list(parse_listing(User, response, "user", _LOGGER, legacy_state=self).records)
 
     async def get_all_result(
@@ -50,7 +52,9 @@ class UsersEndpoint:
     ) -> ProtectListResult[User]:
         """Return parsed records and completeness from this request."""
         path = self._client.build_api_path("/users", site_id)
-        response = await self._client._get(path, expected_unsupported=expected_unsupported)
+        response = await self._client._get(
+            path, expected_unsupported=expected_unsupported, log_body=False
+        )
         return parse_listing(User, response, "user", _LOGGER)
 
     async def get(self, user_id: str, site_id: str | None = None) -> User:

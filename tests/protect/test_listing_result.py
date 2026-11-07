@@ -4,13 +4,23 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import logging
 from typing import Any
 from unittest.mock import AsyncMock
 
+import aiohttp
 import pytest
+from aioresponses import aioresponses
 
 from unifi_official_api import ApiKeyAuth
-from unifi_official_api.exceptions import UniFiResponseError
+from unifi_official_api.exceptions import (
+    UniFiAuthenticationError,
+    UniFiConnectionError,
+    UniFiNotFoundError,
+    UniFiRateLimitError,
+    UniFiResponseError,
+    UniFiTimeoutError,
+)
 from unifi_official_api.protect import ProtectListResult, UniFiProtectClient
 
 FAMILIES = (
@@ -121,11 +131,65 @@ async def test_listing_distinguishes_empty_from_unusable(response: Any, shape_va
     assert endpoint.last_result_complete is True
 
 
-async def test_listing_result_propagates_http_failure() -> None:
-    """An HTTP failure raises before a result can be produced."""
-    client = _client()
-    failure = UniFiResponseError("test failure", status_code=500)
-    client._get = AsyncMock(side_effect=failure)
-    with pytest.raises(UniFiResponseError) as exc:
-        await client.bridges.get_all_result()
-    assert exc.value is failure
+@pytest.mark.parametrize(
+    ("status", "error"),
+    [
+        (401, UniFiAuthenticationError),
+        (404, UniFiNotFoundError),
+        (429, UniFiRateLimitError),
+        (500, UniFiResponseError),
+    ],
+)
+async def test_listing_result_propagates_http_failure(status: int, error: type[Exception]) -> None:
+    """HTTP errors retain their mapped exception rather than returning inventory evidence."""
+    with aioresponses() as mock:
+        mock.get(
+            "https://example.invalid/proxy/protect/integration/v1/bridges",
+            status=status,
+            headers={"Retry-After": "30"},
+        )
+        async with _client() as client:
+            with pytest.raises(error):
+                await client.bridges.get_all_result()
+
+
+@pytest.mark.parametrize(
+    ("failure", "error"),
+    [
+        (aiohttp.ClientConnectionError("test"), UniFiConnectionError),
+        (TimeoutError(), UniFiTimeoutError),
+    ],
+)
+async def test_listing_result_propagates_transport_failure(
+    failure: Exception, error: type[Exception]
+) -> None:
+    """Transport errors do not yield an empty or partial inventory result."""
+    with aioresponses() as mock:
+        mock.get(
+            "https://example.invalid/proxy/protect/integration/v1/bridges",
+            exception=failure,
+        )
+        async with _client() as client:
+            with pytest.raises(error):
+                await client.bridges.get_all_result()
+
+
+@pytest.mark.parametrize(("family", "path"), [("users", "users"), ("ulp_users", "ulp-users")])
+async def test_protect_user_listing_keeps_personal_data_out_of_transport_logs(
+    caplog: pytest.LogCaptureFixture, family: str, path: str
+) -> None:
+    """Neither listing interface logs user records, even with transport debug enabled."""
+    marker = "synthetic-personal-value"
+    caplog.set_level(logging.DEBUG, logger="unifi_official_api")
+    with aioresponses() as mock:
+        mock.get(
+            f"https://example.invalid/proxy/protect/integration/v1/{path}",
+            payload=[{"id": marker, "email": marker, "firstName": marker}],
+            repeat=True,
+        )
+        async with _client() as client:
+            endpoint = getattr(client, family)
+            assert (await endpoint.get_all_result()).skipped == 1
+            assert await endpoint.get_all() == []
+    assert "failed validation" in caplog.text
+    assert marker not in caplog.text
