@@ -28,6 +28,13 @@ Treating all three as the same parsing failure would lose that information.
 - Sanitized helper exceptions do not guarantee that every endpoint's logging
   follows the same policy; lenient list parsing remains endpoint-specific.
 
+## Protect listing update
+
+New reconciliation callers use `get_all_result()` to carry records and
+completeness together. Each result distinguishes complete empty lists, rejected
+records and invalid list shapes independently of overlapping requests. Both
+listing interfaces use schema-only diagnostics for rejected Protect records.
+
 ## Evidence
 
 - [Shared validation helpers](../../src/unifi_official_api/validation.py).

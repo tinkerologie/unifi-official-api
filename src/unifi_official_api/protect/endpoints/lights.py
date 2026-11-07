@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from ...validation import require_record, written_record
 from ..models import Light, LightMode
-from ._base import _parse_lenient_list
+from ._listing import ProtectListResult, parse_listing
 
 if TYPE_CHECKING:
     from ..client import UniFiProtectClient
@@ -50,7 +50,13 @@ class LightsEndpoint:
         path = self._client.build_api_path("/lights", site_id)
         self.last_result_complete = True
         response = await self._client._get(path)
-        return _parse_lenient_list(self, Light, response, "light", _LOGGER)
+        return list(parse_listing(Light, response, "light", _LOGGER, legacy_state=self).records)
+
+    async def get_all_result(self, site_id: str | None = None) -> ProtectListResult[Light]:
+        """Return parsed records and completeness from this request."""
+        path = self._client.build_api_path("/lights", site_id)
+        response = await self._client._get(path)
+        return parse_listing(Light, response, "light", _LOGGER)
 
     async def get(self, light_id: str, site_id: str | None = None) -> Light:
         """

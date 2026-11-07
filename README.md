@@ -209,6 +209,26 @@ other binary download, raises `UniFiAuthenticationError` for 401 and 403, and
 reached. `ValueError` and `TypeError` are raised only for invalid arguments,
 before any request is made.
 
+### Protect listing completeness
+
+Use the per-request result when a missing record can trigger removal:
+
+```python
+result = await client.cameras.get_all_result()
+if result.complete:
+    reconcile_inventory(result.records)
+```
+
+`records` is a tuple in response order. `skipped` counts records that failed
+validation. `shape_valid` indicates that the response contained a bare or
+data-wrapped list. `complete` requires a valid list shape and zero skipped
+records, so a complete empty list is distinct from an unusable response.
+Transport and HTTP failures raise the usual exceptions.
+
+Existing `get_all()` calls still return lists. Their legacy
+`last_result_complete` flag is shared by concurrent calls.
+Liveview and file listings continue to validate every record.
+
 ## Configuration Options
 
 Both clients accept the following configuration options:

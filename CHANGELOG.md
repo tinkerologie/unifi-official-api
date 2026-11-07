@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Protect best-effort endpoints expose `get_all_result()` with a tuple of parsed records, skipped count, and completeness for each request, including overlapping reads (#76).
+
 - Added a domain glossary and six retrospective architecture decision records, with source and test references, covering transport ownership, application routing, typed models, response validation, rate limiting, and optional talkback workers. Contributor entry points link to both. Runtime behavior is unchanged (#73).
 
 ### Changed

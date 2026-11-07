@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from ...validation import require_record, written_record
 from ..models.viewer import Viewer
-from ._base import _parse_lenient_list
+from ._listing import ProtectListResult, parse_listing
 
 if TYPE_CHECKING:
     from ..client import UniFiProtectClient
@@ -47,7 +47,13 @@ class ViewersEndpoint:
         path = self._client.build_api_path("/viewers", site_id)
         self.last_result_complete = True
         response = await self._client._get(path)
-        return _parse_lenient_list(self, Viewer, response, "viewer", _LOGGER)
+        return list(parse_listing(Viewer, response, "viewer", _LOGGER, legacy_state=self).records)
+
+    async def get_all_result(self, site_id: str | None = None) -> ProtectListResult[Viewer]:
+        """Return parsed records and completeness from this request."""
+        path = self._client.build_api_path("/viewers", site_id)
+        response = await self._client._get(path)
+        return parse_listing(Viewer, response, "viewer", _LOGGER)
 
     async def get(self, viewer_id: str, site_id: str | None = None) -> Viewer:
         """
