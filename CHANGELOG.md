@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-11-07
+
 ### Added
+
+- Protect and Mobility clients can share an explicit request budget across clients that use the same server quota. The budget coordinates request starts and short rate-limit cooldowns (#77).
 
 - Protect best-effort endpoints expose `get_all_result()` with a tuple of parsed records, skipped count, and completeness for each request, including overlapping reads (#76).
 

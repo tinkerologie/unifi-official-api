@@ -11,6 +11,7 @@ import time
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
+from hashlib import sha256
 from http import HTTPStatus
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, ClassVar, Final, Self, TypeVar
@@ -148,23 +149,56 @@ def parse_retry_after(headers: Mapping[str, str]) -> int:
     return _retry_after_seconds(headers.get("Retry-After"))
 
 
-class RequestRateLimiter:
-    """
-    Space out requests so a client never exceeds a server-side rate limit.
+def _rate_limit_cooldown(retry_after: float | None) -> float:
+    """Cap the cooldown without altering retry metadata exposed to callers."""
+    if retry_after is None:
+        return RATE_LIMIT_MAX_RETRY_AFTER
+    return min(retry_after, RATE_LIMIT_MAX_RETRY_AFTER)
 
-    Allows at most `max_requests` request starts in any rolling `window`
-    seconds. A rolling window is at least as strict as the server's fixed
-    one, so staying inside it can never trip a fixed-window limit. Waiters
-    are served in arrival order.
+
+type _BudgetScope = tuple[str, str, str, str | None]
+
+
+class RequestBudget:
+    """Limit request starts in a rolling window for clients on one event loop.
+
+    A budget is in memory and serves waiters in arrival order. Share it only
+    among clients that use the same credential scope and server quota.
+    The application and origin binding stores no credentials. In-flight
+    requests and other processes are outside this budget.
     """
 
     def __init__(self, max_requests: int, window: float) -> None:
-        """Initialize the limiter."""
+        """Initialize an independent budget."""
+        if type(max_requests) is not int or max_requests <= 0:
+            msg = "max_requests must be a positive integer"
+            raise ValueError(msg)
+        if not math.isfinite(window) or window <= 0:
+            msg = "window must be positive and finite"
+            raise ValueError(msg)
         self._max_requests = max_requests
         self._window = window
         self._starts: list[float] = []
         self._blocked_until = 0.0
         self._lock = asyncio.Lock()
+        self._binding: tuple[_BudgetScope, bytes] | None = None
+
+    @property
+    def scope(self) -> _BudgetScope | None:
+        """Return the bound application, mode, origin and console identity."""
+        return self._binding[0] if self._binding else None
+
+    def _bind(self, scope: _BudgetScope, base_url: URL) -> None:
+        """Keep a shared budget within one application, origin and route prefix."""
+        # The path prefix can select a different console behind the same proxy.
+        # Compare the effective prefix without retaining or exposing its text.
+        prefix = (base_url / "").raw_path
+        binding = (scope, sha256(prefix.encode()).digest())
+        if self._binding is None:
+            self._binding = binding
+        elif self._binding != binding:
+            msg = "Request budget is already bound to another client scope"
+            raise ValueError(msg)
 
     async def acquire(self) -> None:
         """Wait until another request may start, then record it."""
@@ -184,7 +218,13 @@ class RequestRateLimiter:
 
     def defer(self, seconds: float) -> None:
         """Hold every request for `seconds`, e.g. after a server 429."""
+        if not math.isfinite(seconds) or seconds < 0:
+            msg = "cooldown must be nonnegative and finite"
+            raise ValueError(msg)
         self._blocked_until = max(self._blocked_until, time.monotonic() + seconds)
+
+
+RequestRateLimiter = RequestBudget
 
 
 class BaseUniFiClient(ABC):
@@ -206,6 +246,7 @@ class BaseUniFiClient(ABC):
         session: aiohttp.ClientSession | None = None,
         timeout: int = DEFAULT_TIMEOUT,
         connect_timeout: int = DEFAULT_CONNECT_TIMEOUT,
+        request_budget: RequestBudget | None = None,
     ) -> None:
         """
         Initialize the base client.
@@ -216,6 +257,7 @@ class BaseUniFiClient(ABC):
             session: Optional aiohttp session to reuse.
             timeout: Request timeout in seconds.
             connect_timeout: Connection timeout in seconds.
+            request_budget: Optional shared request-start budget.
 
         """
         self._auth = auth
@@ -227,10 +269,24 @@ class BaseUniFiClient(ABC):
             connect=connect_timeout,
         )
         self._closed = False
-        self._rate_limiter: RequestRateLimiter | None = None
-        if self.RATE_LIMIT is not None:
-            max_requests, window = self.RATE_LIMIT
-            self._rate_limiter = RequestRateLimiter(max_requests, window + RATE_LIMIT_WINDOW_MARGIN)
+        if request_budget is not None:
+            request_budget._bind(self._request_budget_scope(), self._base_url)
+        elif self.RATE_LIMIT is not None:
+            request_budget = self.create_request_budget()
+        self._rate_limiter = request_budget
+
+    @classmethod
+    def create_request_budget(cls) -> RequestBudget:
+        """Create a shareable budget with the application's default quota."""
+        if cls.RATE_LIMIT is None:
+            msg = "This application has no default request budget"
+            raise ValueError(msg)
+        max_requests, window = cls.RATE_LIMIT
+        return RequestBudget(max_requests, window + RATE_LIMIT_WINDOW_MARGIN)
+
+    def _request_budget_scope(self) -> _BudgetScope:
+        """Return credential-free application and service origin information."""
+        return (type(self).__qualname__, "", str(self.base_url.origin()), None)
 
     @property
     def base_url(self) -> URL:
@@ -324,9 +380,7 @@ class BaseUniFiClient(ABC):
         to a minute, which must not freeze every request on the client.
         """
         if self._rate_limiter is not None:
-            if retry_after is None:
-                retry_after = RATE_LIMIT_MAX_RETRY_AFTER
-            self._rate_limiter.defer(min(retry_after, RATE_LIMIT_MAX_RETRY_AFTER))
+            self._rate_limiter.defer(_rate_limit_cooldown(retry_after))
 
     async def _retry_once_after_rate_limit(
         self,

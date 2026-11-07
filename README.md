@@ -229,6 +229,22 @@ Existing `get_all()` calls still return lists. Their legacy
 `last_result_complete` flag is shared by concurrent calls.
 Liveview and file listings continue to validate every record.
 
+### Shared request budgets
+
+Protect and Mobility clients have independent request budgets by default.
+Clients on the same event loop that share a server quota can use one budget:
+
+```python
+budget = UniFiProtectClient.create_request_budget()
+first = UniFiProtectClient(auth, base_url=console_url, request_budget=budget)
+second = UniFiProtectClient(auth, base_url=console_url, request_budget=budget)
+```
+
+The budget shares request-start pacing and short 429 cooldowns across those
+clients. It binds to one application, connection mode, origin and route prefix, including
+the console identity for remote Protect. The caller must group clients by
+credential scope. A budget is local to one event loop and process.
+
 ## Configuration Options
 
 Both clients accept the following configuration options:

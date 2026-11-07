@@ -1,6 +1,7 @@
 # Bounded per-client rate-limit retries
 
-**Status:** Accepted; recorded retrospectively on 2026-11-07.
+**Status:** Accepted. The per-client ownership rule is superseded by
+[ADR 0007](0007-explicit-shared-request-budgets.md).
 
 Rate-limited application clients pace their requests through a limiter in the
 shared transport. Protect and Mobility declare their budgets; a short server

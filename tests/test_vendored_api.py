@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import json
 import logging
@@ -24,7 +25,9 @@ from unifi_official_api import (
     ApiKeyAuth,
     ConnectionType,
     LocalAuth,
+    RequestBudget,
     UniFiInnerSpaceClient,
+    UniFiMobilityClient,
 )
 from unifi_official_api import base as api_base
 from unifi_official_api.base import (
@@ -5195,3 +5198,251 @@ async def test_protect_pos_ingest_transaction_invalid_data_raises() -> None:
         await client.pos.ingest_transaction(
             "cam1", {"type": "sale", "externalId": "1", "amount": 1.0}
         )
+
+
+@pytest.mark.parametrize(
+    ("limit", "window"), [(0, 1), (-1, 1), (True, 1), (1, 0), (1, float("inf"))]
+)
+def test_request_budget_validates_quota(limit: int, window: float) -> None:
+    """A quota must permit starts and have a finite rolling window."""
+    with pytest.raises(ValueError):
+        RequestBudget(limit, window)
+
+
+def test_request_budget_scope_and_default_factory() -> None:
+    """Budgets bind to application and origin without storing credential data."""
+    assert RequestRateLimiter is RequestBudget
+    budget = UniFiProtectClient.create_request_budget()
+    assert budget.scope is None
+    assert (budget._max_requests, budget._window) == (10, 1.1)
+    mobility = UniFiMobilityClient.create_request_budget()
+    assert (mobility._max_requests, mobility._window) == (100, 60.1)
+    with pytest.raises(ValueError, match="no default request budget"):
+        UniFiNetworkClient.create_request_budget()
+    for invalid in (-1, float("nan"), float("inf")):
+        with pytest.raises(ValueError, match="cooldown"):
+            budget.defer(invalid)
+
+    auth = ApiKeyAuth("synthetic-test-key")
+    UniFiProtectClient(auth, base_url="https://example.invalid", request_budget=budget)
+    UniFiProtectClient(auth, base_url="https://example.invalid:443/", request_budget=budget)
+    assert budget.scope == ("protect", "local", "https://example.invalid", None)
+    assert auth.api_key not in repr(budget.scope)
+    with pytest.raises(ValueError, match="another client scope"):
+        UniFiProtectClient(auth, base_url="https://other.invalid", request_budget=budget)
+    with pytest.raises(ValueError, match="another client scope"):
+        UniFiMobilityClient(auth, base_url="https://example.invalid", request_budget=budget)
+
+    proxy_budget = UniFiProtectClient.create_request_budget()
+    for url in ("https://proxy.invalid/console-a", "https://proxy.invalid/console-a/"):
+        UniFiProtectClient(auth, base_url=url, request_budget=proxy_budget)
+    with pytest.raises(ValueError, match="another client scope"):
+        UniFiProtectClient(
+            auth, base_url="https://proxy.invalid/console-b", request_budget=proxy_budget
+        )
+
+    remote = UniFiProtectClient.create_request_budget()
+    UniFiProtectClient(
+        auth, connection_type=ConnectionType.REMOTE, console_id="a", request_budget=remote
+    )
+    with pytest.raises(ValueError, match="another client scope"):
+        UniFiProtectClient(
+            auth, connection_type=ConnectionType.REMOTE, console_id="b", request_budget=remote
+        )
+
+
+@pytest.mark.parametrize("shared", [False, True])
+async def test_two_protect_clients_pace_their_combined_requests(
+    fake_clock: _FakeClock, shared: bool
+) -> None:
+    """Only explicitly shared clients draw from the same request-start window."""
+    budget = UniFiProtectClient.create_request_budget() if shared else None
+    session = MagicMock(closed=False)
+    session.close = AsyncMock()
+    times = []
+
+    def send(method: str, url: Any, **kwargs: Any) -> MagicMock:
+        assert method == "GET" and url.path.endswith("/bridges")
+        times.append(fake_clock.now)
+        return _response_context(200, {"Content-Type": "application/json"}, [])
+
+    session.request = MagicMock(side_effect=send)
+    clients = [
+        UniFiProtectClient(
+            ApiKeyAuth("test"),
+            base_url="https://example.invalid",
+            session=session,
+            request_budget=budget,
+        )
+        for _ in range(2)
+    ]
+    start = fake_clock.now
+    await asyncio.gather(*(clients[index % 2].bridges.get_all() for index in range(12)))
+    assert times[:10] == [start] * 10
+    assert times[10:] == [pytest.approx(start + (1.1 if shared else 0))] * 2
+    await asyncio.gather(*(client.close() for client in clients))
+    session.close.assert_not_awaited()
+
+
+async def test_cancelled_mobility_waiter_does_not_send(
+    fake_clock: _FakeClock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cancellation releases admission for the other client without spending a start."""
+    session = MagicMock(closed=False)
+    session.request.return_value = _response_context(200, {"Content-Type": "application/json"}, [])
+    budget = RequestBudget(1, 1)
+    a, b = (
+        UniFiMobilityClient(ApiKeyAuth("test"), session=session, request_budget=budget)
+        for _ in range(2)
+    )
+    await a.workspaces.get_all()
+    sleeping = asyncio.Event()
+    hold = asyncio.Event()
+
+    async def wait(seconds: float) -> None:
+        sleeping.set()
+        await hold.wait()
+
+    monkeypatch.setattr(api_base.asyncio, "sleep", wait)
+    task = asyncio.create_task(b.workspaces.get_all())
+    await sleeping.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert session.request.call_count == 1
+
+    monkeypatch.setattr(api_base.asyncio, "sleep", fake_clock.sleep)
+    await a.workspaces.get_all()
+    assert session.request.call_count == 2
+    assert fake_clock.sleeps == [pytest.approx(1)]
+
+
+@pytest.mark.parametrize(("header", "expected"), [("2", 2), ("30", 5), (None, 5)])
+async def test_shared_cooldown_delays_other_protect_client(
+    fake_clock: _FakeClock, monkeypatch: pytest.MonkeyPatch, header: str | None, expected: int
+) -> None:
+    """A 429 defers the other client's requests and preserves retry bounds."""
+    budget = UniFiProtectClient.create_request_budget()
+    session = MagicMock(closed=False)
+    times: dict[str, list[float]] = {"bridges": [], "chimes": []}
+
+    def send(method: str, url: Any, **kwargs: Any) -> MagicMock:
+        assert method == "GET"
+        family = url.path.rsplit("/", 1)[-1]
+        times[family].append(fake_clock.now)
+        if family == "bridges" and len(times[family]) == 1:
+            return _response_context(429, {"Retry-After": header} if header else {})
+        return _response_context(200, {"Content-Type": "application/json"}, [])
+
+    session.request = MagicMock(side_effect=send)
+    a, b = (
+        UniFiProtectClient(
+            ApiKeyAuth("test"),
+            base_url="https://example.invalid",
+            session=session,
+            request_budget=budget,
+        )
+        for _ in range(2)
+    )
+    start = fake_clock.now
+    if header == "2":
+        sleeping = asyncio.Event()
+        release = asyncio.Event()
+        other_started = asyncio.Event()
+
+        async def wait(seconds: float) -> None:
+            sleeping.set()
+            await release.wait()
+            await fake_clock.sleep(seconds)
+
+        async def other_read() -> None:
+            other_started.set()
+            await b.chimes.get_all()
+
+        monkeypatch.setattr(api_base.asyncio, "sleep", wait)
+        async with asyncio.TaskGroup() as tasks:
+            tasks.create_task(a.bridges.get_all())
+            await sleeping.wait()
+            tasks.create_task(other_read())
+            await other_started.wait()
+            assert times["chimes"] == []
+            release.set()
+
+        assert times["bridges"] == [start, start + expected]
+    else:
+        with pytest.raises(UniFiRateLimitError) as err:
+            await a.bridges.get_all()
+        assert err.value.retry_after == (int(header) if header else DEFAULT_RATE_LIMIT_RETRY_AFTER)
+        assert times["bridges"] == [start]
+        await b.chimes.get_all()
+    assert times["chimes"] == [start + expected]
+
+
+async def test_protect_binary_json_and_handshake_share_admission(fake_clock: _FakeClock) -> None:
+    """Both clients share one budget across JSON, snapshots and subscription handshakes."""
+    budget = RequestBudget(2, 1)
+    session = MagicMock(closed=False)
+    session.request.return_value = _response_context(200, {"Content-Type": "application/json"}, [])
+    session.get.return_value = _response_context(200, {"Content-Type": "image/jpeg"})
+    handshake_starts = []
+    socket = MagicMock(close=AsyncMock())
+
+    async def connect(*args: Any, **kwargs: Any) -> MagicMock:
+        handshake_starts.append(fake_clock.now)
+        return socket
+
+    session.ws_connect = AsyncMock(side_effect=connect)
+    a, b = (
+        UniFiProtectClient(
+            ApiKeyAuth("test"),
+            base_url="https://example.invalid",
+            session=session,
+            request_budget=budget,
+        )
+        for _ in range(2)
+    )
+    start = fake_clock.now
+    await a.bridges.get_all()
+    assert await b.cameras.get_snapshot("camera") == b"jpeg"
+    async with b.websocket.subscribe_devices("host", "site"):
+        assert handshake_starts == [pytest.approx(start + 1)]
+    socket.close.assert_awaited_once()
+
+
+async def test_protect_handshake_rejection_defers_another_clients_http(
+    fake_clock: _FakeClock,
+) -> None:
+    """A handshake 429 delays another client that shares the remote console quota."""
+    budget = UniFiProtectClient.create_request_budget()
+    session = MagicMock(closed=False)
+    session.ws_connect = AsyncMock(
+        side_effect=aiohttp.WSServerHandshakeError(
+            MagicMock(), (), status=429, headers={"Retry-After": "2"}
+        )
+    )
+    send_times: list[float] = []
+
+    def send(method: str, url: Any, **kwargs: Any) -> MagicMock:
+        assert method == "GET"
+        assert url.path == "/v1/connector/consoles/console/protect/integration/v1/bridges"
+        send_times.append(fake_clock.now)
+        return _response_context(200, {"Content-Type": "application/json"}, [])
+
+    session.request = MagicMock(side_effect=send)
+    first, second = (
+        UniFiProtectClient(
+            ApiKeyAuth("test"),
+            connection_type=ConnectionType.REMOTE,
+            console_id="console",
+            session=session,
+            request_budget=budget,
+        )
+        for _ in range(2)
+    )
+    start = fake_clock.now
+    with pytest.raises(aiohttp.WSServerHandshakeError):
+        async with first.websocket.subscribe_devices("host", "site"):
+            pytest.fail("The mocked handshake must fail")
+    await second.bridges.get_all()
+    assert send_times == [start + 2]
+    assert session.ws_connect.await_count == 1
