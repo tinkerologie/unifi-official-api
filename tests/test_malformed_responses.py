@@ -8,6 +8,7 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
+from pydantic import ValidationError
 
 from unifi_official_api import ApiKeyAuth, ConnectionType, LocalAuth
 from unifi_official_api.carrier_fabric import UniFiCarrierFabricClient
@@ -16,7 +17,9 @@ from unifi_official_api.innerspace import UniFiInnerSpaceClient
 from unifi_official_api.mobility import UniFiMobilityClient
 from unifi_official_api.network.client import UniFiNetworkClient
 from unifi_official_api.protect import UniFiProtectClient
+from unifi_official_api.protect.models import Bridge
 from unifi_official_api.site_manager import UniFiSiteManagerClient
+from unifi_official_api.validation import sanitized_validation_fields
 
 SECRET = "do-not-leak-7f3a"
 # A list item no model accepts: it is not an object, and it carries a value
@@ -445,3 +448,96 @@ async def test_get_route_matches_the_id_the_model_parses() -> None:
     route = await client.routes.get_route("default", "r-1")
     assert route.id == "r-1"
     assert route.description == "Wanted"
+
+
+@pytest.mark.parametrize("wrapped", [False, True])
+async def test_protect_listing_logs_schema_fields_without_rejected_values(
+    caplog: pytest.LogCaptureFixture, wrapped: bool
+) -> None:
+    """Malformed Protect records must not expose rejected values or IDs."""
+    records = [
+        {"id": "first"},
+        {"token": SECRET, "email": "private-example@example.invalid"},
+        {"id": "private-bridge-id", "connectedCameras": [{"secret": SECRET}]},
+        {"id": "last"},
+    ]
+    client = _protect()
+    client._get = AsyncMock(side_effect=[{"data": records} if wrapped else records, None])
+    assert [bridge.id for bridge in await client.bridges.get_all()] == ["first", "last"]
+    assert not client.bridges.last_result_complete
+    assert SECRET not in caplog.text
+    assert "private-example@example.invalid" not in caplog.text
+    assert "private-bridge-id" not in caplog.text
+    warnings = [record for record in caplog.records if record.levelno == logging.WARNING]
+    assert [record.args for record in warnings] == [
+        ("bridges", 1, "id"),
+        ("bridges", 2, "connected_cameras"),
+    ]
+    assert all(record.name.endswith("protect.endpoints._base") for record in warnings)
+    assert await client.bridges.get_all() == []
+    assert client.bridges.last_result_complete
+
+
+@pytest.mark.parametrize(
+    ("family", "module"),
+    [
+        ("bridges", "_base"),
+        ("cameras", "cameras"),
+        ("chimes", "chimes"),
+        ("lights", "lights"),
+        ("sensors", "sensors"),
+        ("viewers", "viewers"),
+        ("alarm_hubs", "alarm_hubs"),
+        ("arm_profiles", "arm_profiles"),
+        ("users", "users"),
+        ("ulp_users", "ulp_users"),
+    ],
+)
+async def test_protect_lenient_listings_keep_records_and_redact_warnings(
+    caplog: pytest.LogCaptureFixture, family: str, module: str
+) -> None:
+    """Each lenient listing keeps valid records and identifies a rejected item safely."""
+    valid = {
+        "id": "valid",
+        "mac": "AA:BB:CC:DD:EE:FF",
+        "name": "Example",
+        "state": "CONNECTED",
+        "firstName": "Example",
+        "lastName": "Person",
+        "fullName": "Example Person",
+        "status": "ACTIVE",
+    }
+    malformed = {key: value for key, value in valid.items() if key != "id"}
+    malformed["token"] = SECRET
+    client = _protect()
+    client._get = AsyncMock(return_value={"data": [malformed, valid]})
+    endpoint = getattr(client, family)
+
+    assert [item.id for item in await endpoint.get_all()] == ["valid"]
+    assert not endpoint.last_result_complete
+    warnings = [record for record in caplog.records if record.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    assert warnings[0].name == f"unifi_official_api.protect.endpoints.{module}"
+    assert "fields: id" in warnings[0].getMessage()
+    assert SECRET not in warnings[0].getMessage()
+    assert SECRET not in repr(warnings[0].args)
+
+
+@pytest.mark.parametrize(
+    ("location", "expected", "legacy"),
+    [
+        (("connectedCameras", 0), "connected_cameras", "0"),
+        (("connected_cameras", 0), "connected_cameras", "0"),
+        ((), "root", "root"),
+        ((SECRET,), "unrecognized", SECRET),
+    ],
+)
+def test_model_aware_diagnostics_use_only_known_top_level_fields(
+    location: tuple[str | int, ...], expected: str, legacy: str
+) -> None:
+    """Untrusted locations and nested indexes cannot become logged field names."""
+    error = ValidationError.from_exception_data(
+        "Bridge", [{"type": "missing", "loc": location, "input": SECRET}]
+    )
+    assert sanitized_validation_fields(error, model=Bridge) == expected
+    assert sanitized_validation_fields(error) == legacy

@@ -4883,7 +4883,7 @@ async def test_protect_pos_ingest_transaction_payload_variants_and_invalid_type(
 async def test_protect_users_malformed_item_log_omits_personal_data(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """A malformed user must be logged by id only, never with email or names."""
+    """A malformed user must be logged by field and position only."""
     client = _protect_client()
     client._get = AsyncMock(
         return_value=[
@@ -4898,7 +4898,9 @@ async def test_protect_users_malformed_item_log_omits_personal_data(
     with caplog.at_level(logging.WARNING):
         assert await client.users.get_all() == []
 
-    assert "bad-user" in caplog.text
+    assert "bad-user" not in caplog.text
+    assert "index 0" in caplog.text
+    assert "fields: name" in caplog.text
     assert "leak.email@example.com" not in caplog.text
     assert "LeakFirst" not in caplog.text
     assert "LeakLast" not in caplog.text
@@ -4907,7 +4909,7 @@ async def test_protect_users_malformed_item_log_omits_personal_data(
 async def test_protect_ulp_users_malformed_item_log_omits_personal_data(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """A malformed ULP user must be logged by id only, never with email or names."""
+    """A malformed ULP user must be logged by field and position only."""
     client = _protect_client()
     client._get = AsyncMock(
         return_value=[
@@ -4923,7 +4925,9 @@ async def test_protect_ulp_users_malformed_item_log_omits_personal_data(
     with caplog.at_level(logging.WARNING):
         assert await client.ulp_users.get_all() == []
 
-    assert "bad-ulp" in caplog.text
+    assert "bad-ulp" not in caplog.text
+    assert "index 0" in caplog.text
+    assert "fields: status" in caplog.text
     assert "leak.email@example.com" not in caplog.text
     assert "LeakFirst" not in caplog.text
     assert "LeakLast" not in caplog.text

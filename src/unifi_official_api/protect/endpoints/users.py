@@ -5,10 +5,9 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from pydantic import ValidationError
-
 from ...validation import require_record
 from ..models.user import ProtectUser, User
+from ._base import _parse_lenient_list
 
 if TYPE_CHECKING:
     from ..client import UniFiProtectClient
@@ -44,26 +43,7 @@ class UsersEndpoint:
         path = self._client.build_api_path("/users", site_id)
         self.last_result_complete = True
         response = await self._client._get(path, expected_unsupported=expected_unsupported)
-
-        if response is None:
-            return []
-
-        data = response.get("data", response) if isinstance(response, dict) else response
-        if not isinstance(data, list):
-            return []
-
-        users: list[User] = []
-        for item in data:
-            try:
-                users.append(User.model_validate(item))
-            except ValidationError as err:
-                self.last_result_complete = False
-                _LOGGER.warning(
-                    "Skipping user that failed to parse (id=%s): %s",
-                    item.get("id") if isinstance(item, dict) else "?",
-                    err.errors(include_input=False, include_context=False),
-                )
-        return users
+        return _parse_lenient_list(self, User, response, "user", _LOGGER)
 
     async def get(self, user_id: str, site_id: str | None = None) -> User:
         """

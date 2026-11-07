@@ -87,38 +87,11 @@ ALLOWED: dict[tuple[str, str], str] = {
     ("network/endpoints/vpn_clients.py", "VpnClientsEndpoint.list_vpn_clients"): (
         "lenient listing: catches ValidationError and skips the client"
     ),
-    ("protect/endpoints/_base.py", "ProtectDeviceEndpoint.get_all"): (
-        "listing: skips the item and sets last_result_complete = False"
-    ),
-    ("protect/endpoints/alarm_hubs.py", "AlarmHubsEndpoint.get_all"): (
-        "listing: skips the item and sets last_result_complete = False"
-    ),
-    ("protect/endpoints/arm_profiles.py", "ArmProfilesEndpoint.get_all"): (
-        "listing: skips the item and sets last_result_complete = False"
-    ),
-    ("protect/endpoints/cameras.py", "CamerasEndpoint.get_all"): (
-        "listing: skips the item and sets last_result_complete = False"
-    ),
-    ("protect/endpoints/chimes.py", "ChimesEndpoint.get_all"): (
-        "listing: skips the item and sets last_result_complete = False"
-    ),
-    ("protect/endpoints/lights.py", "LightsEndpoint.get_all"): (
-        "listing: skips the item and sets last_result_complete = False"
+    ("protect/endpoints/_base.py", "_parse_lenient_list"): (
+        "lenient Protect listing: skip, mark incomplete, log schema fields only"
     ),
     ("protect/endpoints/pos.py", "POSEndpoint.ingest_transaction"): (
         "validates the caller's transaction dict before any request"
-    ),
-    ("protect/endpoints/sensors.py", "SensorsEndpoint.get_all"): (
-        "listing: skips the item and sets last_result_complete = False"
-    ),
-    ("protect/endpoints/ulp_users.py", "UlpUsersEndpoint.get_all"): (
-        "listing: skips the item and sets last_result_complete = False"
-    ),
-    ("protect/endpoints/users.py", "UsersEndpoint.get_all"): (
-        "listing: skips the item and sets last_result_complete = False"
-    ),
-    ("protect/endpoints/viewers.py", "ViewersEndpoint.get_all"): (
-        "listing: skips the item and sets last_result_complete = False"
     ),
 }
 

@@ -5,11 +5,10 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Literal, get_args
 
-from pydantic import ValidationError
-
 from ...validation import created_record, require_record, written_record
 from ..models import Camera, RecordingMode
 from ..models.files import RTSPSStream, TalkbackSession
+from ._base import _parse_lenient_list
 
 if TYPE_CHECKING:
     from ..client import UniFiProtectClient
@@ -59,26 +58,7 @@ class CamerasEndpoint:
         path = self._client.build_api_path("/cameras", site_id)
         self.last_result_complete = True
         response = await self._client._get(path, expected_unsupported=expected_unsupported)
-
-        if response is None:
-            return []
-
-        data = response.get("data", response) if isinstance(response, dict) else response
-        if not isinstance(data, list):
-            return []
-
-        cameras: list[Camera] = []
-        for item in data:
-            try:
-                cameras.append(Camera.model_validate(item))
-            except ValidationError as err:
-                self.last_result_complete = False
-                _LOGGER.warning(
-                    "Skipping camera that failed to parse (id=%s): %s",
-                    item.get("id") if isinstance(item, dict) else "?",
-                    err,
-                )
-        return cameras
+        return _parse_lenient_list(self, Camera, response, "camera", _LOGGER)
 
     async def get(self, camera_id: str, site_id: str | None = None) -> Camera:
         """

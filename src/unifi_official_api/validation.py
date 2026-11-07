@@ -11,10 +11,27 @@ from pydantic import BaseModel, ValidationError
 from .exceptions import UniFiNotFoundError, UniFiResponseError
 
 
-def sanitized_validation_fields(err: ValidationError) -> str:
-    """Return sorted, de-duplicated validation field names without values."""
-    field_names = [str((item.get("loc") or ("root",))[-1]) for item in err.errors()]
-    return ", ".join(sorted(set(field_names)))
+def sanitized_validation_fields(
+    err: ValidationError, *, model: type[BaseModel] | None = None
+) -> str:
+    """Return sorted field names, optionally limited to declared model fields."""
+    if model is None:
+        return ", ".join(sorted({str((item.get("loc") or ("root",))[-1]) for item in err.errors()}))
+
+    fields: dict[str | int, str] = {}
+    for name, field in model.model_fields.items():
+        for key in (name, field.alias, field.validation_alias):
+            if isinstance(key, str):
+                previous = fields.setdefault(key, name)
+                if previous != name:
+                    fields[key] = "unrecognized"
+
+    locations = err.errors(include_input=False, include_context=False, include_url=False)
+    names = {
+        fields.get(location[0], "unrecognized") if (location := item["loc"]) else "root"
+        for item in locations
+    }
+    return ", ".join(sorted(names))
 
 
 def response_record(response: object, *, id_key: str | None = "id") -> dict[str, Any] | None:
