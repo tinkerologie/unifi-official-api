@@ -1,29 +1,29 @@
 # Application-scoped routing and authentication
 
-**Status:** Accepted; recorded retrospectively on 2026-11-07.
+**Status:** Accepted. The record date is 2026-11-07.
 
-Each UniFi application or cloud service has its own client and resource
-operations. Network, Protect, and InnerSpace clients construct their local or
-cloud connector paths centrally; Network also exposes explicit classic API
-paths. Site Manager, Mobility, and Carrier Fabric retain their own cloud
-interfaces. Access uses its separate console developer interface and bearer
-token rather than borrowing Network or Protect credentials.
+Each UniFi application or cloud service has its own client. The client gives
+access to its resources. Network, Protect, and InnerSpace clients have
+functions that make local and cloud connector paths. Network also has
+functions that make Classic API paths.
 
-The shared transport hides HTTP mechanics while application clients retain
-knowledge of route families, identifiers, and authentication. A universal
-resource client would make callers supply those details themselves; separate
-HTTP implementations would duplicate connection and error policy.
+Site Manager, Mobility, and Carrier Fabric have separate cloud interfaces.
+Access uses its console developer interface. This interface uses an Access
+token.
+
+The shared transport manages HTTP requests. The application client selects
+the path, identifiers, and credentials. Without an application client, the
+caller would need to supply these details. Separate HTTP transport code for
+each application would repeat the connection and error rules.
 
 ## Consequences
 
-- A console identity, Network site identity, classic site name, and cloud
-  service scope are distinct inputs; callers cannot substitute one for another.
-- The presence of a client method does not imply that every application
-  supports every connection mode.
-- Classic Network operations remain explicit compatibility surfaces rather
-  than being presented as documented Integration API operations.
-- Resource groups share transport behavior without requiring identical
-  resource layouts in every application.
+- A console ID, a Network site ID, a classic site name, and a cloud service
+  scope are different inputs.
+- The application determines the connection modes that a client method can use.
+- Classic API operations use a separate interface from Network Integration API
+  operations.
+- The same transport can send requests for different resource layouts.
 
 ## Evidence
 

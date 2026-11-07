@@ -1,11 +1,10 @@
 # Architecture decisions
 
-These records describe material decisions already embodied in the library.
-They were recorded retrospectively on 2026-11-07 from source, tests, and the
-changelog. Their trade-offs describe observable consequences rather than
-claiming to recover an undocumented historical discussion.
+These records describe the design of the library. Records 0001 through 0006 describe earlier
+decisions. Their sources are the code, tests, and changelog on 2026-11-07.
+Record 0007 describes the decision to let clients share a request budget.
 
-See the [domain glossary](../../GLOSSARY.md) for resource terminology.
+See the [glossary](../../GLOSSARY.md) for project terms.
 
 | ADR | Decision |
 | --- | --- |
@@ -17,6 +16,5 @@ See the [domain glossary](../../GLOSSARY.md) for resource terminology.
 | [0006](0006-optional-talkback-workers.md) | Optional talkback workers |
 | [0007](0007-explicit-shared-request-budgets.md) | Explicit shared request budgets |
 
-Each record documents the current choice and its limitations. Change an
-established contract through a separate issue and a superseding record, rather
-than turning these retrospective records into proposals for new behavior.
+Use a new issue to change an existing contract. Add a new record that
+supersedes the previous record.

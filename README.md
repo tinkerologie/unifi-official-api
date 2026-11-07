@@ -5,7 +5,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![codecov](https://codecov.io/gh/tinkerologie/unifi-official-api/branch/main/graph/badge.svg)](https://codecov.io/gh/tinkerologie/unifi-official-api)
 
-Async Python library for the official UniFi APIs:
+This Python library sends asynchronous requests to these UniFi APIs.
 
 - **UniFi Network API** (v10.4.57+)
 - **UniFi Protect API** (v7.2.105+)
@@ -16,18 +16,16 @@ Async Python library for the official UniFi APIs:
 
 ## Features
 
-- **Async-first**: Built with `aiohttp` for efficient non-blocking operations
-- **Strict Typing**: 100% typed, passing `mypy --strict` with Pydantic v2 models
-- **Full Coverage**: Comprehensive support for all 6 official UniFi API suites
-- **Dual Connection Support**: Works locally with direct device consoles or via `api.ui.com` cloud integrations
-- **Home Assistant & Automation Ready**: Designed for clean integration into automation environments
+- The library uses `aiohttp` for asynchronous requests.
+- The library uses Pydantic v2 models and passes `mypy --strict`.
+- Clients can connect to a local console or use the UniFi cloud connector.
+- Home Assistant and other Python applications can use these clients.
 
 ## Requirements
 
-> **Python 3.11 or higher is required.**
-
-- Python 3.11, 3.12, or 3.13
-- UniFi API Key from [developer.ui.com](https://developer.ui.com) or generated locally on your console
+- Python 3.11 or higher
+- A local or cloud API key. Get a cloud key from
+  [developer.ui.com](https://developer.ui.com). Get a local key on your console.
 
 ## Installation
 
@@ -165,11 +163,13 @@ asyncio.run(main())
 | **UniFiMobilityClient** | Workspaces, Workspace Admins, UMR Device Gateways & Location Coordinates, Connected Clients, Remote LAN/DHCP Configuration, Remote Wireless WiFi Configuration |
 | **UniFiCarrierFabricClient** | Subscribers Lifecycle (Create, Update, Suspend, Resume), Gateway Host Attach/Detach, Service Plan Assignment, Bandwidth QoS Service Plans |
 
-`UniFiProtectClient` sends only operations documented in the Protect OpenAPI spec pinned by `PROTECT_SPEC_VERSION` (7.3.70). A test checks every public Protect method against a vendored copy of that spec.
+`UniFiProtectClient` uses operations from the Protect OpenAPI specification.
+`PROTECT_SPEC_VERSION` gives the specification version (7.3.70). A test compares
+each public Protect method with the copy of the specification in this repository.
 
 ## Error Handling
 
-The library provides specific exceptions for different error types:
+Use these exceptions to respond to errors.
 
 ```python
 from unifi_official_api import (
@@ -195,23 +195,29 @@ except UniFiError as e:
     print(f"API error: {e.message}")
 ```
 
-`UniFiNotFoundError` covers both an HTTP 404 and a successful response
-(`status_code == 200`) that holds no record. A record that fails validation
-raises `UniFiResponseError` with `status_code == 200` and a message naming the
-failing fields only. Some listings skip such an item instead: a Protect
-endpoint with a `last_result_complete` attribute sets it to `False`, and the
-Network rule and route listings raise `UniFiValidationError` instead when
-called with `strict=True`. An HTTP error answer, including one to a snapshot or
-other binary download, raises `UniFiAuthenticationError` for 401 and 403, and
-`UniFiResponseError` or one of its subclasses (`UniFiNotFoundError` for 404,
-`UniFiRateLimitError` for 429) for any other 4xx or 5xx status;
-`UniFiConnectionError` and `UniFiTimeoutError` mean the console could not be
-reached. `ValueError` and `TypeError` are raised only for invalid arguments,
-before any request is made.
+`UniFiNotFoundError` shows that the server returned HTTP 404 or HTTP 200
+without a record. If a record fails validation, the client raises
+`UniFiResponseError` with `status_code == 200`. The message gives only the field
+names. Network rule and route listings with `strict=True` raise
+`UniFiValidationError` for invalid records.
+
+For HTTP errors, including errors for binary downloads, the client raises
+these exceptions.
+
+| HTTP status | Exception |
+| --- | --- |
+| 401 or 403 | `UniFiAuthenticationError` |
+| 404 | `UniFiNotFoundError` |
+| 429 | `UniFiRateLimitError` |
+| Other 4xx or 5xx | `UniFiResponseError` or a subclass |
+
+If the client cannot reach the console, it raises `UniFiConnectionError` or
+`UniFiTimeoutError`. Invalid arguments can cause `ValueError` or `TypeError`
+before the client sends the request.
 
 ### Protect listing completeness
 
-Use the per-request result when a missing record can trigger removal:
+Use the result of the request to decide if a missing record can cause removal.
 
 ```python
 result = await client.cameras.get_all_result()
@@ -219,20 +225,20 @@ if result.complete:
     reconcile_inventory(result.records)
 ```
 
-`records` is a tuple in response order. `skipped` counts records that failed
-validation. `shape_valid` indicates that the response contained a bare or
-data-wrapped list. `complete` requires a valid list shape and zero skipped
-records, so a complete empty list is distinct from an unusable response.
-Transport and HTTP failures raise the usual exceptions.
+`records` is a tuple in response order. `skipped` gives the number of records
+that fail validation. `shape_valid` is true if the response is a list or if
+its `data` field is a list. `complete` is true if `shape_valid` is true and
+`skipped` is zero. A valid empty list is complete. HTTP and transport failures
+raise the usual exceptions.
 
-Existing `get_all()` calls still return lists. Their legacy
-`last_result_complete` flag is shared by concurrent calls.
-Liveview and file listings continue to validate every record.
+The legacy `get_all()` method returns a list. Concurrent calls to that method
+use the same `last_result_complete` attribute. Liveview and file listings
+validate each record and raise an exception if validation fails.
 
 ### Shared request budgets
 
 Protect and Mobility clients have independent request budgets by default.
-Clients on the same event loop that share a server quota can use one budget:
+Use one budget for clients on the same event loop and server quota.
 
 ```python
 budget = UniFiProtectClient.create_request_budget()
@@ -240,14 +246,17 @@ first = UniFiProtectClient(auth, base_url=console_url, request_budget=budget)
 second = UniFiProtectClient(auth, base_url=console_url, request_budget=budget)
 ```
 
-The budget shares request-start pacing and short 429 cooldowns across those
-clients. It binds to one application, connection mode, origin and route prefix, including
-the console identity for remote Protect. The caller must group clients by
-credential scope. A budget is local to one event loop and process.
+The budget controls when the clients can start requests. It also shares
+short delays after HTTP 429 responses. A budget applies to one application,
+connection mode, origin, and route prefix. For remote Protect, it also
+applies to one console ID. Use the same credential scope for the clients
+that share a budget. Use a budget in one event loop and one process.
 
 ## Configuration Options
 
-Both clients accept the following configuration options:
+### Network client
+
+These examples show local and remote configurations for the Network client.
 
 ```python
 from unifi_official_api import LocalAuth, ConnectionType
@@ -279,7 +288,7 @@ client = UniFiNetworkClient(
 
 ### Local Protect Installation
 
-For connecting directly to a local UniFi Protect installation:
+Use this configuration for a direct connection to a local Protect console.
 
 ```python
 from unifi_official_api import LocalAuth
@@ -296,9 +305,8 @@ client = UniFiProtectClient(
 
 ## Development
 
-Read the [domain glossary](GLOSSARY.md) for resource terminology and the
-[architecture decisions](docs/adr/README.md) for the library's existing design
-contracts and trade-offs.
+Read the [glossary](GLOSSARY.md) for project terms. Read the
+[architecture decisions](docs/adr/README.md) for the design of the library.
 
 ### Setup
 
@@ -325,7 +333,7 @@ mypy src
 
 ### Pre-commit Hooks
 
-This project uses pre-commit hooks to ensure code quality before commits. The hooks automatically run:
+The pre-commit hooks run these checks before each commit.
 
 - **Ruff** - Linting and formatting
 - **Mypy** - Static type checking
@@ -335,7 +343,7 @@ This project uses pre-commit hooks to ensure code quality before commits. The ho
 - **Pyupgrade** - Python syntax modernization
 - **File checks** - YAML, TOML, JSON validation, trailing whitespace, etc.
 
-To set up pre-commit hooks:
+Use these commands to install the pre-commit hooks.
 
 ```bash
 # Install pre-commit
@@ -348,7 +356,7 @@ pre-commit install
 pre-commit run --all-files
 ```
 
-Once installed, the hooks will automatically run on every commit. If any check fails, the commit will be blocked until you fix the issues.
+If a check fails, Git stops the commit. Correct the errors before you try again.
 
 ### Running Tests
 
@@ -365,15 +373,15 @@ pytest tests/network/test_client.py
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Read the [contributor guide](CONTRIBUTING.md) before you submit a pull request.
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details. Earlier releases were MIT licensed; see [NOTICE](NOTICE).
+This project uses the Apache License 2.0. See [LICENSE](LICENSE). Earlier releases used the MIT license. See [NOTICE](NOTICE).
 
 ## Disclaimer
 
-This is an unofficial library. UniFi is a trademark of Ubiquiti Inc. This project is not affiliated with, endorsed by, or sponsored by Ubiquiti Inc.
+This is an unofficial library. UniFi is a trademark of Ubiquiti Inc. Ubiquiti Inc. has no affiliation with this project and does not endorse or sponsor it.
 
 ## Related Projects
 

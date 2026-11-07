@@ -1,27 +1,27 @@
 # Forward-compatible typed resource models
 
-**Status:** Accepted; recorded retrospectively on 2026-11-07.
+**Status:** Accepted. The record date is 2026-11-07.
 
-Resource responses use Pydantic models with Python field names and aliases for
-upstream names. Many models retain unknown fields so firmware additions do not
-require an immediate library release. Selected evolving enum fields accept
-known enum values first and retain unknown strings; this is a field-specific
-choice rather than a promise that every model field accepts arbitrary values.
+The library uses Pydantic models for resource responses. A model can use a
+Python field name and an alias for the API field name. Many models keep
+fields that the library does not know. This lets an application read a field
+that a firmware update adds before the next library release.
 
-Typed records give consumers a stable vocabulary without discarding new
-upstream information. Raw dictionaries would move parsing into every consumer;
-rejecting all extra fields would couple consumers to every firmware addition.
-Required fields and application-specific validators still determine whether a
-record is usable.
+Some enum fields accept both known values and unknown strings. Each model
+specifies which fields can do this. Required fields and validators determine
+if a record is valid.
+
+If the library returned raw dictionaries, each caller would need to parse
+them. If the library refused all unknown fields, each new field would
+require a library release.
 
 ## Consequences
 
-- Adding an unknown field is different from changing the type or omitting a
-  required field; forward compatibility does not make malformed records valid.
-- Python field names and upstream aliases serve different serialization needs.
-  Callers choose alias serialization when constructing upstream-shaped data.
-- Known enum values may be canonicalized, while an unfamiliar value remains a
-  string only on fields that explicitly support that behavior.
+- An unknown field can be valid. A field with the wrong type or a missing
+  required field can make a record invalid.
+- To make data with API field names, use alias serialization.
+- A model can convert a known value to its enum value. It keeps an unknown
+  value as a string only for fields that permit it.
 
 ## Evidence
 
