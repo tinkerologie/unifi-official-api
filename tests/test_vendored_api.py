@@ -5233,6 +5233,14 @@ def test_request_budget_scope_and_default_factory() -> None:
     with pytest.raises(ValueError, match="another client scope"):
         UniFiMobilityClient(auth, base_url="https://example.invalid", request_budget=budget)
 
+    proxy_budget = UniFiProtectClient.create_request_budget()
+    for url in ("https://proxy.invalid/console-a", "https://proxy.invalid/console-a/"):
+        UniFiProtectClient(auth, base_url=url, request_budget=proxy_budget)
+    with pytest.raises(ValueError, match="another client scope"):
+        UniFiProtectClient(
+            auth, base_url="https://proxy.invalid/console-b", request_budget=proxy_budget
+        )
+
     remote = UniFiProtectClient.create_request_budget()
     UniFiProtectClient(
         auth, connection_type=ConnectionType.REMOTE, console_id="a", request_budget=remote
@@ -5311,7 +5319,7 @@ async def test_cancelled_mobility_waiter_does_not_send(
 
 @pytest.mark.parametrize(("header", "expected"), [("2", 2), ("30", 5), (None, 5)])
 async def test_shared_cooldown_delays_other_protect_client(
-    fake_clock: _FakeClock, header: str | None, expected: int
+    fake_clock: _FakeClock, monkeypatch: pytest.MonkeyPatch, header: str | None, expected: int
 ) -> None:
     """A 429 defers the other client's requests and preserves retry bounds."""
     budget = UniFiProtectClient.create_request_budget()
@@ -5338,7 +5346,28 @@ async def test_shared_cooldown_delays_other_protect_client(
     )
     start = fake_clock.now
     if header == "2":
-        await asyncio.gather(a.bridges.get_all(), b.chimes.get_all())
+        sleeping = asyncio.Event()
+        release = asyncio.Event()
+        other_started = asyncio.Event()
+
+        async def wait(seconds: float) -> None:
+            sleeping.set()
+            await release.wait()
+            await fake_clock.sleep(seconds)
+
+        async def other_read() -> None:
+            other_started.set()
+            await b.chimes.get_all()
+
+        monkeypatch.setattr(api_base.asyncio, "sleep", wait)
+        async with asyncio.TaskGroup() as tasks:
+            tasks.create_task(a.bridges.get_all())
+            await sleeping.wait()
+            tasks.create_task(other_read())
+            await other_started.wait()
+            assert times["chimes"] == []
+            release.set()
+
         assert times["bridges"] == [start, start + expected]
     else:
         with pytest.raises(UniFiRateLimitError) as err:
@@ -5378,3 +5407,42 @@ async def test_protect_binary_json_and_handshake_share_admission(fake_clock: _Fa
     async with b.websocket.subscribe_devices("host", "site"):
         assert handshake_starts == [pytest.approx(start + 1)]
     socket.close.assert_awaited_once()
+
+
+async def test_protect_handshake_rejection_defers_another_clients_http(
+    fake_clock: _FakeClock,
+) -> None:
+    """A handshake 429 delays another client that shares the remote console quota."""
+    budget = UniFiProtectClient.create_request_budget()
+    session = MagicMock(closed=False)
+    session.ws_connect = AsyncMock(
+        side_effect=aiohttp.WSServerHandshakeError(
+            MagicMock(), (), status=429, headers={"Retry-After": "2"}
+        )
+    )
+    send_times: list[float] = []
+
+    def send(method: str, url: Any, **kwargs: Any) -> MagicMock:
+        assert method == "GET"
+        assert url.path == "/v1/connector/consoles/console/protect/integration/v1/bridges"
+        send_times.append(fake_clock.now)
+        return _response_context(200, {"Content-Type": "application/json"}, [])
+
+    session.request = MagicMock(side_effect=send)
+    first, second = (
+        UniFiProtectClient(
+            ApiKeyAuth("test"),
+            connection_type=ConnectionType.REMOTE,
+            console_id="console",
+            session=session,
+            request_budget=budget,
+        )
+        for _ in range(2)
+    )
+    start = fake_clock.now
+    with pytest.raises(aiohttp.WSServerHandshakeError):
+        async with first.websocket.subscribe_devices("host", "site"):
+            pytest.fail("The mocked handshake must fail")
+    await second.bridges.get_all()
+    assert send_times == [start + 2]
+    assert session.ws_connect.await_count == 1

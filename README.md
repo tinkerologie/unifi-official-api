@@ -241,7 +241,7 @@ second = UniFiProtectClient(auth, base_url=console_url, request_budget=budget)
 ```
 
 The budget shares request-start pacing and short 429 cooldowns across those
-clients. It binds to one application, connection mode and origin, including
+clients. It binds to one application, connection mode, origin and route prefix, including
 the console identity for remote Protect. The caller must group clients by
 credential scope. A budget is local to one event loop and process.
 

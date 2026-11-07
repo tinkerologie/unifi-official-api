@@ -11,6 +11,7 @@ import time
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
+from hashlib import sha256
 from http import HTTPStatus
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, ClassVar, Final, Self, TypeVar
@@ -180,18 +181,22 @@ class RequestBudget:
         self._starts: list[float] = []
         self._blocked_until = 0.0
         self._lock = asyncio.Lock()
-        self._scope: _BudgetScope | None = None
+        self._binding: tuple[_BudgetScope, bytes] | None = None
 
     @property
     def scope(self) -> _BudgetScope | None:
         """Return the bound application, mode, origin and console identity."""
-        return self._scope
+        return self._binding[0] if self._binding else None
 
-    def _bind(self, scope: _BudgetScope) -> None:
-        """Keep a shared budget within one application and origin."""
-        if self._scope is None:
-            self._scope = scope
-        elif self._scope != scope:
+    def _bind(self, scope: _BudgetScope, base_url: URL) -> None:
+        """Keep a shared budget within one application, origin and route prefix."""
+        # The path prefix can select a different console behind the same proxy.
+        # Compare the effective prefix without retaining or exposing its text.
+        prefix = (base_url / "").raw_path
+        binding = (scope, sha256(prefix.encode()).digest())
+        if self._binding is None:
+            self._binding = binding
+        elif self._binding != binding:
             msg = "Request budget is already bound to another client scope"
             raise ValueError(msg)
 
@@ -265,7 +270,7 @@ class BaseUniFiClient(ABC):
         )
         self._closed = False
         if request_budget is not None:
-            request_budget._bind(self._request_budget_scope())
+            request_budget._bind(self._request_budget_scope(), self._base_url)
         elif self.RATE_LIMIT is not None:
             request_budget = self.create_request_budget()
         self._rate_limiter = request_budget

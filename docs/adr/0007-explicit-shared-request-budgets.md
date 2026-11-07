@@ -8,7 +8,7 @@ coordinate request starts and short cooldowns. The client still creates an
 independent budget by default. The shared option supersedes the ownership rule
 in [ADR 0005](0005-bounded-per-client-rate-limit-retries.md).
 
-The budget binds to one application and origin, with connection mode and
+The budget binds to one application, origin and route prefix, with connection mode and
 remote Protect console identity where applicable. The caller groups clients
 that use the same credential scope. Explicit injection keeps ownership local
 to the application and avoids a process-wide credential registry. Requests
