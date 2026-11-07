@@ -4,7 +4,7 @@
 
 Each UniFi application or cloud service has its own client and resource
 operations. Network, Protect, and InnerSpace clients construct their local or
-cloud-connector paths centrally; Network also exposes explicit classic API
+cloud connector paths centrally; Network also exposes explicit classic API
 paths. Site Manager, Mobility, and Carrier Fabric retain their own cloud
 interfaces. Access uses its separate console developer interface and bearer
 token rather than borrowing Network or Protect credentials.
