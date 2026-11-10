@@ -749,6 +749,25 @@ async def test_subscribe_updates_delivers_bulk_messages_unchanged() -> None:
 
 
 @pytest.mark.asyncio
+async def test_subscribe_updates_leaves_callback_running_state_alone() -> None:
+    """Ending an updates subscription does not stop a concurrent callback loop."""
+    client = _local_client()
+    ws_socket = ProtectWebSocket(client)
+    ws_socket._running = True  # a subscribe_with_callback loop is active
+    text_msg = MagicMock(type=aiohttp.WSMsgType.TEXT, data=json.dumps({"type": "add"}))
+    close_msg = MagicMock(type=aiohttp.WSMsgType.CLOSED)
+    fake_ws = _make_ws([text_msg, close_msg])
+    ws_socket._connect = AsyncMock(return_value=fake_ws)
+
+    async with ws_socket.subscribe_updates(["camera"]) as iterator:
+        received = [message async for message in iterator]
+
+    assert received == [{"type": "add"}]
+    assert fake_ws.closed is True
+    assert ws_socket._running is True
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "model_keys",
     ["camera", "", [], [""], [1]],

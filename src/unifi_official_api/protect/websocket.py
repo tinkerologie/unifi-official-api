@@ -218,29 +218,27 @@ class ProtectWebSocket:
             raise ValueError("model_keys must contain only non-empty strings")
         path = self._subscribe_path("updates")
         ws = await self._connect(path, params=[("modelKeys", key) for key in keys])
-        self._running = True
 
+        # This subscription owns only its own socket. It never touches
+        # ``_running``, which belongs to ``subscribe_with_callback``: ending an
+        # updates subscription must not stop a callback loop running alongside.
         async def message_iterator() -> AsyncIterator[dict[str, Any]]:
-            try:
-                async for msg in ws:
-                    if msg.type == aiohttp.WSMsgType.TEXT:
-                        try:
-                            data = json.loads(msg.data)
-                            yield data
-                        except json.JSONDecodeError:
-                            continue
-                    elif msg.type in (
-                        aiohttp.WSMsgType.ERROR,
-                        aiohttp.WSMsgType.CLOSED,
-                    ):
-                        break
-            finally:
-                self._running = False
+            async for msg in ws:
+                if msg.type == aiohttp.WSMsgType.TEXT:
+                    try:
+                        data = json.loads(msg.data)
+                        yield data
+                    except json.JSONDecodeError:
+                        continue
+                elif msg.type in (
+                    aiohttp.WSMsgType.ERROR,
+                    aiohttp.WSMsgType.CLOSED,
+                ):
+                    break
 
         try:
             yield message_iterator()
         finally:
-            self._running = False
             await ws.close()
 
     async def subscribe_with_callback(
