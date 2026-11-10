@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add controller-wide Network 11 statistics support through `client.stats.get_source()` and `get_recent_series()` on local and remote connections. Typed series report additive byte totals and the actual duration of each bucket (#90).
 - `SpeakersEndpoint.stop_siren(speaker_id, site_id=None)` stops a siren playing on a speaker (`POST /speakers/{id}/stop-siren`) and returns `True` after the documented 204. An offline speaker or firmware too old for siren raises `UniFiResponseError` (#87).
 - `ExternalArmProfilesEndpoint`, exposed as `client.external_arm_profiles`, manages arm profiles owned by the external alarm manager: `get_all`, `get_all_result`, `get`, `create`, `update`, `arm`, `disarm` and `delete` under `/external/arm-profiles`. `update` keeps an omitted field distinct from an explicit `null`, and every request sends `log_body=False` (#87).
 - `ProtectWebSocket.subscribe_updates(model_keys)` sends one `modelKeys` query pair per key to `/subscribe/updates`. Pass each key as a separate item. The subscription yields raw add, update and remove messages (#87).

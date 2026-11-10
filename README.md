@@ -63,6 +63,19 @@ async def main():
 asyncio.run(main())
 ```
 
+#### Network 11 WAN traffic history
+
+Call `await client.stats.get_source()` to read the statistics engine. For
+`source.root == "MODERN"`, call `client.stats.get_recent_series()` with
+`schema="wanBySite"` and the Classic site `_id` from
+`client.sites.get_legacy_all()`. Set `period` to `HOUR`, `DAY`, `WEEK`, or `MONTH`
+and set `end_ms` to the end of the interval in Unix milliseconds. Add the byte
+totals of each bucket to calculate traffic totals. Use the reported duration
+for the newest bucket, which can be partial.
+
+These controller-wide routes are outside the published Integration API.
+Use an admin API key. A View-Only key gets HTTP 403.
+
 ### 2. UniFi Protect Client (Cameras, Sirens, Chimes, Relays, POS)
 
 ```python

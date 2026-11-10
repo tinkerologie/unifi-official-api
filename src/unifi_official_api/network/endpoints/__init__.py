@@ -17,6 +17,7 @@ from .routes import RoutesEndpoint
 from .sites import SitesEndpoint
 from .stacks import StacksEndpoint
 from .static_routes import StaticRoutesEndpoint
+from .stats import StatsEndpoint
 from .switching import SwitchingEndpoint
 from .traffic import TrafficEndpoint
 from .traffic_rules import TrafficRulesEndpoint
@@ -40,6 +41,7 @@ __all__ = [
     "SitesEndpoint",
     "StacksEndpoint",
     "StaticRoutesEndpoint",
+    "StatsEndpoint",
     "SwitchingEndpoint",
     "TrafficEndpoint",
     "TrafficRulesEndpoint",

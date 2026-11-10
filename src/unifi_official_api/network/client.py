@@ -35,6 +35,7 @@ from .endpoints import (
     SitesEndpoint,
     StacksEndpoint,
     StaticRoutesEndpoint,
+    StatsEndpoint,
     SwitchingEndpoint,
     TrafficEndpoint,
     TrafficRulesEndpoint,
@@ -160,6 +161,7 @@ class UniFiNetworkClient(BaseUniFiClient):
         self._nat_rules = NatRulesEndpoint(self)
         self._static_routes = StaticRoutesEndpoint(self)
         self._reports = ReportsEndpoint(self)
+        self._stats = StatsEndpoint(self)
 
     @property
     def connection_type(self) -> ConnectionType:
@@ -285,6 +287,28 @@ class UniFiNetworkClient(BaseUniFiClient):
         connector_path = NETWORK_LEGACY_V2_PATH.removeprefix("/proxy")
         return f"/v1/connector/consoles/{console_id}{connector_path}/site/{site_name}{endpoint}"
 
+    def build_legacy_v2_global_api_path(self, endpoint: str) -> str:
+        """
+        Build a legacy v2 Network API path that is not site-scoped.
+
+        Args:
+            endpoint: The legacy v2 endpoint path after /proxy/network/v2/api.
+
+        Returns:
+            Full legacy v2 API path with the proper prefix for the connection type.
+
+        """
+        if not endpoint.startswith("/"):
+            endpoint = f"/{endpoint}"
+
+        if self._connection_type == ConnectionType.LOCAL:
+            return f"{NETWORK_LEGACY_V2_PATH}{endpoint}"
+
+        console_id = self._require_console_id()
+        # The connector adds /proxy/ when forwarding to the console, so strip it.
+        connector_path = NETWORK_LEGACY_V2_PATH.removeprefix("/proxy")
+        return f"/v1/connector/consoles/{console_id}{connector_path}{endpoint}"
+
     @property
     def devices(self) -> DevicesEndpoint:
         """Access device management endpoints."""
@@ -389,6 +413,11 @@ class UniFiNetworkClient(BaseUniFiClient):
     def reports(self) -> ReportsEndpoint:
         """Access historical site traffic report endpoints."""
         return self._reports
+
+    @property
+    def stats(self) -> StatsEndpoint:
+        """Access network statistics endpoints."""
+        return self._stats
 
     async def get_site_report(
         self,
