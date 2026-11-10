@@ -143,9 +143,12 @@ async def test_list_with_malformed_item_raises_sanitized_response_error(name: st
 
 
 @pytest.mark.parametrize("query", [False, True])
-async def test_isp_metrics_reject_malformed_periods_without_leaking_input(query: bool) -> None:
+@pytest.mark.parametrize("measurement", [SECRET, False, "0", "NaN", float("inf")])
+async def test_isp_metrics_reject_malformed_periods_without_leaking_input(
+    query: bool, measurement: object
+) -> None:
     client = _site_manager()
-    records = [{"periods": [{"data": {"wan": {"download_kbps": SECRET}}}]}]
+    records = [{"periods": [{"data": {"wan": {"download_kbps": measurement}}}]}]
     client._get = AsyncMock(return_value={"data": records})
     client._post = AsyncMock(return_value={"data": {"metrics": records}})
 

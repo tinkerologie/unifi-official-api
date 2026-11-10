@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictInt
+
+_WANMeasurement = StrictInt | Annotated[float, Field(strict=True, allow_inf_nan=False)]
 
 
 class ISPMetricWAN(BaseModel):
@@ -12,13 +14,13 @@ class ISPMetricWAN(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
-    avg_latency: int | float | None = Field(default=None, alias="avgLatency")
-    max_latency: int | float | None = Field(default=None, alias="maxLatency")
-    packet_loss: int | float | None = Field(default=None, alias="packetLoss")
-    uptime: int | float | None = None
-    downtime: int | float | None = None
-    download_kbps: int | float | None = None
-    upload_kbps: int | float | None = None
+    avg_latency: _WANMeasurement | None = Field(default=None, alias="avgLatency")
+    max_latency: _WANMeasurement | None = Field(default=None, alias="maxLatency")
+    packet_loss: _WANMeasurement | None = Field(default=None, alias="packetLoss")
+    uptime: _WANMeasurement | None = None
+    downtime: _WANMeasurement | None = None
+    download_kbps: _WANMeasurement | None = None
+    upload_kbps: _WANMeasurement | None = None
     isp_name: str | None = Field(default=None, alias="ispName")
     isp_asn: str | None = Field(default=None, alias="ispAsn")
 

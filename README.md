@@ -201,7 +201,7 @@ asyncio.run(main())
 | Mobility device detail | `devices.get()` returns one `MobilityDeviceDetail`. | `get_device()` returns one dictionary. |
 | Mobility connected clients | `clients.get_all()` returns one page as `list[MobilityDeviceClient]`. | `list_device_clients()` returns connected client dictionaries from all pages. |
 
-For typed hosts, stop when `next_token` is empty or `None`. For typed Mobility devices, increase `offset` by the number of records received. Stop when a page is shorter than `limit`. Use `list_device_clients()` to read all connected clients. The Mobility API uses 200 as the default page size for devices and connected clients.
+For typed hosts, stop when `next_token` is empty or `None`. For typed Mobility devices, set `limit` from 1 to 200 and start at `offset=0`. Increase `offset` by the number of records received. Stop when a page is shorter than `limit`. Use `list_device_clients()` to read all connected clients. The Mobility API uses 200 as the default page size for devices and connected clients.
 
 The dictionary methods in the table preserve missing keys and explicit `0` and `False` values. Typed models can supply defaults for missing fields. Check `model_fields_set` for fields such as `is_blocked`, `model`, `state`, and `status` to see which values the API supplied.
 
