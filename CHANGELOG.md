@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `SpeakersEndpoint.stop_siren(speaker_id, site_id=None)` stops a siren playing on a speaker (`POST /speakers/{id}/stop-siren`) and returns `True` after the documented 204. An offline speaker or firmware too old for siren raises `UniFiResponseError` (#87).
+- `ExternalArmProfilesEndpoint`, exposed as `client.external_arm_profiles`, manages arm profiles owned by the external alarm manager: `get_all`, `get_all_result`, `get`, `create`, `update`, `arm`, `disarm` and `delete` under `/external/arm-profiles`. `update` keeps an omitted field distinct from an explicit `null`, and every request sends `log_body=False` (#87).
+- `ProtectWebSocket.subscribe_updates(model_keys)` subscribes to the unified `/subscribe/updates` route by sending one `modelKeys` query pair per key, and yields raw add, update and remove messages (#87).
+- `ExternalArmProfile` and `ExternalArmProfileState` model the external alarm manager response. Only `id` is required, extras are kept, and keys spelled `pin`, `pincode` or `pincodes` are removed before validation (#87).
+- `VideoMode.ANTI_FLICKER` (`antiFlicker`), `Sensor.is_mounted_incorrectly` (`isMountedIncorrectly`) and the read-only `NVR.use_external_alarm_manager` property (`featureFlags.useExternalAlarmManager`) (#87).
+
 ### Changed
 
 - Complete the ASD-STE100 Issue 9 review of the core technical guides.
@@ -15,6 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 
 - Add ASD-STE100 Issue 9 to the contributor guide. Update the glossary and the API usage guidance. (#81)
+
+### Notes
+
+- Read the external alarm manager flag through `nvr.use_external_alarm_manager`, not `nvr.feature_flags.use_external_alarm_manager`. `feature_flags` remains a dictionary so existing indexing, mutation and dumps do not change (#87).
+- `Sensor.model_dump()` now includes `is_mounted_incorrectly` (`isMountedIncorrectly` with `by_alias=True`, or with no alias in a plain dump) (#87).
+- These operations and responses are not verified against a live Protect 7.4.96 NVR yet (#87).
 
 ## [3.1.0] - 2026-11-07
 
