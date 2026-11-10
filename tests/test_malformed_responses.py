@@ -142,6 +142,21 @@ async def test_list_with_malformed_item_raises_sanitized_response_error(name: st
     _assert_sanitized(exc_info.value)
 
 
+@pytest.mark.parametrize("query", [False, True])
+async def test_isp_metrics_reject_malformed_periods_without_leaking_input(query: bool) -> None:
+    client = _site_manager()
+    records = [{"periods": [{"data": {"wan": {"download_kbps": SECRET}}}]}]
+    client._get = AsyncMock(return_value={"data": records})
+    client._post = AsyncMock(return_value={"data": {"metrics": records}})
+
+    with pytest.raises(UniFiResponseError) as error:
+        if query:
+            await client.isp_metrics.query("5m", {"sites": []})
+        else:
+            await client.isp_metrics.get_metrics("5m")
+    _assert_sanitized(error.value)
+
+
 async def test_firewall_list_rules_skips_malformed_rule_by_field_name(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

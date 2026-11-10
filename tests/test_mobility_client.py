@@ -130,6 +130,16 @@ async def test_list_devices_pages_by_offset_until_total() -> None:
     )
 
 
+async def test_raw_mobility_reads_return_incomplete_records_unchanged() -> None:
+    workspaces = [{"workspace_id": _WORKSPACE_ID, "is_owner": False}]
+    devices = [{"id": _DEVICE_ID, "client_count": 0, "wifi_enabled": False}]
+    client = _client(_Session([{"data": workspaces}, {"data": devices}, {"data": {}}]))
+
+    assert await client.list_workspaces() == workspaces
+    assert await client.list_devices(_WORKSPACE_ID) == devices
+    assert await client.get_device(_WORKSPACE_ID, _DEVICE_ID) == {}
+
+
 async def test_list_devices_stops_on_a_short_page_without_total() -> None:
     """A page shorter than the page size is the last one, even without a total."""
     session = _Session([_page([{"id": "only"}])])

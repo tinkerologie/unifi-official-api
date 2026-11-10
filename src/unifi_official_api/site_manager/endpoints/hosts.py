@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ...validation import parse_record, require_record
 from ..models.host import Host, HostListResponse
@@ -23,14 +23,14 @@ class HostsEndpoint:
         limit: int = 25,
         next_token: str | None = None,
     ) -> HostListResponse:
-        params: dict[str, Any] = {"limit": limit}
-        if next_token:
-            params["nextToken"] = next_token
-        response = await self._client._get("/v1/hosts", params=params)
+        """Return one host page. Pass its ``next_token`` to read the next page."""
+        params = self._client._page_params(page_size=limit, next_token=next_token)
+        response = await self._client._get_list_page(self._client._HOSTS_PATH, params)
         if isinstance(response, dict):
             return parse_record(HostListResponse, response, "Host list")
         return HostListResponse()
 
     async def get(self, host_id: str) -> Host:
-        response = await self._client._get(f"/v1/hosts/{host_id}")
+        """Return one host by its ID."""
+        response = await self._client._get(self._client._host_path(host_id))
         return require_record(response, Host, f"Host {host_id}")
