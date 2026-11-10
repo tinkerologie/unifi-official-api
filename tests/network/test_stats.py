@@ -135,8 +135,15 @@ class TestStatsEndpoint:
         ) as client:
             with pytest.raises(UniFiResponseError) as exc_info:
                 await client.stats.get_source()
-            assert exc_info.value.status_code == 200
-            assert "UNKNOWN_SOURCE_LABEL" not in str(exc_info.value)
+            err = exc_info.value
+            assert err.status_code == 200
+            # ``__str__`` shows only the status, so check the stored message,
+            # the args and the chain, which do carry text.
+            assert "UNKNOWN_SOURCE_LABEL" not in err.message
+            assert "UNKNOWN_SOURCE_LABEL" not in str(err.args)
+            assert err.response_body is None
+            assert err.__cause__ is None
+            assert err.__context__ is None
 
     async def test_get_recent_series_query_parameters(
         self,
