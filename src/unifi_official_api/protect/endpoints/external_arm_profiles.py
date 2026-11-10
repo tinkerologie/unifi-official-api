@@ -147,7 +147,8 @@ class ExternalArmProfilesEndpoint:
         List all external arm profiles.
 
         Args:
-            site_id: The site ID (required for REMOTE connections, ignored for LOCAL).
+            site_id: Optional site ID accepted for compatibility with other Protect
+                endpoints; it is currently ignored.
 
         Returns:
             List of external arm profiles.
@@ -183,7 +184,8 @@ class ExternalArmProfilesEndpoint:
 
         Args:
             profile_id: The external arm profile ID.
-            site_id: The site ID (required for REMOTE connections, ignored for LOCAL).
+            site_id: Optional site ID accepted for compatibility with other Protect
+                endpoints; it is currently ignored.
 
         Returns:
             The parsed external arm profile.
@@ -218,7 +220,8 @@ class ExternalArmProfilesEndpoint:
 
         Args:
             title: The profile title (required).
-            site_id: The site ID (required for REMOTE connections, ignored for LOCAL).
+            site_id: Optional site ID accepted for compatibility with other Protect
+                endpoints; it is currently ignored.
             activation_delay: Delay in seconds from 0 to 3600.
             deactivation_delay: Delay in seconds from 0 to 3600.
             schedule: Weekly schedule passed through without local structure checks.
@@ -268,7 +271,8 @@ class ExternalArmProfilesEndpoint:
 
         Args:
             profile_id: The external arm profile ID.
-            site_id: The site ID (required for REMOTE connections, ignored for LOCAL).
+            site_id: Optional site ID accepted for compatibility with other Protect
+                endpoints; it is currently ignored.
             title: A new non-empty title. A title cannot be cleared.
             activation_delay: New delay in seconds, or null to clear it.
             deactivation_delay: New delay in seconds, or null to clear it.
@@ -314,7 +318,8 @@ class ExternalArmProfilesEndpoint:
 
         Args:
             profile_id: The external arm profile ID.
-            site_id: The site ID (required for REMOTE connections, ignored for LOCAL).
+            site_id: Optional site ID accepted for compatibility with other Protect
+                endpoints; it is currently ignored.
 
         Returns:
             The updated external arm profile: from the action response when it
@@ -333,7 +338,8 @@ class ExternalArmProfilesEndpoint:
 
         Args:
             profile_id: The external arm profile ID.
-            site_id: The site ID (required for REMOTE connections, ignored for LOCAL).
+            site_id: Optional site ID accepted for compatibility with other Protect
+                endpoints; it is currently ignored.
 
         Returns:
             The updated external arm profile: from the action response when it
@@ -364,7 +370,8 @@ class ExternalArmProfilesEndpoint:
 
         Args:
             profile_id: The external arm profile ID.
-            site_id: The site ID (required for REMOTE connections, ignored for LOCAL).
+            site_id: Optional site ID accepted for compatibility with other Protect
+                endpoints; it is currently ignored.
 
         Returns:
             True if successful.
