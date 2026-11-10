@@ -749,6 +749,23 @@ async def test_subscribe_updates_delivers_bulk_messages_unchanged() -> None:
 
 
 @pytest.mark.asyncio
+async def test_subscribe_updates_stops_at_an_error_frame() -> None:
+    """An ERROR frame ends the iteration; later frames are not delivered."""
+    client = _local_client()
+    ws_socket = ProtectWebSocket(client)
+    error_msg = MagicMock(type=aiohttp.WSMsgType.ERROR)
+    late_msg = MagicMock(type=aiohttp.WSMsgType.TEXT, data=json.dumps({"type": "add"}))
+    fake_ws = _make_ws([error_msg, late_msg])
+    ws_socket._connect = AsyncMock(return_value=fake_ws)
+
+    async with ws_socket.subscribe_updates(["camera"]) as iterator:
+        received = [message async for message in iterator]
+
+    assert received == []
+    assert fake_ws.closed is True
+
+
+@pytest.mark.asyncio
 async def test_subscribe_updates_leaves_callback_running_state_alone() -> None:
     """Ending an updates subscription does not stop a concurrent callback loop."""
     client = _local_client()
