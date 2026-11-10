@@ -728,14 +728,15 @@ async def test_connect_encodes_repeated_model_keys() -> None:
 
 @pytest.mark.asyncio
 async def test_subscribe_updates_delivers_bulk_messages_unchanged() -> None:
-    """A message covering several IDs reaches the caller without interpretation."""
+    """A bulk message passes through unchanged; bad JSON and binary frames are skipped."""
     client = _local_client()
     ws_socket = ProtectWebSocket(client)
     bulk = {"action": "update", "modelKey": "camera", "ids": ["cam-1", "cam-2"]}
     text_msg = MagicMock(type=aiohttp.WSMsgType.TEXT, data=json.dumps(bulk))
     invalid_json_msg = MagicMock(type=aiohttp.WSMsgType.TEXT, data="not-json")
+    binary_msg = MagicMock(type=aiohttp.WSMsgType.BINARY, data=b"\x00\x01")
     close_msg = MagicMock(type=aiohttp.WSMsgType.CLOSED)
-    fake_ws = _make_ws([text_msg, invalid_json_msg, close_msg])
+    fake_ws = _make_ws([text_msg, invalid_json_msg, binary_msg, close_msg])
     ws_socket._connect = AsyncMock(return_value=fake_ws)
 
     received = []

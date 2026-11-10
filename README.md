@@ -80,16 +80,20 @@ async def main():
         for cam in cameras:
             print(f"Camera: {cam.display_name}")
 
-        speakers = await client.speakers.get_all()
-        if speakers:
-            await client.speakers.stop_siren(speakers[0].id)
-
         nvr = await client.nvr.get()
         if nvr.use_external_alarm_manager:
             profiles = await client.external_arm_profiles.get_all()
             print(f"External arm profiles: {len(profiles)}")
 
 asyncio.run(main())
+```
+
+To stop a siren that is playing on a speaker, call `stop_siren` with the ID of
+that speaker. This silences an active alarm without a confirmation, so call it
+only from an explicit user action:
+
+```python
+await client.speakers.stop_siren("speaker-id")
 ```
 
 ### 3. UniFi InnerSpace Client (Floor Plans, AP/Switch Placements)
