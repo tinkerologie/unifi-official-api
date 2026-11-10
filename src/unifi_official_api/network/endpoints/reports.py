@@ -84,7 +84,9 @@ class ReportsEndpoint:
         ``POST /proxy/network/api/s/{site}/stat/report/{interval}.site`` with
         millisecond ``start`` and ``end`` timestamps and requested ``attrs``.
         This endpoint is not part of the official integration OpenAPI schema
-        and should be treated as optional/unverified by callers.
+        and should be treated as optional/unverified by callers. Network 11
+        returns an empty data list from this route. Use
+        ``client.stats.get_recent_series()`` for Network 11 history.
 
         Args:
             site_name: The classic UniFi site name (e.g. ``"default"``).

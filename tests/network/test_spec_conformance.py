@@ -51,6 +51,7 @@ PATH_BUILDERS = frozenset(
         "build_legacy_api_path",
         "build_legacy_global_api_path",
         "build_legacy_v2_api_path",
+        "build_legacy_v2_global_api_path",
     }
 )
 
@@ -79,6 +80,12 @@ ARGUMENTS: dict[str, Any] = {
 OVERRIDES: dict[str, dict[str, Any]] = {
     "client.get_site_report": {"start_ms": 0, "end_ms": 1},
     "reports.get_site_report": {"start_ms": 0, "end_ms": 1},
+    "stats.get_recent_series": {
+        "schema": "wanBySite",
+        "site_id": "id-site-id",
+        "period": "DAY",
+        "end_ms": 1,
+    },
     "clients.execute_action": {"action": "block"},
     "devices.execute_port_action": {"action": "POWER_CYCLE"},
     "devices.set_outlet_state": {"current_device": {"outlet_table": [{"index": 1}]}},
@@ -138,6 +145,8 @@ LEGACY = frozenset(
         "sites.get_legacy_all",
         "static_routes.list_static_routes",
         "static_routes.update_static_route",
+        "stats.get_recent_series",
+        "stats.get_source",
         "traffic_rules.list_traffic_rules",
         "traffic_rules.update_traffic_rule",
         "vpn_clients.get_vpn_client",

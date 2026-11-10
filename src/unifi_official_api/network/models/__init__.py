@@ -82,6 +82,12 @@ from .stack import (
     SwitchStackUnitRole,
 )
 from .static_route import StaticRoute
+from .stats import (
+    STATS_PERIODS,
+    StatisticsSource,
+    StatsSeries,
+    StatsSeriesBucket,
+)
 from .traffic import (
     Country,
     DPIApplication,
@@ -199,4 +205,9 @@ __all__ = [
     # WiFi
     "WifiNetwork",
     "WifiSecurity",
+    # Statistics
+    "STATS_PERIODS",
+    "StatisticsSource",
+    "StatsSeries",
+    "StatsSeriesBucket",
 ]

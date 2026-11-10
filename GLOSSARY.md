@@ -74,6 +74,17 @@ The site name that the Classic API uses.
 
 Use Network site ID for the identifier from the Network Integration API.
 
+#### Classic site identifier
+
+The `_id` field returned by the Classic sites endpoint. Use it to select a
+site when you read a statistics series. The Classic site name is a separate
+field. The Network Integration API site ID maps to the Classic `external_id`.
+
+#### Network statistics engine
+
+The controller service that provides time series such as WAN traffic totals.
+The statistics source is LEGACY on Network 10 and MODERN on Network 11.
+
 #### Network device
 
 Equipment that the Network application manages. Access points, switches,
