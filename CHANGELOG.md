@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Read the external alarm manager flag through `nvr.use_external_alarm_manager`, not `nvr.feature_flags.use_external_alarm_manager`. `feature_flags` remains a dictionary so existing indexing, mutation and dumps do not change (#87).
 - `Sensor.model_dump()` now includes `is_mounted_incorrectly` (`isMountedIncorrectly` with `by_alias=True`, or with no alias in a plain dump) (#87).
-- These operations and responses are not verified against a live Protect 7.4.96 NVR yet (#87).
+- Verified read-only against a live Protect 7.4.96 NVR: `nvr.use_external_alarm_manager`, sensor and camera parsing, `external_arm_profiles.get_all_result()` and `get()` (no PIN in output), and the `subscribe_updates` handshake with `modelKeys`. Not verified live: `speakers.stop_siren` (the test system has no speakers), external profile `arm`/`disarm`/`create`/`update`/`delete` (they change a live security system), and the payloads of `subscribe_updates` messages (no message arrived in the test window) (#87).
 
 ## [3.1.0] - 2026-11-07
 
