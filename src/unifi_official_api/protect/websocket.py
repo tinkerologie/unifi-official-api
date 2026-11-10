@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import asynccontextmanager
 from http import HTTPStatus
 from typing import TYPE_CHECKING, Any
@@ -60,12 +60,19 @@ class ProtectWebSocket:
         """
         return self._client.build_api_path(f"/subscribe/{subscription_type}")
 
-    async def _connect(self, path: str) -> aiohttp.ClientWebSocketResponse:
+    async def _connect(
+        self,
+        path: str,
+        *,
+        params: Sequence[tuple[str, str]] | None = None,
+    ) -> aiohttp.ClientWebSocketResponse:
         """
         Establish WebSocket connection.
 
         Args:
             path: WebSocket endpoint path.
+            params: Repeated query pairs for the handshake, or None to send no
+                query parameters.
 
         Returns:
             WebSocket connection.
@@ -77,7 +84,9 @@ class ProtectWebSocket:
 
         await self._client._throttle()
         try:
-            return await session.ws_connect(url, headers=headers, heartbeat=30)
+            if params is None:
+                return await session.ws_connect(url, headers=headers, heartbeat=30)
+            return await session.ws_connect(url, headers=headers, heartbeat=30, params=params)
         except aiohttp.WSServerHandshakeError as err:
             if err.status == HTTPStatus.TOO_MANY_REQUESTS:
                 cooldown = _rate_limit_cooldown(parse_retry_after(err.headers or {}))
@@ -149,6 +158,66 @@ class ProtectWebSocket:
         del host_id, site_id
         path = self._subscribe_path("events")
         ws = await self._connect(path)
+        self._running = True
+
+        async def message_iterator() -> AsyncIterator[dict[str, Any]]:
+            try:
+                async for msg in ws:
+                    if msg.type == aiohttp.WSMsgType.TEXT:
+                        try:
+                            data = json.loads(msg.data)
+                            yield data
+                        except json.JSONDecodeError:
+                            continue
+                    elif msg.type in (
+                        aiohttp.WSMsgType.ERROR,
+                        aiohttp.WSMsgType.CLOSED,
+                    ):
+                        break
+            finally:
+                self._running = False
+
+        try:
+            yield message_iterator()
+        finally:
+            self._running = False
+            await ws.close()
+
+    @asynccontextmanager
+    async def subscribe_updates(
+        self,
+        model_keys: Sequence[str],
+    ) -> AsyncIterator[AsyncIterator[dict[str, Any]]]:
+        """
+        Subscribe to unified update messages for the given model keys.
+
+        Each key is sent as its own repeated ``modelKeys`` query pair, so a key
+        containing a comma or other separator cannot be read as several keys.
+        Messages pass through decoded and unchanged: the caller interprets
+        ``add``, ``update`` and ``remove`` actions, and one message may cover
+        several model IDs. Keys outside the documented list are accepted so a
+        newer firmware can be used without a client release.
+
+        Args:
+            model_keys: Model keys to subscribe to (for example ``camera``).
+
+        Yields:
+            Async iterator of raw decoded update messages.
+
+        Raises:
+            ValueError: If ``model_keys`` is a bare string, empty, or holds a
+                non-string or empty key. Nothing is connected in that case.
+
+        """
+        if isinstance(model_keys, str):
+            raise ValueError("model_keys must be a sequence of strings, not a bare string")
+        keys = list(model_keys)
+        if not keys:
+            raise ValueError("model_keys must not be empty")
+        if any(not isinstance(key, str) or not key for key in keys):
+            raise ValueError("model_keys must contain only non-empty strings")
+        path = self._subscribe_path("updates")
+        ws = await self._connect(path, params=[("modelKeys", key) for key in keys])
         self._running = True
 
         async def message_iterator() -> AsyncIterator[dict[str, Any]]:
