@@ -25,6 +25,7 @@ from .endpoints import (
     BridgesEndpoint,
     CamerasEndpoint,
     ChimesEndpoint,
+    ExternalArmProfilesEndpoint,
     FobsEndpoint,
     LightsEndpoint,
     LinkStationsEndpoint,
@@ -162,6 +163,7 @@ class UniFiProtectClient(BaseUniFiClient):
         self._alarm_hubs = AlarmHubsEndpoint(self)
         self._alarm_manager = AlarmManagerEndpoint(self)
         self._arm_profiles = ArmProfilesEndpoint(self)
+        self._external_arm_profiles = ExternalArmProfilesEndpoint(self)
         self._users = UsersEndpoint(self)
         self._ulp_users = UlpUsersEndpoint(self)
         self._pos = POSEndpoint(self)
@@ -280,6 +282,11 @@ class UniFiProtectClient(BaseUniFiClient):
     def arm_profiles(self) -> ArmProfilesEndpoint:
         """Access arm profile configuration endpoints."""
         return self._arm_profiles
+
+    @property
+    def external_arm_profiles(self) -> ExternalArmProfilesEndpoint:
+        """Access external alarm manager arm profile endpoints."""
+        return self._external_arm_profiles
 
     @property
     def users(self) -> UsersEndpoint:

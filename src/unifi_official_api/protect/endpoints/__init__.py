@@ -11,6 +11,7 @@ from .arm_profiles import ArmProfilesEndpoint
 from .bridges import BridgesEndpoint
 from .cameras import CamerasEndpoint
 from .chimes import ChimesEndpoint
+from .external_arm_profiles import ExternalArmProfilesEndpoint
 from .fobs import FobsEndpoint
 from .lights import LightsEndpoint
 from .link_stations import LinkStationsEndpoint
@@ -34,6 +35,7 @@ __all__ = [
     "BridgesEndpoint",
     "CamerasEndpoint",
     "ChimesEndpoint",
+    "ExternalArmProfilesEndpoint",
     "FobsEndpoint",
     "LightsEndpoint",
     "LinkStationsEndpoint",

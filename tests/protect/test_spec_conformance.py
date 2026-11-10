@@ -64,6 +64,7 @@ OVERRIDES: dict[str, dict[str, Any]] = {
     "application.upload_file": {"file_data": b"GIF89a", "filename": "a.gif"},
     "cameras.set_recording_mode": {"mode": RecordingMode.ALWAYS},
     "cameras.set_video_mode": {"mode": "default"},
+    "external_arm_profiles.update": {"title": "Updated"},
     "lights.set_mode": {"mode": "always"},
     "websocket.subscribe_with_callback": {"subscription_type": "events", "reconnect": False},
 }
