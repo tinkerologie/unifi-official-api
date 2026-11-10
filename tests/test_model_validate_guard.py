@@ -93,6 +93,9 @@ ALLOWED: dict[tuple[str, str], str] = {
     ("protect/endpoints/pos.py", "POSEndpoint.ingest_transaction"): (
         "validates the caller's transaction dict before any request"
     ),
+    ("protect/models/external_arm_profile.py", "ExternalArmProfile.model_validate"): (
+        "sanitizing override: delegates to BaseModel.model_validate, re-raising without input values"
+    ),
 }
 
 

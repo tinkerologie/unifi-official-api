@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SpeakersEndpoint.stop_siren(speaker_id, site_id=None)` stops a siren playing on a speaker (`POST /speakers/{id}/stop-siren`) and returns `True` after the documented 204. An offline speaker or firmware too old for siren raises `UniFiResponseError` (#87).
 - `ExternalArmProfilesEndpoint`, exposed as `client.external_arm_profiles`, manages arm profiles owned by the external alarm manager: `get_all`, `get_all_result`, `get`, `create`, `update`, `arm`, `disarm` and `delete` under `/external/arm-profiles`. `update` keeps an omitted field distinct from an explicit `null`, and every request sends `log_body=False` (#87).
 - `ProtectWebSocket.subscribe_updates(model_keys)` subscribes to the unified `/subscribe/updates` route by sending one `modelKeys` query pair per key, and yields raw add, update and remove messages (#87).
-- `ExternalArmProfile` and `ExternalArmProfileState` model the external alarm manager response. Only `id` is required, extras are kept, and keys spelled `pin`, `pincode` or `pincodes` are removed before validation (#87).
+- `ExternalArmProfile` and `ExternalArmProfileState` model the external alarm manager response. Only `id` is required, extras are kept, and PIN-spelled keys (`pin`, `pin_code`, `pinCode`, `pincodes`) are removed from nested mappings, lists, tuples and sets on validation, assignment and `model_copy()`. Representations, dumps and validation errors never quote a PIN (#87).
 - `VideoMode.ANTI_FLICKER` (`antiFlicker`), `Sensor.is_mounted_incorrectly` (`isMountedIncorrectly`) and the read-only `NVR.use_external_alarm_manager` property (`featureFlags.useExternalAlarmManager`) (#87).
 
 ### Changed

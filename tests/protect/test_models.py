@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from unifi_official_api.protect import (
     NVR,
@@ -267,6 +268,33 @@ class TestEventModel:
 
 
 _PIN_MARKER = "915273"
+
+
+def _texts(profile: ExternalArmProfile) -> list[str]:
+    """Return every profile representation that can reach a caller or a log."""
+    return [repr(profile), str(profile), str(profile.model_dump()), profile.model_dump_json()]
+
+
+def _error_texts(exc: BaseException) -> list[str]:
+    """Return the text and error payloads of every exception in the chain."""
+    texts: list[str] = []
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        texts.extend((str(current), repr(current)))
+        errors = getattr(current, "errors", None)
+        if callable(errors):
+            texts.append(repr(errors()))
+        current = current.__cause__ or current.__context__
+    return texts
+
+
+def _assert_no_pin(*texts: str) -> None:
+    for text in texts:
+        assert _PIN_MARKER not in text
+
+
 _FULL_PROFILE: dict[str, Any] = {
     "id": "profile-1",
     "title": "Home",
@@ -333,6 +361,7 @@ class TestExternalArmProfileModel:
             {"pin_codes": [_PIN_MARKER]},
             {"schedule": {"mon": {"pin": _PIN_MARKER}}},
             {"extra": [{"pin_code": _PIN_MARKER}, {"pinCode": _PIN_MARKER}]},
+            {"tuple_extra": ({"pin_code": _PIN_MARKER}, {"PIN": _PIN_MARKER})},
             {"pin_code": _PIN_MARKER, "pinCode": _PIN_MARKER, "pin": _PIN_MARKER},
         ],
     )
@@ -346,3 +375,94 @@ class TestExternalArmProfileModel:
         for text in rendered:
             assert _PIN_MARKER not in text
         assert profile.has_pin is True
+
+    def test_container_values_are_stripped_and_preserved(self) -> None:
+        """Tuples, sets and frozensets keep their type while PIN keys go."""
+        profile = ExternalArmProfile.model_validate(
+            {
+                "id": "profile-1",
+                "tuple_extra": ({"pin_codes": _PIN_MARKER},),
+                "set_extra": {1, 2},
+                "frozenset_extra": frozenset({3}),
+            }
+        )
+
+        assert profile.model_extra == {
+            "tuple_extra": ({},),
+            "set_extra": {1, 2},
+            "frozenset_extra": frozenset({3}),
+        }
+        assert _PIN_MARKER not in repr(profile) + profile.model_dump_json()
+
+    def test_model_copy_drops_pin_spellings(self) -> None:
+        """Copy updates cannot put a PIN on the copied profile."""
+        profile = ExternalArmProfile.model_validate({"id": "profile-1", "has_pin": True})
+
+        copied = profile.model_copy(
+            update={
+                "pin_code": _PIN_MARKER,
+                "PIN": _PIN_MARKER,
+                "extra": [{"pin": _PIN_MARKER}, {"pinCode": _PIN_MARKER}],
+                "tuple_extra": ({"pin_codes": _PIN_MARKER},),
+            }
+        )
+
+        assert copied.model_extra == {"extra": [{}, {}], "tuple_extra": ({},)}
+        assert copied.has_pin is True
+        _assert_no_pin(*_texts(copied))
+
+    def test_model_copy_without_update_keeps_the_profile(self) -> None:
+        """A plain copy keeps every value."""
+        profile = ExternalArmProfile.model_validate(_FULL_PROFILE)
+
+        assert profile.model_copy() == profile
+
+    def test_assignment_drops_pin_spellings(self) -> None:
+        """Attribute assignment cannot put a PIN on the profile either."""
+        profile = ExternalArmProfile.model_validate({"id": "profile-1"})
+
+        profile.pin_code = _PIN_MARKER
+        profile.pinCode = _PIN_MARKER
+        profile.extra = [{"pin": _PIN_MARKER}]
+        profile.schedule = {"mon": {"pin": _PIN_MARKER}}
+
+        assert profile.model_extra == {"extra": [{}]}
+        assert profile.schedule == {"mon": {}}
+        _assert_no_pin(*_texts(profile))
+
+    def test_representations_hide_a_pin_injected_into_the_extra_store(self) -> None:
+        """A key written past the mutators still never reaches repr or a dump."""
+        profile = ExternalArmProfile.model_validate({"id": "profile-1"})
+        assert profile.__pydantic_extra__ is not None
+        profile.__pydantic_extra__["pin_code"] = _PIN_MARKER
+        profile.__pydantic_extra__["extra"] = [{"pinCode": _PIN_MARKER}]
+
+        _assert_no_pin(*_texts(profile))
+
+    def test_validation_errors_quote_no_input(self) -> None:
+        """A rejected non-mapping input is not echoed in the error."""
+        with pytest.raises(ValidationError) as caught:
+            ExternalArmProfile.model_validate(_PIN_MARKER)
+
+        _assert_no_pin(*_error_texts(caught.value))
+        assert caught.value.__cause__ is None
+        assert caught.value.__context__ is None
+
+    def test_malformed_json_error_quotes_no_input(self) -> None:
+        """An unparsable body is not echoed in the error."""
+        with pytest.raises(ValidationError) as caught:
+            ExternalArmProfile.model_validate_json(f'{{"pin_code":"{_PIN_MARKER}",')
+
+        _assert_no_pin(*_error_texts(caught.value))
+        assert caught.value.__cause__ is None
+        assert caught.value.__context__ is None
+
+    def test_wrong_type_pin_error_quotes_no_input(self) -> None:
+        """A field error keeps its location but drops every input value."""
+        with pytest.raises(ValidationError) as caught:
+            ExternalArmProfile.model_validate_json(f'{{"id": 123, "pin_code": "{_PIN_MARKER}"}}')
+
+        _assert_no_pin(*_error_texts(caught.value))
+        assert caught.value.errors()[0]["loc"] == ("id",)
+        assert caught.value.__cause__ is None
+        assert caught.value.__context__ is None
