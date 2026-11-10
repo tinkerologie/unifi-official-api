@@ -702,7 +702,7 @@ async def test_subscribe_updates_uses_the_routed_path(
 
 @pytest.mark.asyncio
 async def test_connect_encodes_repeated_model_keys() -> None:
-    """Every key is its own query pair, so separators cannot split it."""
+    """Each query pair preserves its value through URL encoding."""
     client = _local_client()
     ws_socket = ProtectWebSocket(client)
     session = MagicMock()
@@ -787,8 +787,15 @@ async def test_subscribe_updates_leaves_callback_running_state_alone() -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "model_keys",
-    ["camera", "", [], [""], [1]],
-    ids=["bare-string", "empty-string", "empty-sequence", "empty-item", "non-string-item"],
+    ["camera", "", [], [""], [1], ["camera,event"]],
+    ids=[
+        "bare-string",
+        "empty-string",
+        "empty-sequence",
+        "empty-item",
+        "non-string-item",
+        "comma-separated-item",
+    ],
 )
 async def test_subscribe_updates_rejects_invalid_keys_before_connecting(
     model_keys: object,

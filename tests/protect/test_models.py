@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections import UserDict
 from datetime import UTC, datetime
 from typing import Any
 
@@ -362,6 +363,7 @@ class TestExternalArmProfileModel:
             {"pin_codes": [_PIN_MARKER]},
             {"schedule": {"mon": {"pin": _PIN_MARKER}}},
             {"extra": [{"pin_code": _PIN_MARKER}, {"pinCode": _PIN_MARKER}]},
+            {"extra": UserDict({"pinCode": _PIN_MARKER, "futureField": True})},
             {"tuple_extra": ({"pin_code": _PIN_MARKER}, {"PIN": _PIN_MARKER})},
             {"pin_code": _PIN_MARKER, "pinCode": _PIN_MARKER, "pin": _PIN_MARKER},
         ],

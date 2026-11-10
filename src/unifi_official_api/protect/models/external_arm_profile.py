@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from enum import StrEnum
-from typing import Any, Self
+from typing import Any, Literal, Self, TypedDict, Unpack
 
 from pydantic import (
     BaseModel,
@@ -19,6 +19,16 @@ from pydantic import (
 # lower-casing and removing underscores, so ``pin_code``, ``pinCode`` and
 # ``PIN`` all match, while ``has_pin`` (``haspin``) does not.
 _PIN_KEY_NAMES = frozenset({"pin", "pincode", "pincodes"})
+
+
+class _ValidationOptions(TypedDict, total=False):
+    """Options shared by Pydantic's Python and JSON validation methods."""
+
+    strict: bool | None
+    extra: Literal["allow", "ignore", "forbid"] | None
+    context: Any | None
+    by_alias: bool | None
+    by_name: bool | None
 
 
 class ExternalArmProfileState(StrEnum):
@@ -38,7 +48,7 @@ def _normalised_key(key: object) -> str:
 
 def _strip_pin_keys(value: Any) -> Any:
     """Return ``value`` with every PIN-spelling key removed, recursively."""
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         return {
             key: _strip_pin_keys(item)
             for key, item in value.items()
@@ -120,24 +130,12 @@ class ExternalArmProfile(BaseModel):
         cls,
         obj: Any,
         *,
-        strict: bool | None = None,
-        extra: Any | None = None,
         from_attributes: bool | None = None,
-        context: Any | None = None,
-        by_alias: bool | None = None,
-        by_name: bool | None = None,
+        **kwargs: Unpack[_ValidationOptions],
     ) -> Self:
         """Validate one payload, raising errors that quote no input values."""
         try:
-            return super().model_validate(
-                obj,
-                strict=strict,
-                extra=extra,
-                from_attributes=from_attributes,
-                context=context,
-                by_alias=by_alias,
-                by_name=by_name,
-            )
+            return super().model_validate(obj, from_attributes=from_attributes, **kwargs)
         except ValidationError as err:
             sanitized = _sanitized_validation_error(cls, err)
         # Raised after the handler so neither __cause__ nor __context__ points
@@ -148,23 +146,11 @@ class ExternalArmProfile(BaseModel):
     def model_validate_json(
         cls,
         json_data: str | bytes | bytearray,
-        *,
-        strict: bool | None = None,
-        extra: Any | None = None,
-        context: Any | None = None,
-        by_alias: bool | None = None,
-        by_name: bool | None = None,
+        **kwargs: Unpack[_ValidationOptions],
     ) -> Self:
         """Validate one JSON payload, raising errors that quote no input values."""
         try:
-            return super().model_validate_json(
-                json_data,
-                strict=strict,
-                extra=extra,
-                context=context,
-                by_alias=by_alias,
-                by_name=by_name,
-            )
+            return super().model_validate_json(json_data, **kwargs)
         except ValidationError as err:
             sanitized = _sanitized_validation_error(cls, err)
         # Raised after the handler so neither __cause__ nor __context__ points

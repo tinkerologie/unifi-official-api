@@ -191,8 +191,8 @@ class ProtectWebSocket:
         """
         Subscribe to unified update messages for the given model keys.
 
-        Each key is sent as its own repeated ``modelKeys`` query pair, so a key
-        containing a comma or other separator cannot be read as several keys.
+        Each key is sent as its own repeated ``modelKeys`` query pair. The
+        server treats a comma as a separator, so each item must be one key.
         Messages pass through decoded and unchanged: the caller interprets
         ``add``, ``update`` and ``remove`` actions, and one message may cover
         several model IDs. Keys outside the documented list are accepted so a
@@ -206,7 +206,7 @@ class ProtectWebSocket:
 
         Raises:
             ValueError: If ``model_keys`` is a bare string, empty, or holds a
-                non-string or empty key. Nothing is connected in that case.
+                non-string key, an empty key, or a key containing a comma.
 
         """
         if isinstance(model_keys, str):
@@ -216,6 +216,8 @@ class ProtectWebSocket:
             raise ValueError("model_keys must not be empty")
         if any(not isinstance(key, str) or not key for key in keys):
             raise ValueError("model_keys must contain only non-empty strings")
+        if any("," in key for key in keys):
+            raise ValueError("each model_keys item must contain one key without commas")
         path = self._subscribe_path("updates")
         ws = await self._connect(path, params=[("modelKeys", key) for key in keys])
 

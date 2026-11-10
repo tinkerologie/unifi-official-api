@@ -34,7 +34,7 @@ class SpeakersEndpoint(ProtectDeviceEndpoint[Speaker]):
 
         Args:
             speaker_id: The speaker ID.
-            site_id: The site ID (required for REMOTE connections, ignored for LOCAL).
+            site_id: An optional site ID for compatibility. The endpoint ignores it.
 
         Returns:
             True if the request was accepted.

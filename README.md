@@ -196,6 +196,9 @@ only methods and paths.
 External alarm manager arm profiles need an NVR that reports
 `nvr.use_external_alarm_manager is True`. When the flag is false, Protect runs
 the local alarm manager and the external endpoints refuse requests.
+The property keeps `nvr.feature_flags` compatible with existing dictionary access.
+The value is also available at `nvr.feature_flags["useExternalAlarmManager"]`
+when Protect supplies the key.
 `client.speakers.stop_siren` stops a siren playing on a speaker.
 `client.websocket.subscribe_updates` sends one `modelKeys` query pair per key
 and yields raw add, update and remove messages:
