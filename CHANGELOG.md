@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Add controller-wide Network 11 statistics support via `client.stats` (`get_source` and `get_recent_series`), supporting typed series retrieval and observed additive-byte semantics (#503).
+- Add controller-wide Network 11 statistics support through `client.stats.get_source()` and `get_recent_series()` on local and remote connections. Typed series report additive byte totals and the actual duration of each bucket (#90).
 
 ### Changed
 

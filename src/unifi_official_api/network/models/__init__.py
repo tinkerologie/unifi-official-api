@@ -83,6 +83,7 @@ from .stack import (
 )
 from .static_route import StaticRoute
 from .stats import (
+    STATS_PERIODS,
     StatisticsSource,
     StatsSeries,
     StatsSeriesBucket,
@@ -205,6 +206,7 @@ __all__ = [
     "WifiNetwork",
     "WifiSecurity",
     # Statistics
+    "STATS_PERIODS",
     "StatisticsSource",
     "StatsSeries",
     "StatsSeriesBucket",

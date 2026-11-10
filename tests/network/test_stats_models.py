@@ -150,27 +150,36 @@ class TestStatsSeriesBucket:
         assert bucket5.tx_bytes == 0.0
 
     def test_timestamp_validation(self) -> None:
-        """Test timestamp validation rejects bool, non-numeric, and nonfinite."""
-        for bad_ts in [True, False, "bad", float("inf"), float("nan"), None, 10**400]:
+        """Reject timestamps that are not nonnegative whole milliseconds."""
+        for bad_ts in [True, False, "1000", float("inf"), float("nan"), None, -1, 1.5]:
             with pytest.raises(ValidationError):
                 StatsSeriesBucket.model_validate({"timestamp": bad_ts, "duration": 300000})
 
     def test_duration_validation(self) -> None:
-        """Test duration validation rejects bool, non-positive, and nonfinite."""
+        """Reject durations that are not nonnegative whole milliseconds."""
         for bad_dur in [
             True,
             False,
-            0,
+            0.5,
             -1,
             -300000,
             "bad",
             float("inf"),
             float("nan"),
             None,
-            10**400,
         ]:
             with pytest.raises(ValidationError):
                 StatsSeriesBucket.model_validate({"timestamp": 1600000000000, "duration": bad_dur})
+
+    def test_preserve_millisecond_precision(self) -> None:
+        """Keep exact integers and accept whole-valued floats, including zero."""
+        large_timestamp = 10**400 + 1
+        bucket = StatsSeriesBucket.model_validate({"timestamp": large_timestamp, "duration": 0})
+        assert bucket.timestamp == large_timestamp
+        assert bucket.duration == 0
+        bucket = StatsSeriesBucket.model_validate({"timestamp": 1000.0, "duration": 200.0})
+        assert bucket.timestamp == 1000
+        assert bucket.duration == 200
 
     def test_forward_field_compatibility(self) -> None:
         """Test unknown forward fields are preserved."""

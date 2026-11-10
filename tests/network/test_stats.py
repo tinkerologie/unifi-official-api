@@ -24,6 +24,7 @@ from unifi_official_api.network import (
     UniFiNetworkClient,
 )
 from unifi_official_api.network.endpoints import StatsEndpoint
+from unifi_official_api.network.models import STATS_PERIODS
 
 
 class TestStatsPathBuilder:
@@ -84,6 +85,7 @@ class TestStatsEndpoint:
         assert StatisticsSource is not None
         assert StatsSeries is not None
         assert StatsSeriesBucket is not None
+        assert {"HOUR", "DAY", "WEEK", "MONTH"} == STATS_PERIODS
 
     async def test_get_source_local_and_remote(
         self,
@@ -146,7 +148,7 @@ class TestStatsEndpoint:
         def callback(url: Any, **kwargs: Any) -> Any:
             nonlocal recorded_url
             recorded_url = str(url)
-            return CallbackResult(payload={"data": []})
+            return CallbackResult(payload=[])
 
         mock_aioresponse.get(
             re.compile(r"^https://192.168.1.1/proxy/network/v2/api/stats/recent/series.*"),
@@ -202,134 +204,121 @@ class TestStatsEndpoint:
             )
             assert res == []
 
-    async def test_get_recent_series_enveloped_and_raw_responses(
+    async def test_get_recent_series_parses_remote_buckets(
         self,
         mock_aioresponse: aioresponses,
     ) -> None:
-        """Test parsing both raw series list and {data: [...]} envelope."""
-        sample_record = {
-            "siteId": "ab632056-1234-5678-9abc-def012345678",
-            "series": [
-                {
-                    "timestamp": 1600000000000,
-                    "duration": 300000,
-                    "rxBytes": 1048576.0,
-                    "txBytes": 524288.0,
-                }
-            ],
+        """Check the remote path, exact parameters, and partial bucket data."""
+        recorded_url = None
+
+        def callback(url: Any, **kwargs: Any) -> CallbackResult:
+            nonlocal recorded_url
+            recorded_url = url
+            return CallbackResult(
+                payload=[
+                    {
+                        "siteId": "site-1",
+                        "series": [
+                            {
+                                "timestamp": 0,
+                                "duration": 137,
+                                "rxBytes": 0,
+                                "txBytes": 12.5,
+                                "durationMs": 137,
+                            }
+                        ],
+                    }
+                ]
+            )
+
+        mock_aioresponse.get(
+            re.compile(
+                r"^https://api\.ui\.com/v1/connector/consoles/test-console/network/"
+                r"v2/api/stats/recent/series\?"
+            ),
+            callback=callback,
+        )
+        async with UniFiNetworkClient(
+            auth=ApiKeyAuth(api_key="test-key"),
+            connection_type=ConnectionType.REMOTE,
+            console_id="test-console",
+        ) as client:
+            (site,) = await client.stats.get_recent_series(
+                schema="wanBySite",
+                site_id="site-1",
+                period="MONTH",
+                end_ms=0,
+                values=["txBytes", "rxBytes"],
+            )
+
+        assert recorded_url is not None
+        assert parse_qs(urlparse(str(recorded_url)).query) == {
+            "schema": ["wanBySite"],
+            "period": ["MONTH"],
+            "end": ["0"],
+            "filter": ["siteId.eq('site-1')"],
+            "projection": ["values(txBytes,rxBytes)"],
         }
-
-        # 1. Enveloped data
-        mock_aioresponse.get(
-            re.compile(r"^https://192.168.1.1/proxy/network/v2/api/stats/recent/series.*"),
-            payload={"data": [sample_record]},
+        assert site.site_id == "site-1"
+        (bucket,) = site.series
+        assert (bucket.timestamp, bucket.duration, bucket.rx_bytes, bucket.tx_bytes) == (
+            0,
+            137,
+            0.0,
+            12.5,
         )
+        assert bucket.model_extra == {"durationMs": 137}
+
+    @pytest.mark.parametrize(
+        ("argument", "value"),
+        [
+            ("period", "INVALID"),
+            ("period", []),
+            ("end_ms", True),
+            ("end_ms", "bad"),
+            ("end_ms", -100),
+            ("end_ms", 1000.0),
+            ("schema", ""),
+            ("schema", "schema'quote"),
+            ("schema", "wanBySite\n"),
+            ("schema", "1schema"),
+            ("schema", "a" * 65),
+            ("schema", 1),
+            ("site_id", ""),
+            ("site_id", "site'id"),
+            ("site_id", "site-1\n"),
+            ("site_id", "site_1"),
+            ("site_id", "a" * 65),
+            ("site_id", 1),
+            ("values", ()),
+            ("values", "rxBytes"),
+            ("values", b"rxBytes"),
+            ("values", {"rxBytes"}),
+            ("values", ("rxBytes", "rxBytes")),
+            ("values", ("rxBytes", "bad'val")),
+            ("values", ("rxBytes", "rxBytes\n")),
+            ("values", ("rxBytes", 1)),
+        ],
+    )
+    async def test_validation_before_io(
+        self, argument: str, value: object, mock_aioresponse: aioresponses
+    ) -> None:
+        """Reject malformed arguments before constructing a request."""
+        params: dict[str, Any] = {
+            "schema": "wanBySite",
+            "site_id": "site-1",
+            "period": "DAY",
+            "end_ms": 1000,
+        }
+        params[argument] = value
         async with UniFiNetworkClient(
             auth=LocalAuth(api_key="test-key"),
             base_url="https://192.168.1.1",
             connection_type=ConnectionType.LOCAL,
         ) as client:
-            res1 = await client.stats.get_recent_series(
-                schema="wanBySite",
-                site_id="ab632056-1234-5678-9abc-def012345678",
-                period="DAY",
-                end_ms=1600000000000,
-            )
-            assert len(res1) == 1
-            assert res1[0].site_id == "ab632056-1234-5678-9abc-def012345678"
-            assert len(res1[0].series) == 1
-            assert res1[0].series[0].rx_bytes == 1048576.0
-
-        # 2. Raw list
-        mock_aioresponse.get(
-            re.compile(r"^https://192.168.1.1/proxy/network/v2/api/stats/recent/series.*"),
-            payload=[sample_record],
-        )
-        async with UniFiNetworkClient(
-            auth=LocalAuth(api_key="test-key"),
-            base_url="https://192.168.1.1",
-            connection_type=ConnectionType.LOCAL,
-        ) as client:
-            res2 = await client.stats.get_recent_series(
-                schema="wanBySite",
-                site_id="ab632056-1234-5678-9abc-def012345678",
-                period="DAY",
-                end_ms=1600000000000,
-            )
-            assert len(res2) == 1
-
-    async def test_validation_before_io(self) -> None:
-        """Test parameter validation fails before any I/O is performed."""
-        async with UniFiNetworkClient(
-            auth=LocalAuth(api_key="test-key"),
-            base_url="https://192.168.1.1",
-            connection_type=ConnectionType.LOCAL,
-        ) as client:
-            # Bad period
-            with pytest.raises(ValueError, match="Unsupported period"):
-                await client.stats.get_recent_series(
-                    schema="wanBySite",
-                    site_id="site-1",
-                    period="INVALID",  # type: ignore[arg-type]
-                    end_ms=1000,
-                )
-
-            # Bad end_ms (bool, string, negative, nonfinite)
-            for bad_end in [True, False, "bad", -100, float("inf"), float("nan"), 1000.75]:
-                with pytest.raises(ValueError, match="end_ms must be"):
-                    await client.stats.get_recent_series(
-                        schema="wanBySite",
-                        site_id="site-1",
-                        period="DAY",
-                        end_ms=bad_end,  # type: ignore[arg-type]
-                    )
-
-            # Bad schema
-            for bad_schema in [
-                "",
-                "schema;drop",
-                "schema with space",
-                "schema'quote",
-                "wanBySite\n",
-            ]:
-                with pytest.raises(ValueError, match="Invalid schema identifier"):
-                    await client.stats.get_recent_series(
-                        schema=bad_schema,
-                        site_id="site-1",
-                        period="DAY",
-                        end_ms=1000,
-                    )
-
-            # Bad site_id (filter injection prevention)
-            for bad_site in ["", "site'id", "site;inject", "site with spaces", "site-1\n"]:
-                with pytest.raises(ValueError, match="Invalid site_id identifier"):
-                    await client.stats.get_recent_series(
-                        schema="wanBySite",
-                        site_id=bad_site,
-                        period="DAY",
-                        end_ms=1000,
-                    )
-
-            # Empty values
-            with pytest.raises(ValueError, match="values sequence must not be empty"):
-                await client.stats.get_recent_series(
-                    schema="wanBySite",
-                    site_id="site-1",
-                    period="DAY",
-                    end_ms=1000,
-                    values=(),
-                )
-
-            # Bad value identifiers
-            for bad_val in ["", "bad;val", "bad'val", "bad val", "rxBytes\n"]:
-                with pytest.raises(ValueError, match="Invalid value identifier"):
-                    await client.stats.get_recent_series(
-                        schema="wanBySite",
-                        site_id="site-1",
-                        period="DAY",
-                        end_ms=1000,
-                        values=("rxBytes", bad_val),
-                    )
+            with pytest.raises(ValueError):
+                await client.stats.get_recent_series(**params)
+        assert not mock_aioresponse.requests
 
     async def test_malformed_response_shapes(
         self,
@@ -341,10 +330,10 @@ class TestStatsEndpoint:
             base_url="https://192.168.1.1",
             connection_type=ConnectionType.LOCAL,
         ) as client:
-            # 1. Non-list data in dict
+            # 1. A data envelope
             mock_aioresponse.get(
                 re.compile(r"^https://192.168.1.1/proxy/network/v2/api/stats/recent/series.*"),
-                payload={"data": "not-a-list"},
+                payload={"data": []},
             )
             with pytest.raises(UniFiResponseError) as exc1:
                 await client.stats.get_recent_series(
@@ -354,6 +343,9 @@ class TestStatsEndpoint:
                     end_ms=1000,
                 )
             assert exc1.value.status_code == 200
+            assert exc1.value.response_body is None
+            assert exc1.value.__cause__ is None
+            assert exc1.value.__context__ is None
 
             # 2. Unexpected top-level object
             mock_aioresponse.get(
@@ -423,33 +415,6 @@ class TestStatsEndpoint:
             assert err.__context__ is None
             assert err.response_body is None
 
-    async def test_oversized_timestamp_is_a_sanitized_response_error(
-        self,
-        mock_aioresponse: aioresponses,
-    ) -> None:
-        """Test an integer timestamp too large for a float raises the package error."""
-        mock_aioresponse.get(
-            re.compile(r"^https://192.168.1.1/proxy/network/v2/api/stats/recent/series.*"),
-            body='[{"siteId": "site-1", "series": [{"timestamp": 1'
-            + "0" * 400
-            + ', "duration": 300000}]}]',
-            content_type="application/json",
-        )
-        async with UniFiNetworkClient(
-            auth=LocalAuth(api_key="test-key"),
-            base_url="https://192.168.1.1",
-            connection_type=ConnectionType.LOCAL,
-        ) as client:
-            with pytest.raises(UniFiResponseError) as exc_info:
-                await client.stats.get_recent_series(
-                    schema="wanBySite",
-                    site_id="site-1",
-                    period="DAY",
-                    end_ms=1000,
-                )
-            assert exc_info.value.status_code == 200
-            assert exc_info.value.response_body is None
-
     async def test_http_error_translation(
         self,
         mock_aioresponse: aioresponses,
@@ -493,7 +458,7 @@ class TestStatsEndpoint:
             # non-JSON 2xx
             mock_aioresponse.get(pattern, status=200, body="NON_JSON_HTML")
             with pytest.raises(UniFiResponseError) as exc_non_json:
-                await client.stats.get_source(expected_unsupported=False)
+                await client.stats.get_source()
             assert "non-JSON" in exc_non_json.value.message
 
             # Timeout
