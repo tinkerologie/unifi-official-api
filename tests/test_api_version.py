@@ -30,7 +30,7 @@ def test_api_version_drives_user_agent() -> None:
 def test_pinned_spec_versions() -> None:
     """Test pinned specification version constants match the verified upstream specs."""
     assert NETWORK_SPEC_VERSION == "11.0.97"
-    assert PROTECT_SPEC_VERSION == "7.3.70"
+    assert PROTECT_SPEC_VERSION == "7.4.96"
     assert INNERSPACE_SPEC_VERSION == "1.3.23"
     assert MOBILITY_SPEC_VERSION == "1.0.0"
     assert SITE_MANAGER_SPEC_VERSION == "1.0.0"

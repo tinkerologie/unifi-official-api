@@ -55,6 +55,10 @@ from unifi_official_api.network.models.stack import SwitchStackUnit, SwitchStack
 from unifi_official_api.network.models.wifi import WifiNetwork, WifiSecurity
 from unifi_official_api.protect.models.camera import Camera, RecordingMode, VideoMode
 from unifi_official_api.protect.models.event import Event, EventType
+from unifi_official_api.protect.models.external_arm_profile import (
+    ExternalArmProfile,
+    ExternalArmProfileState,
+)
 from unifi_official_api.protect.models.ulp_user import UlpUser, UlpUserStatus
 
 
@@ -146,6 +150,20 @@ CASES = sorted(
             "video_mode",
             "default",
             VideoMode.DEFAULT,
+        ),
+        Case(
+            Camera,
+            {"id": "camera", "mac": "00:00:00:00:00:02"},
+            "video_mode",
+            "antiFlicker",
+            VideoMode.ANTI_FLICKER,
+        ),
+        Case(
+            ExternalArmProfile,
+            {"id": "profile"},
+            "state",
+            "armed",
+            ExternalArmProfileState.ARMED,
         ),
         Case(Event, {"id": "event"}, "type", "motion", EventType.MOTION),
         Case(
@@ -448,6 +466,7 @@ EXPECTED_DECLARATIONS = frozenset(
         "Device.state",
         "Device.type",
         "Event.type",
+        "ExternalArmProfile.state",
         "FirewallActionConfig.type",
         "FirewallRule.action",
         "InnerSpaceAccessPoint.mount_type",

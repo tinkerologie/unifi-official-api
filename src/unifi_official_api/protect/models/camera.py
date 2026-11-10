@@ -79,6 +79,8 @@ class VideoMode(StrEnum):
     HIGH_FPS = "highFps"
     SPORT = "sport"
     SLOW_SHUTTER = "slowShutter"
+    # Anti-flicker avoids banding under non-fluorescent-free lighting (7.4.96).
+    ANTI_FLICKER = "antiFlicker"
     # LPR (License Plate Recognition) related modes
     LPR_NONE_REFLEX = "lprNoneReflex"
     LPR_SLOW_SHUTTER = "lprSlowShutter"

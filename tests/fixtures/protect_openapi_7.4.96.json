@@ -460,6 +460,68 @@
         }
       }
     },
+    "/v1/subscribe/updates": {
+      "get": {
+        "summary": "Get update messages for selected models",
+        "description": "A WebSocket subscription for changes to models selected by model key. Messages describe models being created, updated or removed and may include multiple model IDs. Event messages describe creations and updates only; event removals are not sent.",
+        "tags": [
+          "WebSocket updates"
+        ],
+        "parameters": [
+          {
+            "name": "modelKeys",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(nvr|camera|chime|light|viewer|speaker|bridge|sensor|siren|fob|relay|aiProcessor|aiPort|linkStation|event|externalArmProfile)(,(nvr|camera|chime|light|viewer|speaker|bridge|sensor|siren|fob|relay|aiProcessor|aiPort|linkStation|event|externalArmProfile))*$"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^(nvr|camera|chime|light|viewer|speaker|bridge|sensor|siren|fob|relay|aiProcessor|aiPort|linkStation|event|externalArmProfile)(,(nvr|camera|chime|light|viewer|speaker|bridge|sensor|siren|fob|relay|aiProcessor|aiPort|linkStation|event|externalArmProfile))*$"
+                  },
+                  "minItems": 1
+                }
+              ],
+              "description": "Model keys to subscribe to, comma-separated or supplied as repeated query parameters: nvr, camera, chime, light, viewer, speaker, bridge, sensor, siren, fob, relay, aiProcessor, aiPort, linkStation, event, externalArmProfile.",
+              "examples": [
+                "camera,event",
+                [
+                  "camera",
+                  "event"
+                ]
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/modelUpdateEvent"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/genericError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/cameras/{id}/ptz/patrol/start/{slot}": {
       "post": {
         "summary": "Start a camera PTZ patrol",
@@ -900,6 +962,295 @@
         "responses": {
           "204": {
             "description": "Arm alarm disabled successfully"
+          },
+          "default": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/genericError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/external/arm-profiles": {
+      "get": {
+        "summary": "Get external arm profiles",
+        "description": "Get arm profiles from the external alarm manager. Only available when using external alarm manager.",
+        "tags": [
+          "Arm profile management"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/externalArmProfiles"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/genericError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create an external arm profile",
+        "description": "Create an arm profile in the external alarm manager. Only available when using external alarm manager.",
+        "tags": [
+          "Arm profile management"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/externalArmProfileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "External arm profile created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/externalArmProfile"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/genericError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/external/arm-profiles/{id}": {
+      "get": {
+        "summary": "Get an external arm profile",
+        "description": "Get one arm profile from the external alarm manager. Only available when using external alarm manager.",
+        "tags": [
+          "Arm profile management"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[0-9A-Za-z-]+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/externalArmProfile"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/genericError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update an external arm profile",
+        "description": "Partially update an arm profile in the external alarm manager. Omitted fields remain unchanged; nullable fields clear their existing value when set to null. Only available when using external alarm manager.",
+        "tags": [
+          "Arm profile management"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[0-9A-Za-z-]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/externalArmProfilePatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/externalArmProfile"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/genericError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete an external arm profile",
+        "description": "Delete an arm profile from the external alarm manager. Only available when using external alarm manager.",
+        "tags": [
+          "Arm profile management"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[0-9A-Za-z-]+$"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "External arm profile deleted successfully"
+          },
+          "default": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/genericError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/external/arm-profiles/{id}/actions/arm": {
+      "post": {
+        "summary": "Arm an external arm profile",
+        "description": "Arm one profile in the external alarm manager. Only available when using external alarm manager.",
+        "tags": [
+          "Arm profile management"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[0-9A-Za-z-]+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/externalArmProfile"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/genericError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/external/arm-profiles/{id}/actions/disarm": {
+      "post": {
+        "summary": "Disarm an external arm profile",
+        "description": "Disarm one profile in the external alarm manager. Only available when using external alarm manager.",
+        "tags": [
+          "Arm profile management"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[0-9A-Za-z-]+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/externalArmProfile"
+                }
+              }
+            }
           },
           "default": {
             "description": "Error response",
@@ -1555,6 +1906,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Another talkback session is already in progress on this camera"
           },
           "default": {
             "description": "Error response",
@@ -2597,6 +2951,44 @@
         }
       }
     },
+    "/v1/speakers/{id}/stop-siren": {
+      "post": {
+        "summary": "Stop speaker siren",
+        "description": "Stop a siren playing on the speaker.",
+        "tags": [
+          "Speaker information & management"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Speaker ID"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The speaker siren was stopped successfully."
+          },
+          "400": {
+            "description": "The speaker is offline or runs firmware too old for siren."
+          },
+          "default": {
+            "description": "Error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/genericError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/bridges/{id}": {
       "get": {
         "summary": "Get bridge details",
@@ -3568,6 +3960,2269 @@
   },
   "components": {
     "schemas": {
+      "externalArmProfileRequest": {
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "activation_delay": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3600,
+            "description": "Delay in seconds."
+          },
+          "deactivation_delay": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3600,
+            "description": "Delay in seconds."
+          },
+          "schedule": {
+            "type": "object",
+            "properties": {
+              "sun": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "entries"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "intervals"
+                      },
+                      "entries": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": [
+                            "start",
+                            "end"
+                          ],
+                          "properties": {
+                            "start": {
+                              "type": "object",
+                              "required": [
+                                "hour",
+                                "minute"
+                              ],
+                              "properties": {
+                                "hour": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 23
+                                },
+                                "minute": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 59
+                                }
+                              },
+                              "additionalProperties": true
+                            },
+                            "end": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "required": [
+                                    "hour",
+                                    "minute"
+                                  ],
+                                  "properties": {
+                                    "hour": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 23
+                                    },
+                                    "minute": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 59
+                                    }
+                                  },
+                                  "additionalProperties": true
+                                },
+                                {
+                                  "type": "object",
+                                  "required": [
+                                    "hour",
+                                    "minute"
+                                  ],
+                                  "properties": {
+                                    "hour": {
+                                      "type": "number",
+                                      "const": 24
+                                    },
+                                    "minute": {
+                                      "type": "number",
+                                      "const": 0
+                                    }
+                                  },
+                                  "additionalProperties": true
+                                }
+                              ],
+                              "description": "Use 24:00 or 23:59 for end of day. UOS returns end of day as 23:59."
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "minItems": 1
+                      }
+                    },
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "type"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "all_day"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                ]
+              },
+              "mon": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "entries"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "intervals"
+                      },
+                      "entries": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": [
+                            "start",
+                            "end"
+                          ],
+                          "properties": {
+                            "start": {
+                              "type": "object",
+                              "required": [
+                                "hour",
+                                "minute"
+                              ],
+                              "properties": {
+                                "hour": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 23
+                                },
+                                "minute": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 59
+                                }
+                              },
+                              "additionalProperties": true
+                            },
+                            "end": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "required": [
+                                    "hour",
+                                    "minute"
+                                  ],
+                                  "properties": {
+                                    "hour": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 23
+                                    },
+                                    "minute": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 59
+                                    }
+                                  },
+                                  "additionalProperties": true
+                                },
+                                {
+                                  "type": "object",
+                                  "required": [
+                                    "hour",
+                                    "minute"
+                                  ],
+                                  "properties": {
+                                    "hour": {
+                                      "type": "number",
+                                      "const": 24
+                                    },
+                                    "minute": {
+                                      "type": "number",
+                                      "const": 0
+                                    }
+                                  },
+                                  "additionalProperties": true
+                                }
+                              ],
+                              "description": "Use 24:00 or 23:59 for end of day. UOS returns end of day as 23:59."
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "minItems": 1
+                      }
+                    },
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "type"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "all_day"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                ]
+              },
+              "tue": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "entries"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "intervals"
+                      },
+                      "entries": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": [
+                            "start",
+                            "end"
+                          ],
+                          "properties": {
+                            "start": {
+                              "type": "object",
+                              "required": [
+                                "hour",
+                                "minute"
+                              ],
+                              "properties": {
+                                "hour": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 23
+                                },
+                                "minute": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 59
+                                }
+                              },
+                              "additionalProperties": true
+                            },
+                            "end": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "required": [
+                                    "hour",
+                                    "minute"
+                                  ],
+                                  "properties": {
+                                    "hour": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 23
+                                    },
+                                    "minute": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 59
+                                    }
+                                  },
+                                  "additionalProperties": true
+                                },
+                                {
+                                  "type": "object",
+                                  "required": [
+                                    "hour",
+                                    "minute"
+                                  ],
+                                  "properties": {
+                                    "hour": {
+                                      "type": "number",
+                                      "const": 24
+                                    },
+                                    "minute": {
+                                      "type": "number",
+                                      "const": 0
+                                    }
+                                  },
+                                  "additionalProperties": true
+                                }
+                              ],
+                              "description": "Use 24:00 or 23:59 for end of day. UOS returns end of day as 23:59."
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "minItems": 1
+                      }
+                    },
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "type"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "all_day"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                ]
+              },
+              "wed": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "entries"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "intervals"
+                      },
+                      "entries": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": [
+                            "start",
+                            "end"
+                          ],
+                          "properties": {
+                            "start": {
+                              "type": "object",
+                              "required": [
+                                "hour",
+                                "minute"
+                              ],
+                              "properties": {
+                                "hour": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 23
+                                },
+                                "minute": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 59
+                                }
+                              },
+                              "additionalProperties": true
+                            },
+                            "end": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "required": [
+                                    "hour",
+                                    "minute"
+                                  ],
+                                  "properties": {
+                                    "hour": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 23
+                                    },
+                                    "minute": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 59
+                                    }
+                                  },
+                                  "additionalProperties": true
+                                },
+                                {
+                                  "type": "object",
+                                  "required": [
+                                    "hour",
+                                    "minute"
+                                  ],
+                                  "properties": {
+                                    "hour": {
+                                      "type": "number",
+                                      "const": 24
+                                    },
+                                    "minute": {
+                                      "type": "number",
+                                      "const": 0
+                                    }
+                                  },
+                                  "additionalProperties": true
+                                }
+                              ],
+                              "description": "Use 24:00 or 23:59 for end of day. UOS returns end of day as 23:59."
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "minItems": 1
+                      }
+                    },
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "type"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "all_day"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                ]
+              },
+              "thu": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "entries"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "intervals"
+                      },
+                      "entries": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": [
+                            "start",
+                            "end"
+                          ],
+                          "properties": {
+                            "start": {
+                              "type": "object",
+                              "required": [
+                                "hour",
+                                "minute"
+                              ],
+                              "properties": {
+                                "hour": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 23
+                                },
+                                "minute": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 59
+                                }
+                              },
+                              "additionalProperties": true
+                            },
+                            "end": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "required": [
+                                    "hour",
+                                    "minute"
+                                  ],
+                                  "properties": {
+                                    "hour": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 23
+                                    },
+                                    "minute": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 59
+                                    }
+                                  },
+                                  "additionalProperties": true
+                                },
+                                {
+                                  "type": "object",
+                                  "required": [
+                                    "hour",
+                                    "minute"
+                                  ],
+                                  "properties": {
+                                    "hour": {
+                                      "type": "number",
+                                      "const": 24
+                                    },
+                                    "minute": {
+                                      "type": "number",
+                                      "const": 0
+                                    }
+                                  },
+                                  "additionalProperties": true
+                                }
+                              ],
+                              "description": "Use 24:00 or 23:59 for end of day. UOS returns end of day as 23:59."
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "minItems": 1
+                      }
+                    },
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "type"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "all_day"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                ]
+              },
+              "fri": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "entries"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "intervals"
+                      },
+                      "entries": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": [
+                            "start",
+                            "end"
+                          ],
+                          "properties": {
+                            "start": {
+                              "type": "object",
+                              "required": [
+                                "hour",
+                                "minute"
+                              ],
+                              "properties": {
+                                "hour": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 23
+                                },
+                                "minute": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 59
+                                }
+                              },
+                              "additionalProperties": true
+                            },
+                            "end": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "required": [
+                                    "hour",
+                                    "minute"
+                                  ],
+                                  "properties": {
+                                    "hour": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 23
+                                    },
+                                    "minute": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 59
+                                    }
+                                  },
+                                  "additionalProperties": true
+                                },
+                                {
+                                  "type": "object",
+                                  "required": [
+                                    "hour",
+                                    "minute"
+                                  ],
+                                  "properties": {
+                                    "hour": {
+                                      "type": "number",
+                                      "const": 24
+                                    },
+                                    "minute": {
+                                      "type": "number",
+                                      "const": 0
+                                    }
+                                  },
+                                  "additionalProperties": true
+                                }
+                              ],
+                              "description": "Use 24:00 or 23:59 for end of day. UOS returns end of day as 23:59."
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "minItems": 1
+                      }
+                    },
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "type"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "all_day"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                ]
+              },
+              "sat": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "entries"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "intervals"
+                      },
+                      "entries": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": [
+                            "start",
+                            "end"
+                          ],
+                          "properties": {
+                            "start": {
+                              "type": "object",
+                              "required": [
+                                "hour",
+                                "minute"
+                              ],
+                              "properties": {
+                                "hour": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 23
+                                },
+                                "minute": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 59
+                                }
+                              },
+                              "additionalProperties": true
+                            },
+                            "end": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "required": [
+                                    "hour",
+                                    "minute"
+                                  ],
+                                  "properties": {
+                                    "hour": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 23
+                                    },
+                                    "minute": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 59
+                                    }
+                                  },
+                                  "additionalProperties": true
+                                },
+                                {
+                                  "type": "object",
+                                  "required": [
+                                    "hour",
+                                    "minute"
+                                  ],
+                                  "properties": {
+                                    "hour": {
+                                      "type": "number",
+                                      "const": 24
+                                    },
+                                    "minute": {
+                                      "type": "number",
+                                      "const": 0
+                                    }
+                                  },
+                                  "additionalProperties": true
+                                }
+                              ],
+                              "description": "Use 24:00 or 23:59 for end of day. UOS returns end of day as 23:59."
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "minItems": 1
+                      }
+                    },
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "type"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "all_day"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false,
+            "minProperties": 1
+          },
+          "alarm_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "pin_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 4,
+                "maxLength": 6,
+                "pattern": "^\\d{4,6}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "title": "externalArmProfileRequest"
+      },
+      "externalArmProfilePatch": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Omit to retain the existing title. A title cannot be cleared."
+          },
+          "activation_delay": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3600
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Delay in seconds. Omit to retain the existing delay; use null to clear it."
+          },
+          "deactivation_delay": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3600
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Delay in seconds. Omit to retain the existing delay; use null to clear it."
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "sun": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "required": [
+                          "type",
+                          "entries"
+                        ],
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "intervals"
+                          },
+                          "entries": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "start",
+                                "end"
+                              ],
+                              "properties": {
+                                "start": {
+                                  "type": "object",
+                                  "required": [
+                                    "hour",
+                                    "minute"
+                                  ],
+                                  "properties": {
+                                    "hour": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 23
+                                    },
+                                    "minute": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 59
+                                    }
+                                  },
+                                  "additionalProperties": true
+                                },
+                                "end": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "required": [
+                                        "hour",
+                                        "minute"
+                                      ],
+                                      "properties": {
+                                        "hour": {
+                                          "type": "integer",
+                                          "minimum": 0,
+                                          "maximum": 23
+                                        },
+                                        "minute": {
+                                          "type": "integer",
+                                          "minimum": 0,
+                                          "maximum": 59
+                                        }
+                                      },
+                                      "additionalProperties": true
+                                    },
+                                    {
+                                      "type": "object",
+                                      "required": [
+                                        "hour",
+                                        "minute"
+                                      ],
+                                      "properties": {
+                                        "hour": {
+                                          "type": "number",
+                                          "const": 24
+                                        },
+                                        "minute": {
+                                          "type": "number",
+                                          "const": 0
+                                        }
+                                      },
+                                      "additionalProperties": true
+                                    }
+                                  ],
+                                  "description": "Use 24:00 or 23:59 for end of day. UOS returns end of day as 23:59."
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "minItems": 1
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "required": [
+                          "type"
+                        ],
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "all_day"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    ]
+                  },
+                  "mon": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "required": [
+                          "type",
+                          "entries"
+                        ],
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "intervals"
+                          },
+                          "entries": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "start",
+                                "end"
+                              ],
+                              "properties": {
+                                "start": {
+                                  "type": "object",
+                                  "required": [
+                                    "hour",
+                                    "minute"
+                                  ],
+                                  "properties": {
+                                    "hour": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 23
+                                    },
+                                    "minute": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 59
+                                    }
+                                  },
+                                  "additionalProperties": true
+                                },
+                                "end": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "required": [
+                                        "hour",
+                                        "minute"
+                                      ],
+                                      "properties": {
+                                        "hour": {
+                                          "type": "integer",
+                                          "minimum": 0,
+                                          "maximum": 23
+                                        },
+                                        "minute": {
+                                          "type": "integer",
+                                          "minimum": 0,
+                                          "maximum": 59
+                                        }
+                                      },
+                                      "additionalProperties": true
+                                    },
+                                    {
+                                      "type": "object",
+                                      "required": [
+                                        "hour",
+                                        "minute"
+                                      ],
+                                      "properties": {
+                                        "hour": {
+                                          "type": "number",
+                                          "const": 24
+                                        },
+                                        "minute": {
+                                          "type": "number",
+                                          "const": 0
+                                        }
+                                      },
+                                      "additionalProperties": true
+                                    }
+                                  ],
+                                  "description": "Use 24:00 or 23:59 for end of day. UOS returns end of day as 23:59."
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "minItems": 1
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "required": [
+                          "type"
+                        ],
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "all_day"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    ]
+                  },
+                  "tue": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "required": [
+                          "type",
+                          "entries"
+                        ],
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "intervals"
+                          },
+                          "entries": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "start",
+                                "end"
+                              ],
+                              "properties": {
+                                "start": {
+                                  "type": "object",
+                                  "required": [
+                                    "hour",
+                                    "minute"
+                                  ],
+                                  "properties": {
+                                    "hour": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 23
+                                    },
+                                    "minute": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 59
+                                    }
+                                  },
+                                  "additionalProperties": true
+                                },
+                                "end": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "required": [
+                                        "hour",
+                                        "minute"
+                                      ],
+                                      "properties": {
+                                        "hour": {
+                                          "type": "integer",
+                                          "minimum": 0,
+                                          "maximum": 23
+                                        },
+                                        "minute": {
+                                          "type": "integer",
+                                          "minimum": 0,
+                                          "maximum": 59
+                                        }
+                                      },
+                                      "additionalProperties": true
+                                    },
+                                    {
+                                      "type": "object",
+                                      "required": [
+                                        "hour",
+                                        "minute"
+                                      ],
+                                      "properties": {
+                                        "hour": {
+                                          "type": "number",
+                                          "const": 24
+                                        },
+                                        "minute": {
+                                          "type": "number",
+                                          "const": 0
+                                        }
+                                      },
+                                      "additionalProperties": true
+                                    }
+                                  ],
+                                  "description": "Use 24:00 or 23:59 for end of day. UOS returns end of day as 23:59."
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "minItems": 1
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "required": [
+                          "type"
+                        ],
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "all_day"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    ]
+                  },
+                  "wed": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "required": [
+                          "type",
+                          "entries"
+                        ],
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "intervals"
+                          },
+                          "entries": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "start",
+                                "end"
+                              ],
+                              "properties": {
+                                "start": {
+                                  "type": "object",
+                                  "required": [
+                                    "hour",
+                                    "minute"
+                                  ],
+                                  "properties": {
+                                    "hour": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 23
+                                    },
+                                    "minute": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 59
+                                    }
+                                  },
+                                  "additionalProperties": true
+                                },
+                                "end": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "required": [
+                                        "hour",
+                                        "minute"
+                                      ],
+                                      "properties": {
+                                        "hour": {
+                                          "type": "integer",
+                                          "minimum": 0,
+                                          "maximum": 23
+                                        },
+                                        "minute": {
+                                          "type": "integer",
+                                          "minimum": 0,
+                                          "maximum": 59
+                                        }
+                                      },
+                                      "additionalProperties": true
+                                    },
+                                    {
+                                      "type": "object",
+                                      "required": [
+                                        "hour",
+                                        "minute"
+                                      ],
+                                      "properties": {
+                                        "hour": {
+                                          "type": "number",
+                                          "const": 24
+                                        },
+                                        "minute": {
+                                          "type": "number",
+                                          "const": 0
+                                        }
+                                      },
+                                      "additionalProperties": true
+                                    }
+                                  ],
+                                  "description": "Use 24:00 or 23:59 for end of day. UOS returns end of day as 23:59."
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "minItems": 1
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "required": [
+                          "type"
+                        ],
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "all_day"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    ]
+                  },
+                  "thu": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "required": [
+                          "type",
+                          "entries"
+                        ],
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "intervals"
+                          },
+                          "entries": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "start",
+                                "end"
+                              ],
+                              "properties": {
+                                "start": {
+                                  "type": "object",
+                                  "required": [
+                                    "hour",
+                                    "minute"
+                                  ],
+                                  "properties": {
+                                    "hour": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 23
+                                    },
+                                    "minute": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 59
+                                    }
+                                  },
+                                  "additionalProperties": true
+                                },
+                                "end": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "required": [
+                                        "hour",
+                                        "minute"
+                                      ],
+                                      "properties": {
+                                        "hour": {
+                                          "type": "integer",
+                                          "minimum": 0,
+                                          "maximum": 23
+                                        },
+                                        "minute": {
+                                          "type": "integer",
+                                          "minimum": 0,
+                                          "maximum": 59
+                                        }
+                                      },
+                                      "additionalProperties": true
+                                    },
+                                    {
+                                      "type": "object",
+                                      "required": [
+                                        "hour",
+                                        "minute"
+                                      ],
+                                      "properties": {
+                                        "hour": {
+                                          "type": "number",
+                                          "const": 24
+                                        },
+                                        "minute": {
+                                          "type": "number",
+                                          "const": 0
+                                        }
+                                      },
+                                      "additionalProperties": true
+                                    }
+                                  ],
+                                  "description": "Use 24:00 or 23:59 for end of day. UOS returns end of day as 23:59."
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "minItems": 1
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "required": [
+                          "type"
+                        ],
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "all_day"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    ]
+                  },
+                  "fri": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "required": [
+                          "type",
+                          "entries"
+                        ],
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "intervals"
+                          },
+                          "entries": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "start",
+                                "end"
+                              ],
+                              "properties": {
+                                "start": {
+                                  "type": "object",
+                                  "required": [
+                                    "hour",
+                                    "minute"
+                                  ],
+                                  "properties": {
+                                    "hour": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 23
+                                    },
+                                    "minute": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 59
+                                    }
+                                  },
+                                  "additionalProperties": true
+                                },
+                                "end": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "required": [
+                                        "hour",
+                                        "minute"
+                                      ],
+                                      "properties": {
+                                        "hour": {
+                                          "type": "integer",
+                                          "minimum": 0,
+                                          "maximum": 23
+                                        },
+                                        "minute": {
+                                          "type": "integer",
+                                          "minimum": 0,
+                                          "maximum": 59
+                                        }
+                                      },
+                                      "additionalProperties": true
+                                    },
+                                    {
+                                      "type": "object",
+                                      "required": [
+                                        "hour",
+                                        "minute"
+                                      ],
+                                      "properties": {
+                                        "hour": {
+                                          "type": "number",
+                                          "const": 24
+                                        },
+                                        "minute": {
+                                          "type": "number",
+                                          "const": 0
+                                        }
+                                      },
+                                      "additionalProperties": true
+                                    }
+                                  ],
+                                  "description": "Use 24:00 or 23:59 for end of day. UOS returns end of day as 23:59."
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "minItems": 1
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "required": [
+                          "type"
+                        ],
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "all_day"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    ]
+                  },
+                  "sat": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "required": [
+                          "type",
+                          "entries"
+                        ],
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "intervals"
+                          },
+                          "entries": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "start",
+                                "end"
+                              ],
+                              "properties": {
+                                "start": {
+                                  "type": "object",
+                                  "required": [
+                                    "hour",
+                                    "minute"
+                                  ],
+                                  "properties": {
+                                    "hour": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 23
+                                    },
+                                    "minute": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 59
+                                    }
+                                  },
+                                  "additionalProperties": true
+                                },
+                                "end": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "required": [
+                                        "hour",
+                                        "minute"
+                                      ],
+                                      "properties": {
+                                        "hour": {
+                                          "type": "integer",
+                                          "minimum": 0,
+                                          "maximum": 23
+                                        },
+                                        "minute": {
+                                          "type": "integer",
+                                          "minimum": 0,
+                                          "maximum": 59
+                                        }
+                                      },
+                                      "additionalProperties": true
+                                    },
+                                    {
+                                      "type": "object",
+                                      "required": [
+                                        "hour",
+                                        "minute"
+                                      ],
+                                      "properties": {
+                                        "hour": {
+                                          "type": "number",
+                                          "const": 24
+                                        },
+                                        "minute": {
+                                          "type": "number",
+                                          "const": 0
+                                        }
+                                      },
+                                      "additionalProperties": true
+                                    }
+                                  ],
+                                  "description": "Use 24:00 or 23:59 for end of day. UOS returns end of day as 23:59."
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "minItems": 1
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "required": [
+                          "type"
+                        ],
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "all_day"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false,
+                "minProperties": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Omit to retain the existing schedule; use null to clear it."
+          },
+          "alarm_ids": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Omit to retain the existing associations; use null or an empty array to clear them."
+          },
+          "pin_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 4,
+                "maxLength": 6,
+                "pattern": "^\\d{4,6}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Omit to retain the existing PIN; use null to clear it."
+          }
+        },
+        "additionalProperties": false,
+        "minProperties": 1,
+        "title": "externalArmProfilePatch"
+      },
+      "externalArmProfile": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "alarm_ids",
+          "created_at",
+          "state"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "alarm_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "breached",
+              "breaching",
+              "armed",
+              "disarmed",
+              "arming"
+            ],
+            "description": "External Alarm Manager profile arm state. Use this when `nvr.featureFlags.useExternalAlarmManager` is true. When it is false, see `nvr.armMode` for Local Alarm Manager profile arm state."
+          },
+          "state_set_at": {
+            "type": "string"
+          },
+          "state_promotion_due_at": {
+            "type": "string"
+          },
+          "schedule": {
+            "type": "object",
+            "properties": {
+              "sun": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "entries"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "intervals"
+                      },
+                      "entries": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": [
+                            "start",
+                            "end"
+                          ],
+                          "properties": {
+                            "start": {
+                              "type": "object",
+                              "required": [
+                                "hour",
+                                "minute"
+                              ],
+                              "properties": {
+                                "hour": {
+                                  "type": "number"
+                                },
+                                "minute": {
+                                  "type": "number"
+                                }
+                              },
+                              "additionalProperties": true
+                            },
+                            "end": {
+                              "type": "object",
+                              "required": [
+                                "hour",
+                                "minute"
+                              ],
+                              "properties": {
+                                "hour": {
+                                  "type": "number"
+                                },
+                                "minute": {
+                                  "type": "number"
+                                }
+                              },
+                              "additionalProperties": true
+                            }
+                          },
+                          "additionalProperties": true
+                        }
+                      }
+                    },
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "type"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "all_day"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                ]
+              },
+              "mon": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "entries"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "intervals"
+                      },
+                      "entries": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": [
+                            "start",
+                            "end"
+                          ],
+                          "properties": {
+                            "start": {
+                              "type": "object",
+                              "required": [
+                                "hour",
+                                "minute"
+                              ],
+                              "properties": {
+                                "hour": {
+                                  "type": "number"
+                                },
+                                "minute": {
+                                  "type": "number"
+                                }
+                              },
+                              "additionalProperties": true
+                            },
+                            "end": {
+                              "type": "object",
+                              "required": [
+                                "hour",
+                                "minute"
+                              ],
+                              "properties": {
+                                "hour": {
+                                  "type": "number"
+                                },
+                                "minute": {
+                                  "type": "number"
+                                }
+                              },
+                              "additionalProperties": true
+                            }
+                          },
+                          "additionalProperties": true
+                        }
+                      }
+                    },
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "type"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "all_day"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                ]
+              },
+              "tue": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "entries"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "intervals"
+                      },
+                      "entries": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": [
+                            "start",
+                            "end"
+                          ],
+                          "properties": {
+                            "start": {
+                              "type": "object",
+                              "required": [
+                                "hour",
+                                "minute"
+                              ],
+                              "properties": {
+                                "hour": {
+                                  "type": "number"
+                                },
+                                "minute": {
+                                  "type": "number"
+                                }
+                              },
+                              "additionalProperties": true
+                            },
+                            "end": {
+                              "type": "object",
+                              "required": [
+                                "hour",
+                                "minute"
+                              ],
+                              "properties": {
+                                "hour": {
+                                  "type": "number"
+                                },
+                                "minute": {
+                                  "type": "number"
+                                }
+                              },
+                              "additionalProperties": true
+                            }
+                          },
+                          "additionalProperties": true
+                        }
+                      }
+                    },
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "type"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "all_day"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                ]
+              },
+              "wed": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "entries"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "intervals"
+                      },
+                      "entries": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": [
+                            "start",
+                            "end"
+                          ],
+                          "properties": {
+                            "start": {
+                              "type": "object",
+                              "required": [
+                                "hour",
+                                "minute"
+                              ],
+                              "properties": {
+                                "hour": {
+                                  "type": "number"
+                                },
+                                "minute": {
+                                  "type": "number"
+                                }
+                              },
+                              "additionalProperties": true
+                            },
+                            "end": {
+                              "type": "object",
+                              "required": [
+                                "hour",
+                                "minute"
+                              ],
+                              "properties": {
+                                "hour": {
+                                  "type": "number"
+                                },
+                                "minute": {
+                                  "type": "number"
+                                }
+                              },
+                              "additionalProperties": true
+                            }
+                          },
+                          "additionalProperties": true
+                        }
+                      }
+                    },
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "type"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "all_day"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                ]
+              },
+              "thu": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "entries"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "intervals"
+                      },
+                      "entries": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": [
+                            "start",
+                            "end"
+                          ],
+                          "properties": {
+                            "start": {
+                              "type": "object",
+                              "required": [
+                                "hour",
+                                "minute"
+                              ],
+                              "properties": {
+                                "hour": {
+                                  "type": "number"
+                                },
+                                "minute": {
+                                  "type": "number"
+                                }
+                              },
+                              "additionalProperties": true
+                            },
+                            "end": {
+                              "type": "object",
+                              "required": [
+                                "hour",
+                                "minute"
+                              ],
+                              "properties": {
+                                "hour": {
+                                  "type": "number"
+                                },
+                                "minute": {
+                                  "type": "number"
+                                }
+                              },
+                              "additionalProperties": true
+                            }
+                          },
+                          "additionalProperties": true
+                        }
+                      }
+                    },
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "type"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "all_day"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                ]
+              },
+              "fri": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "entries"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "intervals"
+                      },
+                      "entries": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": [
+                            "start",
+                            "end"
+                          ],
+                          "properties": {
+                            "start": {
+                              "type": "object",
+                              "required": [
+                                "hour",
+                                "minute"
+                              ],
+                              "properties": {
+                                "hour": {
+                                  "type": "number"
+                                },
+                                "minute": {
+                                  "type": "number"
+                                }
+                              },
+                              "additionalProperties": true
+                            },
+                            "end": {
+                              "type": "object",
+                              "required": [
+                                "hour",
+                                "minute"
+                              ],
+                              "properties": {
+                                "hour": {
+                                  "type": "number"
+                                },
+                                "minute": {
+                                  "type": "number"
+                                }
+                              },
+                              "additionalProperties": true
+                            }
+                          },
+                          "additionalProperties": true
+                        }
+                      }
+                    },
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "type"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "all_day"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                ]
+              },
+              "sat": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "entries"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "intervals"
+                      },
+                      "entries": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": [
+                            "start",
+                            "end"
+                          ],
+                          "properties": {
+                            "start": {
+                              "type": "object",
+                              "required": [
+                                "hour",
+                                "minute"
+                              ],
+                              "properties": {
+                                "hour": {
+                                  "type": "number"
+                                },
+                                "minute": {
+                                  "type": "number"
+                                }
+                              },
+                              "additionalProperties": true
+                            },
+                            "end": {
+                              "type": "object",
+                              "required": [
+                                "hour",
+                                "minute"
+                              ],
+                              "properties": {
+                                "hour": {
+                                  "type": "number"
+                                },
+                                "minute": {
+                                  "type": "number"
+                                }
+                              },
+                              "additionalProperties": true
+                            }
+                          },
+                          "additionalProperties": true
+                        }
+                      }
+                    },
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "type"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "all_day"
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "created_by": {
+            "type": "string"
+          },
+          "updated_by": {
+            "type": "string"
+          },
+          "active_breach_id": {
+            "type": "number"
+          },
+          "has_pin": {
+            "type": "boolean"
+          },
+          "activation_delay": {
+            "type": "number",
+            "description": "Delay in seconds.",
+            "maximum": 3600
+          },
+          "deactivation_delay": {
+            "type": "number",
+            "description": "Delay in seconds.",
+            "maximum": 3600
+          }
+        },
+        "additionalProperties": true,
+        "title": "externalArmProfile"
+      },
+      "externalArmProfiles": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/externalArmProfile"
+        },
+        "title": "externalArmProfiles"
+      },
       "protectVersion": {
         "type": "string",
         "description": "Protect application version",
@@ -4144,6 +6799,9 @@
           "mac": {
             "$ref": "#/components/schemas/mac"
           },
+          "featureFlags": {
+            "$ref": "#/components/schemas/nvrFeatureFlags"
+          },
           "doorbellSettings": {
             "$ref": "#/components/schemas/doorbellSettings"
           },
@@ -4158,6 +6816,7 @@
           "type",
           "guid",
           "mac",
+          "featureFlags",
           "doorbellSettings",
           "armMode"
         ],
@@ -4195,6 +6854,24 @@
         ],
         "description": "GUID of the NVR",
         "title": "nvrGuid"
+      },
+      "nvrFeatureFlags": {
+        "type": "object",
+        "properties": {
+          "useExternalAlarmManager": {
+            "type": "boolean",
+            "description": "Whether UniFi OS runs the external Alarm Manager instead of Protect. When false, Protect runs the local Alarm Manager; when true, UniFi OS runs the external Alarm Manager.",
+            "examples": [
+              true,
+              false
+            ]
+          }
+        },
+        "required": [
+          "useExternalAlarmManager"
+        ],
+        "description": "Feature flags.",
+        "title": "nvrFeatureFlags"
       },
       "doorbellSettings": {
         "type": "object",
@@ -4265,45 +6942,81 @@
               "armed",
               "breach",
               "disabled"
+            ],
+            "description": "Current arm status: armed, arming, breach, or disabled.",
+            "examples": [
+              "arming",
+              "armed",
+              "breach",
+              "disabled"
             ]
           },
           "armProfileId": {
             "type": [
               "string",
               "null"
+            ],
+            "description": "Which arm profile is currently selected.",
+            "examples": [
+              "e9c2e8a0-71fa-49f0-a4c6-f5199272f5dd"
             ]
           },
           "armedAt": {
             "type": [
               "number",
               "null"
+            ],
+            "description": "Unix timestamp in milliseconds when the profile became armed.",
+            "examples": [
+              1445408038748
             ]
           },
           "willBeArmedAt": {
             "type": [
               "number",
               "null"
+            ],
+            "description": "Unix timestamp in milliseconds when an arming profile will become armed.",
+            "examples": [
+              1445408098748
             ]
           },
           "breachDetectedAt": {
             "type": [
               "number",
               "null"
+            ],
+            "description": "Unix timestamp in milliseconds when a breach was detected.",
+            "examples": [
+              1445408158748
             ]
           },
           "breachEventCount": {
-            "type": "number"
+            "type": "number",
+            "description": "Number of breach events detected.",
+            "examples": [
+              1,
+              0
+            ]
           },
           "breachTriggerEventId": {
             "type": [
               "string",
               "null"
+            ],
+            "description": "Event ID of the breach trigger.",
+            "examples": [
+              "e9c2e8a0-71fa-49f0-a4c6-f5199272f5dd"
             ]
           },
           "breachEventId": {
             "type": [
               "string",
               "null"
+            ],
+            "description": "Event ID of the breach.",
+            "examples": [
+              "b9d4e8a0-71fa-49f0-a4c6-f5199272f5dd"
             ]
           }
         },
@@ -4317,6 +7030,7 @@
           "breachTriggerEventId",
           "breachEventId"
         ],
+        "description": "Local Alarm Manager profile arm state. Use this when `nvr.featureFlags.useExternalAlarmManager` is false. When it is true, retrieve External Alarm Manager profile state from `GET /integration/v1/external/arm-profiles`.",
         "title": "nvrArmMode"
       },
       "camera": {
@@ -4582,7 +7296,8 @@
           "sport",
           "slowShutter",
           "lprReflex",
-          "lprNoneReflex"
+          "lprNoneReflex",
+          "antiFlicker"
         ],
         "description": "Current video mode of the camera",
         "examples": [
@@ -4660,7 +7375,8 @@
                 "sport",
                 "slowShutter",
                 "lprReflex",
-                "lprNoneReflex"
+                "lprNoneReflex",
+                "antiFlicker"
               ]
             },
             "description": "A list of supported video modes by the camera"
@@ -5457,6 +8173,9 @@
           "tamperingDetectedAt": {
             "$ref": "#/components/schemas/tamperingDetectedAt"
           },
+          "isMountedIncorrectly": {
+            "$ref": "#/components/schemas/sensorIsMountedIncorrectly"
+          },
           "wirelessConnectionState": {
             "$ref": "#/components/schemas/wirelessConnectionState"
           }
@@ -5490,6 +8209,7 @@
           "externalLeakDetectedAt",
           "leakSettings",
           "tamperingDetectedAt",
+          "isMountedIncorrectly",
           "wirelessConnectionState"
         ],
         "title": "sensor"
@@ -6004,6 +8724,14 @@
           1445408038748
         ],
         "title": "tamperingDetectedAt"
+      },
+      "sensorIsMountedIncorrectly": {
+        "type": [
+          "boolean",
+          "null"
+        ],
+        "description": "Whether the sensor reports an incorrect mounting orientation (e.g. upside down), null if the sensor doesn't support orientation reporting or hasn't reported yet.",
+        "title": "sensorIsMountedIncorrectly"
       },
       "wirelessConnectionState": {
         "type": "object",
@@ -8120,6 +10848,9 @@
           "mac": {
             "$ref": "#/components/schemas/mac"
           },
+          "featureFlags": {
+            "$ref": "#/components/schemas/nvrFeatureFlags"
+          },
           "doorbellSettings": {
             "$ref": "#/components/schemas/doorbellSettings"
           },
@@ -8580,6 +11311,9 @@
           },
           "tamperingDetectedAt": {
             "$ref": "#/components/schemas/tamperingDetectedAt"
+          },
+          "isMountedIncorrectly": {
+            "$ref": "#/components/schemas/sensorIsMountedIncorrectly"
           },
           "wirelessConnectionState": {
             "$ref": "#/components/schemas/wirelessConnectionState"
@@ -9242,6 +11976,9 @@
               "mac": {
                 "$ref": "#/components/schemas/mac"
               },
+              "featureFlags": {
+                "$ref": "#/components/schemas/nvrFeatureFlags"
+              },
               "doorbellSettings": {
                 "$ref": "#/components/schemas/doorbellSettings"
               },
@@ -9256,6 +11993,7 @@
               "type",
               "guid",
               "mac",
+              "featureFlags",
               "doorbellSettings",
               "armMode"
             ],
@@ -9840,6 +12578,9 @@
               "tamperingDetectedAt": {
                 "$ref": "#/components/schemas/tamperingDetectedAt"
               },
+              "isMountedIncorrectly": {
+                "$ref": "#/components/schemas/sensorIsMountedIncorrectly"
+              },
               "wirelessConnectionState": {
                 "$ref": "#/components/schemas/wirelessConnectionState"
               }
@@ -9873,6 +12614,7 @@
               "externalLeakDetectedAt",
               "leakSettings",
               "tamperingDetectedAt",
+              "isMountedIncorrectly",
               "wirelessConnectionState"
             ],
             "title": "sensor"
@@ -10332,6 +13074,9 @@
               },
               "mac": {
                 "$ref": "#/components/schemas/mac"
+              },
+              "featureFlags": {
+                "$ref": "#/components/schemas/nvrFeatureFlags"
               },
               "doorbellSettings": {
                 "$ref": "#/components/schemas/doorbellSettings"
@@ -10863,6 +13608,9 @@
               },
               "tamperingDetectedAt": {
                 "$ref": "#/components/schemas/tamperingDetectedAt"
+              },
+              "isMountedIncorrectly": {
+                "$ref": "#/components/schemas/sensorIsMountedIncorrectly"
               },
               "wirelessConnectionState": {
                 "$ref": "#/components/schemas/wirelessConnectionState"
@@ -12058,7 +14806,7 @@
           "start",
           "device"
         ],
-        "description": "Sensor has started or finished being tampered with",
+        "description": "Sensor tamper has been detected",
         "title": "sensorTamperEvent"
       },
       "sensorBatteryLowEvent": {
@@ -14831,6 +17579,505 @@
           "item"
         ],
         "title": "eventUpdate"
+      },
+      "modelUpdateEvent": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/deviceEvent"
+          },
+          {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/eventAdd"
+              },
+              {
+                "$ref": "#/components/schemas/eventUpdate"
+              }
+            ],
+            "discriminator": {
+              "propertyName": "type",
+              "mapping": {
+                "add": "#/components/schemas/eventAdd",
+                "update": "#/components/schemas/eventUpdate"
+              }
+            },
+            "description": "An event that was created or updated"
+          },
+          {
+            "$ref": "#/components/schemas/integrationExternalArmProfileEvent"
+          }
+        ],
+        "description": "A model which was created, updated or removed"
+      },
+      "integrationExternalArmProfileEvent": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/integrationExternalArmProfileAdd"
+          },
+          {
+            "$ref": "#/components/schemas/integrationExternalArmProfileUpdate"
+          },
+          {
+            "$ref": "#/components/schemas/integrationExternalArmProfileRemove"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "add": "#/components/schemas/integrationExternalArmProfileAdd",
+            "update": "#/components/schemas/integrationExternalArmProfileUpdate",
+            "remove": "#/components/schemas/integrationExternalArmProfileRemove"
+          }
+        },
+        "description": "An external arm profile which was created, updated or removed"
+      },
+      "integrationExternalArmProfileAdd": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "add"
+          },
+          "item": {
+            "$ref": "#/components/schemas/integrationExternalArmProfile"
+          }
+        },
+        "required": [
+          "type",
+          "item"
+        ],
+        "title": "integrationExternalArmProfileAdd"
+      },
+      "integrationExternalArmProfile": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "modelKey": {
+            "type": "string",
+            "const": "externalArmProfile"
+          },
+          "title": {
+            "type": "string"
+          },
+          "alarm_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "disarmed",
+              "arming",
+              "armed",
+              "breaching",
+              "breached"
+            ]
+          },
+          "state_set_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state_promotion_due_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "activation_delay": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "deactivation_delay": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "schedule": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/integrationExternalProfileSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "active_breach_id": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "has_pin": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "modelKey",
+          "title",
+          "alarm_ids",
+          "created_at",
+          "state"
+        ],
+        "title": "integrationExternalArmProfile"
+      },
+      "integrationExternalProfileSchedule": {
+        "type": "object",
+        "properties": {
+          "sun": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/integrationExternalProfileIntervals"
+              },
+              {
+                "$ref": "#/components/schemas/integrationExternalProfileAllDay"
+              }
+            ],
+            "discriminator": {
+              "propertyName": "type",
+              "mapping": {
+                "intervals": "#/components/schemas/integrationExternalProfileIntervals",
+                "all_day": "#/components/schemas/integrationExternalProfileAllDay"
+              }
+            }
+          },
+          "mon": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/integrationExternalProfileIntervals"
+              },
+              {
+                "$ref": "#/components/schemas/integrationExternalProfileAllDay"
+              }
+            ],
+            "discriminator": {
+              "propertyName": "type",
+              "mapping": {
+                "intervals": "#/components/schemas/integrationExternalProfileIntervals",
+                "all_day": "#/components/schemas/integrationExternalProfileAllDay"
+              }
+            }
+          },
+          "tue": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/integrationExternalProfileIntervals"
+              },
+              {
+                "$ref": "#/components/schemas/integrationExternalProfileAllDay"
+              }
+            ],
+            "discriminator": {
+              "propertyName": "type",
+              "mapping": {
+                "intervals": "#/components/schemas/integrationExternalProfileIntervals",
+                "all_day": "#/components/schemas/integrationExternalProfileAllDay"
+              }
+            }
+          },
+          "wed": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/integrationExternalProfileIntervals"
+              },
+              {
+                "$ref": "#/components/schemas/integrationExternalProfileAllDay"
+              }
+            ],
+            "discriminator": {
+              "propertyName": "type",
+              "mapping": {
+                "intervals": "#/components/schemas/integrationExternalProfileIntervals",
+                "all_day": "#/components/schemas/integrationExternalProfileAllDay"
+              }
+            }
+          },
+          "thu": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/integrationExternalProfileIntervals"
+              },
+              {
+                "$ref": "#/components/schemas/integrationExternalProfileAllDay"
+              }
+            ],
+            "discriminator": {
+              "propertyName": "type",
+              "mapping": {
+                "intervals": "#/components/schemas/integrationExternalProfileIntervals",
+                "all_day": "#/components/schemas/integrationExternalProfileAllDay"
+              }
+            }
+          },
+          "fri": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/integrationExternalProfileIntervals"
+              },
+              {
+                "$ref": "#/components/schemas/integrationExternalProfileAllDay"
+              }
+            ],
+            "discriminator": {
+              "propertyName": "type",
+              "mapping": {
+                "intervals": "#/components/schemas/integrationExternalProfileIntervals",
+                "all_day": "#/components/schemas/integrationExternalProfileAllDay"
+              }
+            }
+          },
+          "sat": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/integrationExternalProfileIntervals"
+              },
+              {
+                "$ref": "#/components/schemas/integrationExternalProfileAllDay"
+              }
+            ],
+            "discriminator": {
+              "propertyName": "type",
+              "mapping": {
+                "intervals": "#/components/schemas/integrationExternalProfileIntervals",
+                "all_day": "#/components/schemas/integrationExternalProfileAllDay"
+              }
+            }
+          }
+        }
+      },
+      "integrationExternalProfileIntervals": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "intervals"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/integrationExternalProfileInterval"
+            }
+          }
+        },
+        "required": [
+          "type",
+          "entries"
+        ]
+      },
+      "integrationExternalProfileInterval": {
+        "type": "object",
+        "properties": {
+          "start": {
+            "$ref": "#/components/schemas/integrationExternalProfileTime"
+          },
+          "end": {
+            "$ref": "#/components/schemas/integrationExternalProfileTime"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ]
+      },
+      "integrationExternalProfileTime": {
+        "type": "object",
+        "properties": {
+          "hour": {
+            "type": "number"
+          },
+          "minute": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "hour",
+          "minute"
+        ]
+      },
+      "integrationExternalProfileAllDay": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "all_day"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "integrationExternalArmProfileUpdate": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "update"
+          },
+          "item": {
+            "$ref": "#/components/schemas/integrationExternalArmProfilePartialWithReference"
+          }
+        },
+        "required": [
+          "type",
+          "item"
+        ],
+        "title": "integrationExternalArmProfileUpdate"
+      },
+      "integrationExternalArmProfilePartialWithReference": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "modelKey": {
+            "type": "string",
+            "const": "externalArmProfile"
+          },
+          "title": {
+            "type": "string"
+          },
+          "alarm_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "disarmed",
+              "arming",
+              "armed",
+              "breaching",
+              "breached"
+            ]
+          },
+          "state_set_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state_promotion_due_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "activation_delay": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "deactivation_delay": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "schedule": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/integrationExternalProfileSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "active_breach_id": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "has_pin": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "modelKey"
+        ],
+        "title": "integrationExternalArmProfilePartialWithReference"
+      },
+      "integrationExternalArmProfileRemove": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "remove"
+          },
+          "item": {
+            "$ref": "#/components/schemas/integrationExternalArmProfileReference"
+          }
+        },
+        "required": [
+          "type",
+          "item"
+        ],
+        "title": "integrationExternalArmProfileRemove"
+      },
+      "integrationExternalArmProfileReference": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/integrationExternalArmProfile"
+          }
+        ],
+        "title": "integrationExternalArmProfileReference"
       },
       "activePatrolSlotString": {
         "type": "string",

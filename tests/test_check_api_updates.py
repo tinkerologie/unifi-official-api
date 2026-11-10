@@ -97,7 +97,7 @@ def test_property_named_like_a_keyword_is_kept() -> None:
 
 
 def test_pinned_protect_fixture_matches_itself() -> None:
-    spec = json.loads((FIXTURES / "protect_openapi_7.3.70.json").read_text())
+    spec = json.loads((FIXTURES / "protect_openapi_7.4.96.json").read_text())
     changed = copy.deepcopy(spec)
     changed["info"]["version"] = "7.3.74"
 

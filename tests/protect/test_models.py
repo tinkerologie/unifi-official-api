@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
+
+import pytest
 
 from unifi_official_api.protect import (
     NVR,
@@ -11,6 +14,8 @@ from unifi_official_api.protect import (
     Chime,
     Event,
     EventType,
+    ExternalArmProfile,
+    ExternalArmProfileState,
     Light,
     LightMode,
     LiveView,
@@ -85,6 +90,29 @@ class TestSensorModel:
         assert sensor.battery_status.percentage == 85
         assert sensor.battery_status.is_low is False
 
+    @pytest.mark.parametrize(
+        ("payload_key", "value"),
+        [
+            ("isMountedIncorrectly", True),
+            ("isMountedIncorrectly", False),
+            ("isMountedIncorrectly", None),
+            ("is_mounted_incorrectly", True),
+            ("is_mounted_incorrectly", None),
+            ("is_mounted_incorrectly", "omitted"),
+        ],
+    )
+    def test_is_mounted_incorrectly(self, payload_key: str, value: bool | str | None) -> None:
+        """The orientation flag reads through its alias or Python name."""
+        base = {"id": "sensor-123", "mac": "AA:BB:CC:DD:EE:FF"}
+        if value == "omitted":
+            sensor = Sensor.model_validate(base)
+            assert sensor.is_mounted_incorrectly is None
+            return
+        sensor = Sensor.model_validate({**base, payload_key: value})
+        assert sensor.is_mounted_incorrectly is value
+        assert "isMountedIncorrectly" in sensor.model_dump(by_alias=True)
+        assert "is_mounted_incorrectly" in sensor.model_dump()
+
 
 class TestLightModel:
     """Tests for Light model."""
@@ -145,6 +173,34 @@ class TestNVRModel:
         assert nvr.version == "2.9.20"
         assert nvr.camera_count == 8
         assert nvr.recording_retention_days == 30
+
+    @pytest.mark.parametrize(
+        ("feature_flags", "expected"),
+        [
+            ({"useExternalAlarmManager": True}, True),
+            ({"useExternalAlarmManager": False}, False),
+            ({}, None),
+            ({"useExternalAlarmManager": "yes"}, None),
+            ({"useExternalAlarmManager": 1}, None),
+            (None, None),
+        ],
+    )
+    def test_use_external_alarm_manager_reads_only_booleans(
+        self, feature_flags: dict[str, Any] | None, expected: bool | None
+    ) -> None:
+        """The property returns the flag only when it is a real boolean."""
+        nvr = NVR.model_validate({"id": "nvr-123", "featureFlags": feature_flags})
+        assert nvr.use_external_alarm_manager is expected
+
+    def test_use_external_alarm_manager_keeps_dictionary_access(self) -> None:
+        """The flag stays readable through the unchanged ``feature_flags`` dict."""
+        flags = {"useExternalAlarmManager": True, "futureFlag": 7}
+        nvr = NVR.model_validate({"id": "nvr-123", "featureFlags": flags})
+
+        assert nvr.feature_flags is not None
+        assert nvr.feature_flags["useExternalAlarmManager"] is True
+        assert nvr.feature_flags["futureFlag"] == 7
+        assert nvr.model_dump(by_alias=True)["featureFlags"] == flags
 
 
 class TestLiveViewModel:
@@ -208,3 +264,85 @@ class TestEventModel:
             }
         )
         assert event.duration is None
+
+
+_PIN_MARKER = "915273"
+_FULL_PROFILE: dict[str, Any] = {
+    "id": "profile-1",
+    "title": "Home",
+    "state": "armed",
+    "state_set_at": "2026-11-01T00:00:00.000Z",
+    "state_promotion_due_at": "2026-11-01T00:00:30.000Z",
+    "created_at": "2026-10-01T00:00:00.000Z",
+    "created_by": "user-1",
+    "updated_at": "2026-11-01T00:00:00.000Z",
+    "updated_by": "user-2",
+    "activation_delay": 30,
+    "deactivation_delay": 15.5,
+    "active_breach_id": 12,
+    "alarm_ids": ["alarm-1", "alarm-2"],
+    "has_pin": True,
+    "schedule": {"mon": {"type": "all_day"}},
+}
+
+
+class TestExternalArmProfileModel:
+    """Tests for the external alarm manager arm profile model."""
+
+    def test_full_payload(self) -> None:
+        """Every documented snake_case field parses."""
+        profile = ExternalArmProfile.model_validate(_FULL_PROFILE)
+
+        assert profile.id == "profile-1"
+        assert profile.title == "Home"
+        assert profile.state is ExternalArmProfileState.ARMED
+        assert profile.state_set_at == "2026-11-01T00:00:00.000Z"
+        assert profile.state_promotion_due_at == "2026-11-01T00:00:30.000Z"
+        assert profile.activation_delay == 30
+        assert profile.deactivation_delay == 15.5
+        assert profile.active_breach_id == 12
+        assert profile.alarm_ids == ["alarm-1", "alarm-2"]
+        assert profile.has_pin is True
+        assert profile.schedule == {"mon": {"type": "all_day"}}
+        assert profile.model_dump(by_alias=True) == _FULL_PROFILE
+
+    def test_minimal_payload(self) -> None:
+        """Only ``id`` is required, as for the other arm profile models."""
+        profile = ExternalArmProfile.model_validate({"id": "profile-1"})
+
+        assert profile.id == "profile-1"
+        assert profile.state is None
+        assert profile.model_dump(exclude_none=True) == {"id": "profile-1"}
+
+    def test_unknown_state_and_extras_follow_forward_compatibility(self) -> None:
+        """A newer state stays a plain string and unknown extras are kept."""
+        profile = ExternalArmProfile.model_validate(
+            {"id": "profile-1", "state": "futureState", "futureField": {"a": 1}}
+        )
+
+        assert type(profile.state) is str
+        assert profile.state == "futureState"
+        assert profile.model_extra == {"futureField": {"a": 1}}
+
+    @pytest.mark.parametrize(
+        "pin_payload",
+        [
+            {"pin_code": _PIN_MARKER},
+            {"pinCode": _PIN_MARKER},
+            {"PIN": _PIN_MARKER},
+            {"pin_codes": [_PIN_MARKER]},
+            {"schedule": {"mon": {"pin": _PIN_MARKER}}},
+            {"extra": [{"pin_code": _PIN_MARKER}, {"pinCode": _PIN_MARKER}]},
+            {"pin_code": _PIN_MARKER, "pinCode": _PIN_MARKER, "pin": _PIN_MARKER},
+        ],
+    )
+    def test_pin_keys_never_reach_the_model(self, pin_payload: dict[str, Any]) -> None:
+        """No PIN spelling survives into any representation or dump."""
+        profile = ExternalArmProfile.model_validate(
+            {"id": "profile-1", "has_pin": True, **pin_payload}
+        )
+
+        rendered = (repr(profile), str(profile.model_dump()), profile.model_dump_json())
+        for text in rendered:
+            assert _PIN_MARKER not in text
+        assert profile.has_pin is True

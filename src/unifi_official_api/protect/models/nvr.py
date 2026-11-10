@@ -87,3 +87,18 @@ class NVR(BaseModel):
     def display_name(self) -> str:
         """Get the display name for the NVR."""
         return self.name or self.mac or self.id
+
+    @property
+    def use_external_alarm_manager(self) -> bool | None:
+        """Return ``featureFlags.useExternalAlarmManager`` when it is a boolean.
+
+        ``feature_flags`` stays an untyped dictionary so existing callers can
+        index, mutate and dump it unchanged. The read-only property returns
+        ``None`` when the flag is absent or is not a boolean, as on firmware
+        that predates the external alarm manager.
+        """
+        flags = self.feature_flags
+        if not isinstance(flags, dict):
+            return None
+        value = flags.get("useExternalAlarmManager")
+        return value if isinstance(value, bool) else None
