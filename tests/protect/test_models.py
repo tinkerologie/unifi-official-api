@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from typing import Any
 
@@ -456,6 +457,17 @@ class TestExternalArmProfileModel:
         _assert_no_pin(*_error_texts(caught.value))
         assert caught.value.__cause__ is None
         assert caught.value.__context__ is None
+
+    def test_valid_json_parses_and_drops_the_pin(self) -> None:
+        """A valid JSON body parses like a dict and the PIN never reaches the model."""
+        body = json.dumps({**_FULL_PROFILE, "pin_code": _PIN_MARKER})
+
+        profile = ExternalArmProfile.model_validate_json(body)
+
+        assert profile == ExternalArmProfile.model_validate(_FULL_PROFILE)
+        assert profile.model_dump(by_alias=True) == _FULL_PROFILE
+        assert profile.model_extra == {}
+        _assert_no_pin(repr(profile), str(profile), profile.model_dump_json())
 
     def test_wrong_type_pin_error_quotes_no_input(self) -> None:
         """A field error keeps its location but drops every input value."""
