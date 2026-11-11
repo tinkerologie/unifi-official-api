@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `DevicesEndpoint.set_led_override(site_name, device_id, mode)` sets the status LED override on a Network device, for status LED control in `ha-unifi-insights` (tinkerologie/ha-unifi-insights#504). The Integration API has no LED setting, so the method sends `PUT` to the classic `rest/device/{_id}` route with `{"led_override": mode}` only. `mode` is `"on"`, `"off"`, or `"default"`. Other values raise `ValueError` before a request. `device_id` is the legacy `_id` from `/stat/device` (#92).
+
 ## [3.2.0] - 2026-11-11
 
 ### Added

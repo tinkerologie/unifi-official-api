@@ -620,6 +620,71 @@ async def test_devices_set_outlet_state_refuses_without_seed() -> None:
         )
 
 
+# A legacy device ``_id`` from ``/stat/device``: 24 hex characters.
+LEGACY_DEVICE_ID = "65f0c2a1b3d4e5f6a7b8c9d0"
+LED_URLS = {
+    ConnectionType.LOCAL: "https://192.168.1.1/proxy/network/api/s/default/rest/device/",
+    ConnectionType.REMOTE: (
+        "https://api.ui.com/v1/connector/consoles/console-1/network/api/s/default/rest/device/"
+    ),
+}
+
+
+def _led_client(session: _Session, connection_type: ConnectionType) -> UniFiNetworkClient:
+    if connection_type is ConnectionType.LOCAL:
+        return _client(session)
+    return UniFiNetworkClient(
+        auth=ApiKeyAuth(api_key="test-cloud-key"),
+        connection_type=ConnectionType.REMOTE,
+        console_id="console-1",
+        session=session,  # type: ignore[arg-type]
+    )
+
+
+@pytest.mark.parametrize("connection_type", [ConnectionType.LOCAL, ConnectionType.REMOTE])
+@pytest.mark.parametrize("mode", ["on", "off", "default"])
+async def test_devices_set_led_override_sends_one_field_put(
+    mode: str, connection_type: ConnectionType
+) -> None:
+    """devices.set_led_override PUTs only led_override, so other settings stay as they are."""
+    session = _Session([{"meta": {"rc": "ok"}, "data": []}])
+    client = _led_client(session, connection_type)
+
+    assert await client.devices.set_led_override("default", LEGACY_DEVICE_ID, mode) is True
+
+    assert len(session.requests) == 1
+    request = session.requests[0]
+    assert request["method"] == "PUT"
+    assert request["url"] == LED_URLS[connection_type] + LEGACY_DEVICE_ID
+    assert request["json"] == {"led_override": mode}
+    await client.close()
+
+
+@pytest.mark.parametrize("mode", ["ON", "blink", "", "Default"])
+async def test_devices_set_led_override_rejects_unknown_mode_before_request(mode: str) -> None:
+    """An unsupported mode raises ValueError and sends no request."""
+    session = _Session([])
+    client = _client(session)
+
+    with pytest.raises(ValueError, match="LED override mode must be one of"):
+        await client.devices.set_led_override("default", LEGACY_DEVICE_ID, mode)
+
+    assert session.requests == []
+    await client.close()
+
+
+async def test_devices_set_led_override_propagates_transport_error() -> None:
+    """A controller error status escapes as the mapped library exception."""
+    session = _Session([_Response("Not found", status=404)])
+    client = _client(session)
+
+    with pytest.raises(UniFiNotFoundError):
+        await client.devices.set_led_override("default", LEGACY_DEVICE_ID, "off")
+
+    assert len(session.requests) == 1
+    await client.close()
+
+
 async def test_routes_list_routes_pins_request_and_models() -> None:
     """routes.list_routes pins GET /proxy/network/v2/api/site/{site}/trafficroutes."""
     raw_route = {"_id": "rt-1", "description": "WAN Route", "enabled": True}
