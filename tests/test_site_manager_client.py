@@ -113,6 +113,32 @@ async def test_list_hosts_rejects_a_repeated_pagination_token() -> None:
     assert "repeated nextToken" in error.value.args[0]
 
 
+async def test_list_hosts_returns_all_pages_without_filling_missing_fields() -> None:
+    first = [{"id": "host-1"}, {"type": "gateway"}]
+    second = [{"id": "host-2", "isBlocked": False}]
+    session = _Session([{"data": first, "nextToken": "second"}, {"data": second}])
+
+    assert await _client(session).list_hosts() == first + second
+    assert [request["url"] for request in session.requests] == [
+        "https://api.ui.com/v1/hosts",
+        "https://api.ui.com/v1/hosts",
+    ]
+    assert session.requests[0]["params"] is None
+    assert session.requests[1]["params"] == {"nextToken": "second"}
+
+
+async def test_list_hosts_accepts_an_empty_collection() -> None:
+    assert await _client(_Session([{"data": []}])).list_hosts() == []
+
+
+@pytest.mark.parametrize("envelope", [{}, {"data": None}, {"data": {"id": "host-1"}}])
+async def test_list_hosts_requires_a_list_in_the_envelope(envelope: dict[str, Any]) -> None:
+    with pytest.raises(UniFiResponseError) as error:
+        await _client(_Session([envelope])).list_hosts()
+    assert error.value.status_code == 200
+    assert "returned malformed data" in error.value.message
+
+
 async def test_null_devices_array_is_an_empty_host_group() -> None:
     """The documented nullable devices field does not discard inventory."""
     session = _Session([{"data": [{"hostId": "host-a", "devices": None}]}])
@@ -277,6 +303,24 @@ async def test_get_isp_metrics_options_and_query_parameters() -> None:
         "beginTimestamp": "2026-01-01T00:00:00Z",
         "endTimestamp": "2026-01-01T12:00:00Z",
     }
+
+
+async def test_get_isp_metrics_returns_unchanged_records_and_empty_lists() -> None:
+    records = [
+        {
+            "hostId": "host-1:console-1",
+            "siteId": "site-1",
+            "periods": [{"data": {"wan": {"download_kbps": 0, "futureFlag": False}}}],
+        },
+        {"siteId": "site-2"},
+    ]
+    session = _Session([{"data": records}, {"data": []}])
+    client = _client(session)
+
+    result = await client.get_isp_metrics()
+    assert result == records
+    assert result[0]["periods"][0]["data"]["wan"]["futureFlag"] is False
+    assert await client.get_isp_metrics() == []
 
 
 async def test_query_isp_metrics_pins_verb_path_body_and_unwraps_data() -> None:

@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from .device import DeviceListResponse, SiteManagerDevice, SiteManagerHostDevices
 from .host import Host, HostListResponse, HostReportedState, HostUserData
-from .isp_metric import ISPMetric, ISPMetricQuery, ISPMetricQueryResult
+from .isp_metric import (
+    ISPMetric,
+    ISPMetricPeriod,
+    ISPMetricPeriodData,
+    ISPMetricQuery,
+    ISPMetricQueryResult,
+    ISPMetricQuerySite,
+    ISPMetricWAN,
+)
 from .sd_wan import SDWanConfig, SDWanConfigDetail, SDWanStatus
 from .site import SiteListResponse, SiteManagerSite, SiteMeta, SiteStatistics
 
@@ -15,8 +23,12 @@ __all__ = [
     "HostReportedState",
     "HostUserData",
     "ISPMetric",
+    "ISPMetricPeriod",
+    "ISPMetricPeriodData",
     "ISPMetricQuery",
     "ISPMetricQueryResult",
+    "ISPMetricQuerySite",
+    "ISPMetricWAN",
     "SDWanConfig",
     "SDWanConfigDetail",
     "SDWanStatus",

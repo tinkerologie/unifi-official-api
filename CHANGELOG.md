@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-11-11
+
 ### Added
 
 - Add controller-wide Network 11 statistics support through `client.stats.get_source()` and `get_recent_series()` on local and remote connections. Typed series report additive byte totals and the actual duration of each bucket (#90).
@@ -15,11 +17,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ProtectWebSocket.subscribe_updates(model_keys)` sends one `modelKeys` query pair per key to `/subscribe/updates`. Pass each key as a separate item. The subscription yields raw add, update and remove messages (#87).
 - `ExternalArmProfile` and `ExternalArmProfileState` model the external alarm manager response. Only `id` is required, extras are kept, and PIN-spelled keys (`pin`, `pin_code`, `pinCode`, `pincodes`) are removed from nested mappings, lists, tuples and sets on validation, assignment and `model_copy()`. Representations, dumps and validation errors never quote a PIN (#87).
 - `VideoMode.ANTI_FLICKER` (`antiFlicker`), `Sensor.is_mounted_incorrectly` (`isMountedIncorrectly`) and the read-only `NVR.use_external_alarm_manager` property (`featureFlags.useExternalAlarmManager`) (#87).
+- Site Manager ISP metrics models expose host and site records, timestamped periods, and WAN measurements. Typed ISP requests accept timezone-aware timestamps and per-site queries. Query results expose `status` and `message`. (#86)
+- Mobility `devices.get_all()` accepts `limit` and `offset` for a single typed page. (#86)
 
 ### Changed
 
 - Complete the ASD-STE100 Issue 9 review of the core technical guides.
 - Correct the Python requirement, API inventory, and quick-start examples. (#81)
+- Site Manager `hosts.get_all()` sends the Python `limit` argument as `pageSize`. The typed sites and devices pages and the connection validation probe still send `limit`. (#86)
+- Mobility typed reads raise `UniFiValidationError` before the request when a workspace or device ID is unsafe. (#86)
+- Typed Site Manager ISP reads raise a sanitized `UniFiResponseError` for malformed period samples. The ISP documentation describes the `5m` and `1h` aggregation intervals. (#86)
 
 ### Documentation
 

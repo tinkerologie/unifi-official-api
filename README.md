@@ -142,7 +142,7 @@ async def main():
     ) as client:
         hosts = await client.hosts.get_all()
         sites = await client.sites.get_all()
-        metrics = await client.isp_metrics.get_metrics("latency", duration="24h")
+        metrics = await client.isp_metrics.get_metrics("5m", duration="24h")
         print(f"First pages: {len(hosts.data)} consoles and {len(sites.data)} sites")
 
 asyncio.run(main())
@@ -186,6 +186,43 @@ async def main():
 
 asyncio.run(main())
 ```
+
+## Site Manager and Mobility read methods
+
+| Resource | Typed method and result | Dictionary method and result |
+| --- | --- | --- |
+| Site Manager hosts | `hosts.get_all()` returns one `HostListResponse` page. Pass its `next_token` to the next call. | `list_hosts()` returns host dictionaries from all pages. |
+| Site Manager host detail | `hosts.get()` returns one `Host`. | `get_host()` returns one dictionary. |
+| Site Manager ISP metrics | `isp_metrics.get_metrics()` returns `list[ISPMetric]` in one call. | `get_isp_metrics()` returns a list of dictionaries in one call. |
+| Site Manager ISP query | `isp_metrics.query()` returns `ISPMetricQueryResult` in one call. | `query_isp_metrics()` returns the `data` dictionary in one call. |
+| Mobility workspaces | `workspaces.get_all()` returns `list[WorkspaceSummary]` in one call. | `list_workspaces()` returns a list of dictionaries in one call. |
+| Mobility workspace admins | `workspaces.get_admins()` returns `list[AdminSummary]` in one call. | `list_workspace_admins()` returns a list of dictionaries in one call. |
+| Mobility devices | `devices.get_all()` returns one page as `list[MobilityDeviceSummary]`. Pass `limit` and `offset` to read subsequent pages. | `list_devices()` returns device dictionaries from all pages. |
+| Mobility device detail | `devices.get()` returns one `MobilityDeviceDetail`. | `get_device()` returns one dictionary. |
+| Mobility connected clients | `clients.get_all()` returns one page as `list[MobilityDeviceClient]`. | `list_device_clients()` returns connected client dictionaries from all pages. |
+
+For typed hosts, stop when `next_token` is empty or `None`. For typed Mobility devices, set `limit` from 1 to 200 and start at `offset=0`. Increase `offset` by the number of records received. Stop when a page is shorter than `limit`. Use `list_device_clients()` to read all connected clients. The Mobility API uses 200 as the default page size for devices and connected clients.
+
+The dictionary methods in the table preserve missing keys and explicit `0` and `False` values. Typed models can supply defaults for missing fields. Check `model_fields_set` for fields such as `is_blocked`, `model`, `state`, and `status` to see which values the API supplied.
+
+### ISP metrics intervals and site queries
+
+Use `5m` for five-minute samples and `1h` for hourly samples. The API accepts `duration="24h"` for `5m` and `duration="7d"` or `duration="30d"` for `1h`. To specify a time range, use timezone-aware `begin_timestamp` and `end_timestamp` arguments. The API rejects a duration combined with either timestamp.
+
+Each `ISPMetric` record identifies a host and site. Its `periods` contain timestamped samples. A sample can include measurements in `period.data.wan`. A missing `periods` field gives `None`, and an empty periods list gives `[]`. A missing WAN measurement gives `None`. A measurement of zero gives `0`.
+
+To query selected sites, supply each site's host ID and site ID. Each site can also have a timezone-aware time range.
+
+```python
+from unifi_official_api.site_manager import ISPMetricQuery, ISPMetricQuerySite
+
+query = ISPMetricQuery(sites=[ISPMetricQuerySite(host_id=host_id, site_id=site_id)])
+result = await client.isp_metrics.query("1h", query)
+if result.status == "partialSuccess":
+    print(result.message)
+```
+
+The API can return accessible metrics with `status="partialSuccess"` and a message. The published query uses the `sites` body. Existing dictionary payloads and legacy typed query fields still pass through. The legacy fields `hostIds`, `timeRangeStart`, and `timeRangeEnd` and the legacy GET filter `hostId` are outside the published schema. Use `sites` on its own when building a typed site query.
 
 ## API Coverage Summary
 

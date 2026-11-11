@@ -18,19 +18,18 @@ class DevicesEndpoint:
     def __init__(self, client: UniFiMobilityClient) -> None:
         self._client = client
 
-    async def get_all(self, workspace_id: str) -> list[MobilityDeviceSummary]:
-        response = await self._client._get(f"/v1/mobility/workspaces/{workspace_id}/devices")
-        if response is None:
-            return []
-        data = response.get("data", response) if isinstance(response, dict) else response
-        if isinstance(data, list):
-            return parse_records(MobilityDeviceSummary, data, "Mobility device")
-        return []
+    async def get_all(
+        self, workspace_id: str, *, limit: int | None = None, offset: int | None = None
+    ) -> list[MobilityDeviceSummary]:
+        """Return one page of device summaries. Set ``offset`` to read a later page."""
+        path = self._client._devices_path(workspace_id)
+        response = await self._client._get_list_page(path, limit=limit, offset=offset)
+        data = self._client._list_data(response, allow_bare_list=True)
+        return parse_records(MobilityDeviceSummary, data or [], "Mobility device")
 
     async def get(self, workspace_id: str, device_id: str) -> MobilityDeviceDetail:
-        response = await self._client._get(
-            f"/v1/mobility/workspaces/{workspace_id}/devices/{device_id}"
-        )
+        """Return the detail record of one device."""
+        response = await self._client._get(self._client._device_path(workspace_id, device_id))
         return require_record(
             response, MobilityDeviceDetail, f"Device {device_id} in workspace {workspace_id}"
         )

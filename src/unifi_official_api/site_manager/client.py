@@ -38,6 +38,8 @@ class UniFiSiteManagerClient(BaseUniFiClient):
     ISP metric telemetry, SD-WAN topologies, and Cloud Connector proxying.
     """
 
+    _HOSTS_PATH = "/v1/hosts"
+
     def _response_log_text(self, response_text: str, *, limit: int) -> str:
         """Keep account-wide inventory and metadata out of transport logs."""
         return "[Site Manager response omitted]"[:limit] if response_text else "empty"
@@ -106,18 +108,18 @@ class UniFiSiteManagerClient(BaseUniFiClient):
     async def validate_connection(self) -> bool:
         """Validate credentials by querying accessible hosts."""
         try:
-            response = await self._get("/v1/hosts", params={"limit": 1})
+            response = await self._get(self._HOSTS_PATH, params={"limit": 1})
             return response is not None
         except UniFiError, ValueError:
             return False
 
     async def list_hosts(self) -> list[dict[str, Any]]:
-        """Return all accessible UniFi hosts."""
-        return await self._list_paginated("/v1/hosts")
+        """Return host dictionaries from all pages."""
+        return await self._list_paginated(self._HOSTS_PATH)
 
     async def get_host(self, host_id: str) -> dict[str, Any]:
         """Return detailed information for a specific host."""
-        path = f"/v1/hosts/{host_id}"
+        path = self._host_path(host_id)
         data = await self._get(path)
         return self._extract_object(data, path)
 
@@ -167,17 +169,14 @@ class UniFiSiteManagerClient(BaseUniFiClient):
         metric_type: Literal["5m", "1h"] = "5m",
         duration: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Return ISP metrics for the supplied time range or duration."""
-        params: dict[str, Any] = {}
-        if begin_timestamp is not None:
-            params["beginTimestamp"] = self._format_timestamp(begin_timestamp)
-        if end_timestamp is not None:
-            params["endTimestamp"] = self._format_timestamp(end_timestamp)
-        if duration is not None:
-            params["duration"] = duration
+        """Return host and site records for an interval without pagination.
 
-        path = f"/v1/isp-metrics/{metric_type}"
-        data = await self._get(path, params=params or None)
+        The API accepts ``24h`` with ``5m``, or ``7d`` or ``30d`` with ``1h``.
+        Use either a duration or timezone-aware timestamps.
+        """
+        path = self._isp_metrics_path(metric_type)
+        params = self._isp_metrics_params(begin_timestamp, end_timestamp, duration)
+        data = await self._get(path, params=params)
         return self._extract_data(data, path)
 
     async def query_isp_metrics(
@@ -185,9 +184,9 @@ class UniFiSiteManagerClient(BaseUniFiClient):
         metric_type: Literal["5m", "1h"],
         sites: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        """Query ISP metrics for specific sites and time ranges."""
-        path = f"/v1/isp-metrics/{metric_type}/query"
-        data = await self._post(path, json_data={"sites": sites})
+        """Query ISP metrics for specified sites and time ranges without pagination."""
+        path = self._isp_metrics_query_path(metric_type)
+        data = await self._post(path, json_data=self._isp_metrics_query_body(sites))
         return self._extract_object(data, path)
 
     async def list_sd_wan_configs(self) -> list[dict[str, Any]]:
@@ -207,6 +206,28 @@ class UniFiSiteManagerClient(BaseUniFiClient):
         data = await self._get(path)
         return self._extract_object(data, path)
 
+    def _host_path(self, host_id: str) -> str:
+        """Return the path for a single Site Manager host."""
+        return f"{self._HOSTS_PATH}/{host_id}"
+
+    @staticmethod
+    def _page_params(
+        *, page_size: int | None = None, next_token: str | None = None
+    ) -> dict[str, int | str]:
+        """Build query parameters for a Site Manager page."""
+        params: dict[str, int | str] = {}
+        if page_size is not None:
+            params["pageSize"] = page_size
+        if next_token:
+            params["nextToken"] = next_token
+        return params
+
+    async def _get_list_page(
+        self, path: str, params: dict[str, Any]
+    ) -> dict[str, Any] | list[Any] | None:
+        """Fetch a page and retain the response envelope."""
+        return await self._get(path, params=params or None)
+
     async def _list_paginated(
         self,
         path: str,
@@ -219,11 +240,8 @@ class UniFiSiteManagerClient(BaseUniFiClient):
         seen_tokens: set[str] = set()
 
         for _ in range(_MAX_PAGES):
-            page_params = dict(params or {})
-            if next_token is not None:
-                page_params["nextToken"] = next_token
-
-            response = await self._get(path, params=page_params or None)
+            page_params = dict(params or {}) | self._page_params(next_token=next_token)
+            response = await self._get_list_page(path, page_params)
             page = self._extract_data(response, path)
             if len(items) + len(page) > _MAX_ITEMS:
                 self._raise_response_error(f"{path} exceeded the item limit")
@@ -243,6 +261,45 @@ class UniFiSiteManagerClient(BaseUniFiClient):
         raise UniFiResponseError(msg, status_code=200)
 
     @staticmethod
+    def _isp_metrics_path(interval: str) -> str:
+        return f"/v1/isp-metrics/{interval}"
+
+    def _isp_metrics_query_path(self, interval: str) -> str:
+        return f"{self._isp_metrics_path(interval)}/query"
+
+    def _isp_metrics_params(
+        self,
+        begin_timestamp: datetime | None = None,
+        end_timestamp: datetime | None = None,
+        duration: str | None = None,
+        *,
+        host_id: str | None = None,
+    ) -> dict[str, str] | None:
+        """Build ISP metrics query parameters and format timestamps."""
+        params = self._isp_metrics_timestamps(begin_timestamp, end_timestamp)
+        if host_id:
+            params["hostId"] = host_id
+        if duration is not None:
+            params["duration"] = duration
+        return params or None
+
+    def _isp_metrics_timestamps(
+        self, begin_timestamp: datetime | None, end_timestamp: datetime | None
+    ) -> dict[str, str]:
+        return {
+            name: self._format_timestamp(timestamp)
+            for name, timestamp in (
+                ("beginTimestamp", begin_timestamp),
+                ("endTimestamp", end_timestamp),
+            )
+            if timestamp is not None
+        }
+
+    @staticmethod
+    def _isp_metrics_query_body(sites: list[dict[str, Any]]) -> dict[str, Any]:
+        return {"sites": sites}
+
+    @staticmethod
     def _format_timestamp(timestamp: datetime) -> str:
         """Format an aware datetime as an RFC3339 timestamp."""
         if timestamp.tzinfo is None or timestamp.utcoffset() is None:
@@ -260,7 +317,7 @@ class UniFiSiteManagerClient(BaseUniFiClient):
         if not isinstance(response, dict):
             self._raise_response_error(f"{path} returned a malformed response envelope")
 
-        data = response.get("data")
+        data = self._response_data(response)
         if not isinstance(data, list) or not all(isinstance(item, dict) for item in data):
             self._raise_response_error(f"{path} returned malformed data")
 
@@ -275,11 +332,18 @@ class UniFiSiteManagerClient(BaseUniFiClient):
         if not isinstance(response, dict):
             self._raise_response_error(f"{path} returned a malformed response envelope")
 
-        data = response.get("data")
+        data = self._response_data(response)
         if not isinstance(data, dict):
             self._raise_response_error(f"{path} returned malformed data")
 
         return data
+
+    @staticmethod
+    def _response_data(response: object, *, fallback: object = None) -> object:
+        """Select the data value or return the adapter's fallback."""
+        if isinstance(response, dict):
+            return response.get("data", fallback)
+        return fallback
 
     def _extract_next_token(
         self,

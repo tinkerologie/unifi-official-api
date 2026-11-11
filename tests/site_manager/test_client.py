@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta, timezone
+from typing import Any
+
 import pytest
 from aioresponses import aioresponses
+from pydantic import ValidationError
+from yarl import URL
 
 from unifi_official_api import ApiKeyAuth
-from unifi_official_api.exceptions import UniFiNotFoundError
+from unifi_official_api.exceptions import (
+    UniFiNotFoundError,
+    UniFiResponseError,
+    UniFiValidationError,
+)
 from unifi_official_api.site_manager import (
     DeviceListResponse,
     Host,
@@ -14,6 +23,7 @@ from unifi_official_api.site_manager import (
     ISPMetric,
     ISPMetricQuery,
     ISPMetricQueryResult,
+    ISPMetricQuerySite,
     SDWanConfig,
     SDWanConfigDetail,
     SDWanStatus,
@@ -37,7 +47,7 @@ class TestUniFiSiteManagerClient:
     ) -> None:
         """Test hosts endpoints."""
         mock_aioresponse.get(
-            "https://api.ui.com/v1/hosts?limit=25&nextToken=prev-tok",
+            "https://api.ui.com/v1/hosts?pageSize=25&nextToken=prev-tok",
             payload={
                 "data": [
                     {
@@ -62,7 +72,7 @@ class TestUniFiSiteManagerClient:
                 }
             },
         )
-        mock_aioresponse.get("https://api.ui.com/v1/hosts?limit=10", payload=None)
+        mock_aioresponse.get("https://api.ui.com/v1/hosts?pageSize=10", payload=None)
         mock_aioresponse.get("https://api.ui.com/v1/hosts/bad-id", payload={})
 
         async with client:
@@ -81,6 +91,51 @@ class TestUniFiSiteManagerClient:
 
             with pytest.raises(UniFiNotFoundError):
                 await client.hosts.get("bad-id")
+
+    async def test_typed_host_pages_are_followed_by_the_caller(
+        self, client: UniFiSiteManagerClient, mock_aioresponse: aioresponses
+    ) -> None:
+        mock_aioresponse.get(
+            "https://api.ui.com/v1/hosts?pageSize=1",
+            payload={"data": [{"id": "host-1"}], "nextToken": "second"},
+        )
+        mock_aioresponse.get(
+            "https://api.ui.com/v1/hosts?pageSize=1&nextToken=second",
+            payload={"data": [{"id": "host-2", "isBlocked": False}], "nextToken": ""},
+        )
+
+        async with client:
+            first = await client.hosts.get_all(limit=1, next_token="")
+            assert len(mock_aioresponse.requests) == 1
+            second = await client.hosts.get_all(limit=1, next_token=first.next_token)
+
+        assert [host.id for host in first.data + second.data] == ["host-1", "host-2"]
+        assert first.data[0].is_blocked is False
+        assert "is_blocked" not in first.data[0].model_fields_set
+        assert "is_blocked" in second.data[0].model_fields_set
+        assert second.next_token == ""
+
+    @pytest.mark.parametrize("payload", [{}, {"data": []}, []])
+    async def test_typed_host_empty_pages(
+        self, client: UniFiSiteManagerClient, mock_aioresponse: aioresponses, payload: object
+    ) -> None:
+        mock_aioresponse.get("https://api.ui.com/v1/hosts?pageSize=25", payload=payload)
+
+        async with client:
+            assert await client.hosts.get_all() == HostListResponse()
+
+    @pytest.mark.parametrize("payload", [{"data": None}, {"data": [{"type": "private-value"}]}])
+    async def test_typed_host_rejects_invalid_enveloped_data(
+        self, client: UniFiSiteManagerClient, mock_aioresponse: aioresponses, payload: object
+    ) -> None:
+        mock_aioresponse.get("https://api.ui.com/v1/hosts?pageSize=25", payload=payload)
+
+        async with client:
+            with pytest.raises(UniFiResponseError) as error:
+                await client.hosts.get_all()
+        assert error.value.status_code == 200
+        assert "private-value" not in error.value.message
+        assert error.value.__cause__ is None
 
     async def test_sites_endpoints(
         self, client: UniFiSiteManagerClient, mock_aioresponse: aioresponses
@@ -184,6 +239,167 @@ class TestUniFiSiteManagerClient:
 
             empty_query = await client.isp_metrics.query("throughput", {})
             assert empty_query.metrics == []
+
+    async def test_typed_isp_metrics_keep_sites_and_samples_distinct(
+        self, client: UniFiSiteManagerClient, mock_aioresponse: aioresponses
+    ) -> None:
+        start = datetime(2024, 6, 30, 13, 35, tzinfo=UTC)
+        end = datetime(2024, 6, 30, 16, 35, tzinfo=timezone(timedelta(hours=1)))
+        mock_aioresponse.get(
+            URL("https://api.ui.com/v1/isp-metrics/5m").with_query(
+                beginTimestamp="2024-06-30T13:35:00Z", endTimestamp="2024-06-30T16:35:00+01:00"
+            ),
+            payload={
+                "data": [
+                    {
+                        "metricType": "5m",
+                        "hostId": "host-1:console-1",
+                        "siteId": "site-1",
+                        "periods": [
+                            {
+                                "metricTime": "2024-06-30T13:35:00Z",
+                                "version": "1",
+                                "data": {
+                                    "wan": {
+                                        "avgLatency": 1.5,
+                                        "maxLatency": 2,
+                                        "packetLoss": 0,
+                                        "downtime": 0,
+                                        "uptime": 100,
+                                        "download_kbps": 0,
+                                        "ispName": "ISP",
+                                        "ispAsn": "12578",
+                                    }
+                                },
+                            },
+                            {"data": {}},
+                            None,
+                        ],
+                    },
+                    {"siteId": "site-2", "periods": []},
+                    {"siteId": "site-3"},
+                ]
+            },
+        )
+
+        async with client:
+            measured, empty, absent = await client.isp_metrics.get_metrics(
+                "5m", begin_timestamp=start, end_timestamp=end
+            )
+
+        assert (measured.metric_type, measured.host_id, measured.site_id) == (
+            "5m",
+            "host-1:console-1",
+            "site-1",
+        )
+        assert measured.periods is not None
+        first, second, null = measured.periods
+        assert first is not None and first.data is not None and first.data.wan is not None
+        assert (first.metric_time, first.version) == (start, "1")
+        wan = first.data.wan
+        assert (wan.avg_latency, wan.max_latency, wan.packet_loss) == (1.5, 2, 0)
+        assert (wan.downtime, wan.uptime, wan.download_kbps, wan.upload_kbps) == (0, 100, 0, None)
+        assert (wan.isp_name, wan.isp_asn) == ("ISP", "12578")
+        assert second is not None and second.data is not None and second.data.wan is None
+        assert null is None
+        assert empty.periods == []
+        assert absent.periods is None
+
+    async def test_typed_isp_metrics_accept_a_bare_list(
+        self, client: UniFiSiteManagerClient, mock_aioresponse: aioresponses
+    ) -> None:
+        mock_aioresponse.get(
+            "https://api.ui.com/v1/isp-metrics/1h?duration=7d",
+            payload=[{"siteId": "site-1"}],
+        )
+        async with client:
+            records = await client.isp_metrics.get_metrics("1h", duration="7d")
+
+        assert [record.site_id for record in records] == ["site-1"]
+
+    async def test_typed_isp_metrics_reject_naive_timestamps_before_request(
+        self, client: UniFiSiteManagerClient, mock_aioresponse: aioresponses
+    ) -> None:
+        with pytest.raises(ValueError, match="Timestamps must include a UTC offset"):
+            await client.isp_metrics.get_metrics("5m", begin_timestamp=datetime(2024, 6, 30))
+
+        assert mock_aioresponse.requests == {}
+
+    async def test_typed_isp_site_query_sends_sites_and_parses_partial_success(
+        self, client: UniFiSiteManagerClient, mock_aioresponse: aioresponses
+    ) -> None:
+        url = URL("https://api.ui.com/v1/isp-metrics/1h/query")
+        mock_aioresponse.post(
+            url,
+            payload={
+                "data": {
+                    "metrics": [{"siteId": "site-1"}],
+                    "status": "partialSuccess",
+                    "message": "Some sites were inaccessible",
+                }
+            },
+        )
+        query = ISPMetricQuery(
+            sites=[
+                ISPMetricQuerySite(
+                    host_id="host-1:console-1",
+                    site_id="site-1",
+                    begin_timestamp=datetime(2024, 6, 30, 13, 35, tzinfo=UTC),
+                ),
+                ISPMetricQuerySite(host_id="host-2", site_id="site-2"),
+            ]
+        )
+
+        async with client:
+            result = await client.isp_metrics.query("1h", query)
+
+        assert mock_aioresponse.requests["POST", url][0].kwargs["json"] == {
+            "sites": [
+                {
+                    "hostId": "host-1:console-1",
+                    "siteId": "site-1",
+                    "beginTimestamp": "2024-06-30T13:35:00Z",
+                },
+                {"hostId": "host-2", "siteId": "site-2"},
+            ]
+        }
+        assert result.status == "partialSuccess"
+        assert result.message == "Some sites were inaccessible"
+        assert [record.site_id for record in result.metrics] == ["site-1"]
+
+    @pytest.mark.parametrize(
+        "legacy", [{"hostIds": []}, {"timeRangeStart": 0}, {"timeRangeEnd": 0}]
+    )
+    async def test_typed_isp_query_rejects_mixed_legacy_and_site_fields(
+        self, client: UniFiSiteManagerClient, mock_aioresponse: aioresponses, legacy: dict[str, Any]
+    ) -> None:
+        with pytest.raises(UniFiValidationError, match="cannot combine sites with legacy fields"):
+            await client.isp_metrics.query("5m", ISPMetricQuery(sites=[], **legacy))
+
+        assert mock_aioresponse.requests == {}
+
+    def test_typed_isp_query_site_requires_timezone(self) -> None:
+        with pytest.raises(ValidationError, match="timezone"):
+            ISPMetricQuerySite(
+                host_id="host-1", site_id="site-1", end_timestamp=datetime(2024, 6, 30)
+            )
+
+    async def test_typed_isp_legacy_query_keeps_its_body_and_bare_response(
+        self, client: UniFiSiteManagerClient, mock_aioresponse: aioresponses
+    ) -> None:
+        url = URL("https://api.ui.com/v1/isp-metrics/5m/query")
+        mock_aioresponse.post(url, payload={"metrics": [{"value": 0}]})
+        query = ISPMetricQuery(host_ids=["host-1"], time_range_start=0, time_range_end="now")
+
+        async with client:
+            result = await client.isp_metrics.query("5m", query)
+
+        assert mock_aioresponse.requests["POST", url][0].kwargs["json"] == {
+            "hostIds": ["host-1"],
+            "timeRangeStart": 0,
+            "timeRangeEnd": "now",
+        }
+        assert result.metrics[0].value == 0
 
     async def test_sd_wan_endpoints(
         self, client: UniFiSiteManagerClient, mock_aioresponse: aioresponses

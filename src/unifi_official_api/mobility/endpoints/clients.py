@@ -25,7 +25,7 @@ class ClientsEndpoint:
 
     async def get_all(self, workspace_id: str, device_id: str) -> list[MobilityDeviceClient]:
         """
-        List clients associated with a mobility device.
+        Return one page of clients associated with a mobility device.
 
         Args:
             workspace_id: Workspace UUID.
@@ -38,7 +38,7 @@ class ClientsEndpoint:
             UniFiResponseError: If an item in the response fails validation.
         """
         response = await self._client._get(
-            f"/v1/mobility/workspaces/{workspace_id}/devices/{device_id}/clients"
+            self._client._device_clients_path(workspace_id, device_id)
         )
         if response is None:
             return []

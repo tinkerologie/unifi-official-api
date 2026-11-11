@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from ...exceptions import UniFiValidationError
 from ...validation import parse_record, parse_records
 from ..models.isp_metric import ISPMetric, ISPMetricQuery, ISPMetricQueryResult
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from ..client import UniFiSiteManagerClient
 
 
@@ -29,32 +32,32 @@ class ISPMetricsEndpoint:
         *,
         host_id: str | None = None,
         duration: str | None = None,
+        begin_timestamp: datetime | None = None,
+        end_timestamp: datetime | None = None,
     ) -> list[ISPMetric]:
         """
-        Get ISP metrics for a specific type.
+        Return ISP metrics by host and site without pagination.
 
         Args:
-            metric_type: Metric type (e.g. latency, throughput, uptime).
-            host_id: Optional host filter.
-            duration: Optional duration string (e.g. 24h, 7d).
+            metric_type: Aggregation interval (``5m`` or ``1h``).
+            host_id: Legacy filter. The published API has no ``hostId`` parameter.
+            duration: ``24h`` for ``5m``, or ``7d`` or ``30d`` for ``1h``.
+                The API accepts a duration or timestamps.
+            begin_timestamp: Optional timezone-aware start time.
+            end_timestamp: Optional timezone-aware end time.
 
         Returns:
-            List of ISPMetric data points.
+            List of host and site records with timestamped periods.
 
         Raises:
             UniFiResponseError: If an item in the response fails validation.
         """
-        params: dict[str, Any] = {}
-        if host_id:
-            params["hostId"] = host_id
-        if duration:
-            params["duration"] = duration
-        response = await self._client._get(
-            f"/v1/isp-metrics/{metric_type}", params=params if params else None
+        path = self._client._isp_metrics_path(metric_type)
+        params = self._client._isp_metrics_params(
+            begin_timestamp, end_timestamp, duration or None, host_id=host_id
         )
-        if response is None:
-            return []
-        data = response.get("data", response) if isinstance(response, dict) else response
+        response = await self._client._get(path, params=params)
+        data = self._client._response_data(response, fallback=response)
         if isinstance(data, list):
             return parse_records(ISPMetric, data, "ISP metric")
         return []
@@ -65,28 +68,43 @@ class ISPMetricsEndpoint:
         query_data: ISPMetricQuery | dict[str, Any],
     ) -> ISPMetricQueryResult:
         """
-        Query historical ISP metrics across multiple hosts and time intervals.
+        Query historical ISP metrics for specific sites without pagination.
 
         Args:
-            metric_type: Metric type (e.g. latency, packet-loss).
-            query_data: Query parameters.
+            metric_type: Aggregation interval (``5m`` or ``1h``).
+            query_data: A query with ``sites`` or a dictionary payload.
+                Legacy typed queries keep their original serialization.
 
         Returns:
             ISPMetricQueryResult containing matching metrics.
 
         Raises:
+            UniFiValidationError: If a typed query combines ``sites`` and legacy fields.
             UniFiResponseError: If the query result in the response fails validation.
         """
-        payload = (
-            query_data.model_dump(by_alias=True, exclude_none=True)
-            if isinstance(query_data, ISPMetricQuery)
-            else query_data
-        )
-        response = await self._client._post(
-            f"/v1/isp-metrics/{metric_type}/query", json_data=payload
-        )
-        if isinstance(response, dict):
-            data = response.get("data", response)
-            if isinstance(data, dict):
-                return parse_record(ISPMetricQueryResult, data, "ISP metric query")
+        path = self._client._isp_metrics_query_path(metric_type)
+        response = await self._client._post(path, json_data=self._query_payload(query_data))
+        data = self._client._response_data(response, fallback=response)
+        if isinstance(data, dict):
+            return parse_record(ISPMetricQueryResult, data, "ISP metric query")
         return ISPMetricQueryResult()
+
+    def _query_payload(self, query_data: ISPMetricQuery | dict[str, Any]) -> dict[str, Any]:
+        if isinstance(query_data, dict):
+            return query_data
+        if query_data.sites is None:
+            return query_data.model_dump(by_alias=True, exclude_none=True)
+
+        legacy_fields = {"host_ids", "time_range_start", "time_range_end"}
+        if query_data.host_ids or legacy_fields & query_data.model_fields_set:
+            msg = "ISP metrics queries cannot combine sites with legacy fields"
+            raise UniFiValidationError(msg)
+
+        sites = [
+            site.model_dump(
+                by_alias=True, exclude_none=True, exclude={"begin_timestamp", "end_timestamp"}
+            )
+            | self._client._isp_metrics_timestamps(site.begin_timestamp, site.end_timestamp)
+            for site in query_data.sites
+        ]
+        return self._client._isp_metrics_query_body(sites)

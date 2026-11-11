@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+
 import pytest
 from aioresponses import aioresponses
 
 from unifi_official_api import ApiKeyAuth
-from unifi_official_api.exceptions import UniFiNotFoundError
+from unifi_official_api.exceptions import (
+    UniFiNotFoundError,
+    UniFiResponseError,
+    UniFiValidationError,
+)
 from unifi_official_api.mobility import (
     AdminSummary,
     MobilityDeviceClient,
@@ -217,3 +223,106 @@ class TestUniFiMobilityClient:
         mock_aioresponse.get("https://api.ui.com/v1/mobility/workspaces", payload={"data": []})
         async with client:
             assert await client.validate_connection() is True
+
+    async def test_typed_device_pages_are_followed_by_the_caller(
+        self, client: UniFiMobilityClient, mock_aioresponse: aioresponses
+    ) -> None:
+        path = "https://api.ui.com/v1/mobility/workspaces/ws-1/devices"
+        device = {"name": "Router", "firmware_version": "1.0", "mac_address": "00:00:00:00:00:00"}
+        mock_aioresponse.get(f"{path}?limit=1&offset=0", payload={"data": [{**device, "id": "a"}]})
+        mock_aioresponse.get(f"{path}?limit=1&offset=1", payload={"data": [{**device, "id": "b"}]})
+        mock_aioresponse.get(f"{path}?offset=2", payload={"data": []})
+
+        async with client:
+            first = await client.devices.get_all("ws-1", limit=1, offset=0)
+            assert len(mock_aioresponse.requests) == 1
+            second = await client.devices.get_all("ws-1", limit=1, offset=1)
+            assert await client.devices.get_all("ws-1", offset=2) == []
+
+        assert [item.id for item in first + second] == ["a", "b"]
+        assert first[0].state == "CONNECTED"
+        assert first[0].model == "UMR"
+        assert {"state", "model"}.isdisjoint(first[0].model_fields_set)
+
+    async def test_typed_workspaces_accept_a_bare_list_and_preserve_explicit_false(
+        self, client: UniFiMobilityClient, mock_aioresponse: aioresponses
+    ) -> None:
+        mock_aioresponse.get(
+            "https://api.ui.com/v1/mobility/workspaces",
+            payload=[{"workspace_id": "ws-1", "workspace_name": "Fleet", "is_owner": False}],
+        )
+        async with client:
+            (workspace,) = await client.workspaces.get_all()
+
+        assert workspace.is_owner is False
+        assert workspace.status == "ACTIVE"
+        assert "status" not in workspace.model_fields_set
+
+    @pytest.mark.parametrize("payload", [{}, {"data": []}, {"data": None}, {"data": {}}])
+    async def test_typed_device_list_has_empty_fallback(
+        self, client: UniFiMobilityClient, mock_aioresponse: aioresponses, payload: object
+    ) -> None:
+        mock_aioresponse.get(
+            "https://api.ui.com/v1/mobility/workspaces/ws-1/devices", payload=payload
+        )
+        async with client:
+            assert await client.devices.get_all("ws-1") == []
+
+    async def test_typed_device_rejects_a_malformed_record(
+        self, client: UniFiMobilityClient, mock_aioresponse: aioresponses
+    ) -> None:
+        mock_aioresponse.get(
+            "https://api.ui.com/v1/mobility/workspaces/ws-1/devices",
+            payload={"data": [{"name": "private-value"}]},
+        )
+        async with client:
+            with pytest.raises(UniFiResponseError) as error:
+                await client.devices.get_all("ws-1")
+
+        assert error.value.status_code == 200
+        assert "private-value" not in error.value.message
+        assert error.value.__cause__ is None
+
+    @pytest.mark.parametrize(
+        "read",
+        [
+            lambda c: c.workspaces.get_admins("../admins"),
+            lambda c: c.devices.get_all("../devices"),
+            lambda c: c.devices.get("../devices", "dev-1"),
+            lambda c: c.devices.get("ws-1", "dev/1"),
+            lambda c: c.clients.get_all("ws-1", "dev%2F1"),
+            lambda c: c.clients.get_all("../workspaces", "dev-1"),
+        ],
+    )
+    async def test_typed_reads_reject_unsafe_ids_before_request(
+        self,
+        client: UniFiMobilityClient,
+        mock_aioresponse: aioresponses,
+        read: Callable[[UniFiMobilityClient], Awaitable[object]],
+    ) -> None:
+        with pytest.raises(UniFiValidationError, match="Invalid Mobility identifier"):
+            await read(client)
+
+        assert mock_aioresponse.requests == {}
+
+    async def test_typed_device_detail_uses_first_list_record(
+        self, client: UniFiMobilityClient, mock_aioresponse: aioresponses
+    ) -> None:
+        device = {
+            "id": "dev-1",
+            "name": "Router",
+            "firmware_version": "1.0",
+            "mac_address": "00:00:00:00:00:00",
+            "client_count": 0,
+            "wifi_enabled": False,
+        }
+        mock_aioresponse.get(
+            "https://api.ui.com/v1/mobility/workspaces/ws-1/devices/dev-1",
+            payload={"data": [device, {"id": "dev-2"}]},
+        )
+        async with client:
+            detail = await client.devices.get("ws-1", "dev-1")
+
+        assert detail.id == "dev-1"
+        assert detail.client_count == 0
+        assert detail.wifi_enabled is False

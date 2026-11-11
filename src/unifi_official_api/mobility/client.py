@@ -29,7 +29,6 @@ from .endpoints import (
 if TYPE_CHECKING:
     import aiohttp
 
-_WORKSPACES_PATH = "/v1/mobility/workspaces"
 _PAGE_SIZE = 200
 _MAX_ITEMS = 5_000
 _MAX_PAGES = _MAX_ITEMS // _PAGE_SIZE
@@ -48,6 +47,8 @@ class UniFiMobilityClient(BaseUniFiClient):
     Provides cloud management of mobility router gateways (UMR devices),
     workspaces, connected clients, and remote network/wireless configurations.
     """
+
+    _WORKSPACES_PATH = "/v1/mobility/workspaces"
 
     RATE_LIMIT: ClassVar[tuple[int, float] | None] = (
         MOBILITY_RATE_LIMIT_REQUESTS,
@@ -121,13 +122,13 @@ class UniFiMobilityClient(BaseUniFiClient):
 
     async def list_workspaces(self) -> list[dict[str, Any]]:
         """Return every Mobility workspace the API key can access."""
-        response = await self._get(_WORKSPACES_PATH)
-        return self._extract_list(response, _WORKSPACES_PATH)
+        response = await self._get_list_page(self._WORKSPACES_PATH)
+        return self._extract_list(response, self._WORKSPACES_PATH)
 
     async def list_workspace_admins(self, workspace_id: str) -> list[dict[str, Any]]:
         """Return every admin for a workspace with their permission levels."""
-        path = f"{_WORKSPACES_PATH}/{self._safe_id(workspace_id)}/admins"
-        response = await self._get(path)
+        path = self._workspace_admins_path(workspace_id)
+        response = await self._get_list_page(path)
         return self._extract_list(response, path)
 
     async def _list_paginated(self, path: str) -> list[dict[str, Any]]:
@@ -135,7 +136,7 @@ class UniFiMobilityClient(BaseUniFiClient):
         items: list[dict[str, Any]] = []
 
         for _ in range(_MAX_PAGES):
-            response = await self._get(path, params={"limit": _PAGE_SIZE, "offset": len(items)})
+            response = await self._get_list_page(path, limit=_PAGE_SIZE, offset=len(items))
             page = self._extract_list(response, path)
             if len(items) + len(page) > _MAX_ITEMS:
                 self._raise_response_error(f"{path} exceeded the item limit")
@@ -151,23 +152,16 @@ class UniFiMobilityClient(BaseUniFiClient):
         return self._raise_response_error(f"{path} exceeded the page limit")
 
     async def list_devices(self, workspace_id: str) -> list[dict[str, Any]]:
-        """Return the summary of every device in a workspace."""
-        path = f"{_WORKSPACES_PATH}/{self._safe_id(workspace_id)}/devices"
-        return await self._list_paginated(path)
+        """Return device dictionaries from all pages in a workspace."""
+        return await self._list_paginated(self._devices_path(workspace_id))
 
     async def list_device_clients(self, workspace_id: str, device_id: str) -> list[dict[str, Any]]:
-        """Return every client associated with a device."""
-        path = (
-            f"{_WORKSPACES_PATH}/{self._safe_id(workspace_id)}"
-            f"/devices/{self._safe_id(device_id)}/clients"
-        )
-        return await self._list_paginated(path)
+        """Return connected client dictionaries from all pages for a device."""
+        return await self._list_paginated(self._device_clients_path(workspace_id, device_id))
 
     async def get_device(self, workspace_id: str, device_id: str) -> dict[str, Any]:
         """Return the detail record of one device."""
-        path = (
-            f"{_WORKSPACES_PATH}/{self._safe_id(workspace_id)}/devices/{self._safe_id(device_id)}"
-        )
+        path = self._device_path(workspace_id, device_id)
         response = await self._get(path)
         if not isinstance(response, dict) or not isinstance(data := response.get("data"), dict):
             self._raise_response_error(f"{path} returned a malformed device")
@@ -185,9 +179,7 @@ class UniFiMobilityClient(BaseUniFiClient):
             msg = "Device name is required"
             raise UniFiValidationError(msg)
 
-        path = (
-            f"{_WORKSPACES_PATH}/{self._safe_id(workspace_id)}/devices/{self._safe_id(device_id)}"
-        )
+        path = self._device_path(workspace_id, device_id)
         await self._put(path, json_data={"name": name})
 
     async def update_device_network(
@@ -214,10 +206,7 @@ class UniFiMobilityClient(BaseUniFiClient):
         if dhcp_lease_time is not None:
             body["dhcp_lease_time"] = dhcp_lease_time
 
-        path = (
-            f"{_WORKSPACES_PATH}/{self._safe_id(workspace_id)}"
-            f"/devices/{self._safe_id(device_id)}/network"
-        )
+        path = f"{self._device_path(workspace_id, device_id)}/network"
         await self._put(path, json_data=body)
 
     async def update_device_wireless(
@@ -233,11 +222,31 @@ class UniFiMobilityClient(BaseUniFiClient):
             msg = "Both ssid and password are required"
             raise UniFiValidationError(msg)
 
-        path = (
-            f"{_WORKSPACES_PATH}/{self._safe_id(workspace_id)}"
-            f"/devices/{self._safe_id(device_id)}/wireless"
-        )
+        path = f"{self._device_path(workspace_id, device_id)}/wireless"
         await self._put(path, json_data={"ssid": ssid, "password": password})
+
+    def _workspace_admins_path(self, workspace_id: str) -> str:
+        return f"{self._WORKSPACES_PATH}/{self._safe_id(workspace_id)}/admins"
+
+    def _devices_path(self, workspace_id: str) -> str:
+        return f"{self._WORKSPACES_PATH}/{self._safe_id(workspace_id)}/devices"
+
+    def _device_path(self, workspace_id: str, device_id: str) -> str:
+        return f"{self._devices_path(workspace_id)}/{self._safe_id(device_id)}"
+
+    def _device_clients_path(self, workspace_id: str, device_id: str) -> str:
+        return f"{self._device_path(workspace_id, device_id)}/clients"
+
+    async def _get_list_page(
+        self, path: str, *, limit: int | None = None, offset: int | None = None
+    ) -> dict[str, Any] | list[Any] | None:
+        """Fetch one collection response with the supplied paging parameters."""
+        params = {
+            key: value for key, value in (("limit", limit), ("offset", offset)) if value is not None
+        }
+        if params:
+            return await self._get(path, params=params)
+        return await self._get(path)
 
     @staticmethod
     def _safe_id(identifier: Any) -> str:
@@ -256,11 +265,21 @@ class UniFiMobilityClient(BaseUniFiClient):
         if not isinstance(response, dict):
             self._raise_response_error(f"{path} returned a malformed response envelope")
 
-        data = response.get("data")
-        if not isinstance(data, list) or not all(isinstance(item, dict) for item in data):
+        data = self._list_data(response)
+        if data is None or not all(isinstance(item, dict) for item in data):
             self._raise_response_error(f"{path} returned malformed data")
 
         return data
+
+    @staticmethod
+    def _list_data(response: object, *, allow_bare_list: bool = False) -> list[Any] | None:
+        """Select the records from an envelope or an accepted bare list."""
+        if isinstance(response, dict):
+            data = response.get("data")
+            return data if isinstance(data, list) else None
+        if allow_bare_list and isinstance(response, list):
+            return response
+        return None
 
     @staticmethod
     def _raise_response_error(message: str) -> NoReturn:

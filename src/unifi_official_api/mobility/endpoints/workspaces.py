@@ -33,13 +33,9 @@ class WorkspacesEndpoint:
         Raises:
             UniFiResponseError: If an item in the response fails validation.
         """
-        response = await self._client._get("/v1/mobility/workspaces")
-        if response is None:
-            return []
-        data = response.get("data", response) if isinstance(response, dict) else response
-        if isinstance(data, list):
-            return parse_records(WorkspaceSummary, data, "Mobility workspace")
-        return []
+        response = await self._client._get_list_page(self._client._WORKSPACES_PATH)
+        data = self._client._list_data(response, allow_bare_list=True)
+        return parse_records(WorkspaceSummary, data or [], "Mobility workspace")
 
     async def get_admins(self, workspace_id: str) -> list[AdminSummary]:
         """
@@ -54,10 +50,7 @@ class WorkspacesEndpoint:
         Raises:
             UniFiResponseError: If an item in the response fails validation.
         """
-        response = await self._client._get(f"/v1/mobility/workspaces/{workspace_id}/admins")
-        if response is None:
-            return []
-        data = response.get("data", response) if isinstance(response, dict) else response
-        if isinstance(data, list):
-            return parse_records(AdminSummary, data, "Mobility workspace admin")
-        return []
+        path = self._client._workspace_admins_path(workspace_id)
+        response = await self._client._get_list_page(path)
+        data = self._client._list_data(response, allow_bare_list=True)
+        return parse_records(AdminSummary, data or [], "Mobility workspace admin")
