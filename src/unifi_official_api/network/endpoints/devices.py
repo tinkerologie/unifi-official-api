@@ -63,6 +63,8 @@ def _seed_outlet_overrides(device_dict: dict[str, Any]) -> list[dict[str, Any]]:
 
 DEVICE_ACTIONS: Final = frozenset({"RESTART"})
 PORT_ACTIONS: Final = frozenset({"POWER_CYCLE"})
+# ``"default"`` hands the LED back to the site-wide LED setting.
+LED_OVERRIDE_MODES: Final = frozenset({"on", "off", "default"})
 
 
 class DevicesEndpoint:
@@ -613,4 +615,37 @@ class DevicesEndpoint:
 
         put_path = self._client.build_legacy_api_path(site_name, f"/rest/device/{target_id}")
         await self._client._put(put_path, json_data={"outlet_overrides": outlet_overrides})
+        return True
+
+    async def set_led_override(self, site_name: str, device_id: str, mode: str) -> bool:
+        """
+        Set the status LED override on a device.
+
+        Sends ``PUT`` to the legacy ``rest/device/{device_id}`` route with
+        ``{"led_override": mode}`` and no other field. The controller applies
+        the fields it receives, so a one-field body leaves every other device
+        setting as it is.
+
+        Args:
+            site_name: The UniFi site name, for example ``default``.
+            device_id: The legacy device ``_id`` from ``/stat/device``. The
+                Integration API device ID is not valid on this route.
+            mode: ``"on"``, ``"off"``, or ``"default"``. ``"default"`` makes
+                the LED follow the site LED setting.
+
+        Returns:
+            True when the request completes. The controller response is not
+            examined, so True does not confirm the LED state.
+
+        Raises:
+            ValueError: If ``mode`` is not a supported value. No request is sent.
+            UniFiError: Any transport error from the request, such as
+                ``UniFiNotFoundError`` for an unknown ``device_id``, propagates.
+
+        """
+        if mode not in LED_OVERRIDE_MODES:
+            msg = f"LED override mode must be one of: {', '.join(sorted(LED_OVERRIDE_MODES))}"
+            raise ValueError(msg)
+        put_path = self._client.build_legacy_api_path(site_name, f"/rest/device/{device_id}")
+        await self._client._put(put_path, json_data={"led_override": mode})
         return True
