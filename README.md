@@ -93,7 +93,20 @@ async def main():
         for cam in cameras:
             print(f"Camera: {cam.display_name}")
 
+        nvr = await client.nvr.get()
+        if nvr.use_external_alarm_manager:
+            profiles = await client.external_arm_profiles.get_all()
+            print(f"External arm profiles: {len(profiles)}")
+
 asyncio.run(main())
+```
+
+To stop a siren that is playing on a speaker, call `stop_siren` with the ID of
+that speaker. This silences an active alarm without a confirmation, so call it
+only from an explicit user action:
+
+```python
+await client.speakers.stop_siren("speaker-id")
 ```
 
 ### 3. UniFi InnerSpace Client (Floor Plans, AP/Switch Placements)
@@ -179,7 +192,7 @@ asyncio.run(main())
 | Client / API | Endpoints / Resources Covered |
 | -------------- | ------------------------------- |
 | **UniFiNetworkClient** | Sites, Devices, Clients, Networks, WiFi/SSIDs, Firewall & Zones, Vouchers, ACL Rules, Switching (LAGs, MC-LAG domains, Switch Stacks), Traffic Matching, Resources (WAN, VPN, RADIUS) |
-| **UniFiProtectClient** | Cameras (streams, snapshots, PTZ, talkback), sirens, key fobs, relays, speakers, bridges, link stations, alarm hubs, Alarm Manager webhooks, and arm profiles.<br>Local and Identity users, POS transactions, sensors, lights, chimes, read-only NVR, liveviews, viewers, and device and event WebSockets. |
+| **UniFiProtectClient** | Cameras (streams, snapshots, PTZ, talkback), sirens, key fobs, relays, speakers (test sound, stop siren), bridges, link stations, alarm hubs, Alarm Manager webhooks, arm profiles, and external alarm manager arm profiles.<br>Local and Identity users, POS transactions, sensors, lights, chimes, read-only NVR, liveviews, viewers, and device, event and unified update WebSockets. |
 | **UniFiInnerSpaceClient** | Full Project Data (Shapes, Walls, Attenuation), Floor Plans, Placed Access Points, Placed Switches, Unplaced Inventory, Blueprint Image Assets |
 | **UniFiSiteManagerClient** | Hosts/Consoles, Multi-site Aggregation, Cross-console Devices, ISP Performance Telemetry & Queries, SD-WAN Configs & Health Status, Cloud Connector Arbitrary Proxy |
 | **UniFiMobilityClient** | Workspaces, Workspace Admins, Mobile routers and location coordinates, Connected Clients, Remote LAN/DHCP Configuration, Remote Wireless WiFi Configuration |
@@ -189,9 +202,25 @@ asyncio.run(main())
 Access uses its own bearer token. The default console port is 12445.
 
 An offline test compares the HTTP methods and paths from public Protect calls
-with the OpenAPI fixture for `PROTECT_SPEC_VERSION` (7.3.70). The test skips
+with the OpenAPI fixture for `PROTECT_SPEC_VERSION` (7.4.96). The test skips
 `client.close` and `chimes.play` because they send no requests. The test checks
 only methods and paths.
+
+External alarm manager arm profiles need an NVR that reports
+`nvr.use_external_alarm_manager is True`. When the flag is false, Protect runs
+the local alarm manager and the external endpoints refuse requests.
+The property keeps `nvr.feature_flags` compatible with existing dictionary access.
+The value is also available at `nvr.feature_flags["useExternalAlarmManager"]`
+when Protect supplies the key.
+`client.speakers.stop_siren` stops a siren playing on a speaker.
+`client.websocket.subscribe_updates` sends one `modelKeys` query pair per key
+and yields raw add, update and remove messages:
+
+```python
+async with client.websocket.subscribe_updates(["camera", "event"]) as updates:
+    async for message in updates:
+        print(message)
+```
 
 ## Error Handling
 

@@ -9,11 +9,14 @@ callbacks.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+from collections.abc import Callable
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
 import pytest
+from yarl import URL
 
 from unifi_official_api import ApiKeyAuth, ConnectionType, LocalAuth
 from unifi_official_api.protect import UniFiProtectClient
@@ -666,3 +669,162 @@ async def test_subscribe_events_context_manager() -> None:
 
     assert received == [{"type": "ring"}]
     assert fake_ws.closed is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("client_factory", "expected_path"),
+    [
+        (_local_client, "/proxy/protect/integration/v1/subscribe/updates"),
+        (
+            _remote_client,
+            "/v1/connector/consoles/console-1/protect/integration/v1/subscribe/updates",
+        ),
+    ],
+    ids=["local", "remote"],
+)
+async def test_subscribe_updates_uses_the_routed_path(
+    client_factory: Callable[[], UniFiProtectClient], expected_path: str
+) -> None:
+    """The updates subscription is routed like every other Protect endpoint."""
+    client = client_factory()
+    ws_socket = ProtectWebSocket(client)
+    ws_socket._connect = AsyncMock(return_value=_make_ws([]))
+
+    async with ws_socket.subscribe_updates(["camera", "event"]) as iterator:
+        assert [message async for message in iterator] == []
+
+    ws_socket._connect.assert_awaited_once_with(
+        expected_path,
+        params=[("modelKeys", "camera"), ("modelKeys", "event")],
+    )
+
+
+@pytest.mark.asyncio
+async def test_connect_encodes_repeated_model_keys() -> None:
+    """Each query pair preserves its value through URL encoding."""
+    client = _local_client()
+    ws_socket = ProtectWebSocket(client)
+    session = MagicMock()
+    session.ws_connect = AsyncMock(return_value=MagicMock())
+    client._ensure_session = AsyncMock(return_value=session)
+    keys = ["camera", "event&model=camera", "external arm profile"]
+
+    await ws_socket._connect(
+        "/proxy/protect/integration/v1/subscribe/updates",
+        params=[("modelKeys", key) for key in keys],
+    )
+
+    _args, kwargs = session.ws_connect.call_args
+    assert kwargs["params"] == [("modelKeys", key) for key in keys]
+    encoded = str(
+        URL("wss://console/proxy/protect/integration/v1/subscribe/updates").with_query(
+            kwargs["params"]
+        )
+    )
+    assert "event%26model%3Dcamera" in encoded
+    assert URL(encoded).query.getall("modelKeys") == keys
+
+
+@pytest.mark.asyncio
+async def test_subscribe_updates_delivers_bulk_messages_unchanged() -> None:
+    """A bulk message passes through unchanged; bad JSON and binary frames are skipped."""
+    client = _local_client()
+    ws_socket = ProtectWebSocket(client)
+    bulk = {"action": "update", "modelKey": "camera", "ids": ["cam-1", "cam-2"]}
+    text_msg = MagicMock(type=aiohttp.WSMsgType.TEXT, data=json.dumps(bulk))
+    invalid_json_msg = MagicMock(type=aiohttp.WSMsgType.TEXT, data="not-json")
+    binary_msg = MagicMock(type=aiohttp.WSMsgType.BINARY, data=b"\x00\x01")
+    close_msg = MagicMock(type=aiohttp.WSMsgType.CLOSED)
+    fake_ws = _make_ws([text_msg, invalid_json_msg, binary_msg, close_msg])
+    ws_socket._connect = AsyncMock(return_value=fake_ws)
+
+    received = []
+    async with ws_socket.subscribe_updates(["camera"]) as iterator:
+        async for message in iterator:
+            received.append(message)
+
+    assert received == [bulk]
+    assert fake_ws.closed is True
+
+
+@pytest.mark.asyncio
+async def test_subscribe_updates_stops_at_an_error_frame() -> None:
+    """An ERROR frame ends the iteration; later frames are not delivered."""
+    client = _local_client()
+    ws_socket = ProtectWebSocket(client)
+    error_msg = MagicMock(type=aiohttp.WSMsgType.ERROR)
+    late_msg = MagicMock(type=aiohttp.WSMsgType.TEXT, data=json.dumps({"type": "add"}))
+    fake_ws = _make_ws([error_msg, late_msg])
+    ws_socket._connect = AsyncMock(return_value=fake_ws)
+
+    async with ws_socket.subscribe_updates(["camera"]) as iterator:
+        received = [message async for message in iterator]
+
+    assert received == []
+    assert fake_ws.closed is True
+
+
+@pytest.mark.asyncio
+async def test_subscribe_updates_leaves_callback_running_state_alone() -> None:
+    """Ending an updates subscription does not stop a concurrent callback loop."""
+    client = _local_client()
+    ws_socket = ProtectWebSocket(client)
+    ws_socket._running = True  # a subscribe_with_callback loop is active
+    text_msg = MagicMock(type=aiohttp.WSMsgType.TEXT, data=json.dumps({"type": "add"}))
+    close_msg = MagicMock(type=aiohttp.WSMsgType.CLOSED)
+    fake_ws = _make_ws([text_msg, close_msg])
+    ws_socket._connect = AsyncMock(return_value=fake_ws)
+
+    async with ws_socket.subscribe_updates(["camera"]) as iterator:
+        received = [message async for message in iterator]
+
+    assert received == [{"type": "add"}]
+    assert fake_ws.closed is True
+    assert ws_socket._running is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "model_keys",
+    ["camera", "", [], [""], [1], ["camera,event"]],
+    ids=[
+        "bare-string",
+        "empty-string",
+        "empty-sequence",
+        "empty-item",
+        "non-string-item",
+        "comma-separated-item",
+    ],
+)
+async def test_subscribe_updates_rejects_invalid_keys_before_connecting(
+    model_keys: object,
+) -> None:
+    """Invalid model keys fail before a handshake is attempted."""
+    client = _local_client()
+    ws_socket = ProtectWebSocket(client)
+    ws_socket._connect = AsyncMock()
+
+    with pytest.raises(ValueError):
+        async with ws_socket.subscribe_updates(model_keys):  # type: ignore[arg-type]
+            pass
+
+    ws_socket._connect.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_existing_subscriptions_send_no_query_parameters() -> None:
+    """Device and event subscriptions keep their original handshake arguments."""
+    client = _local_client()
+    ws_socket = ProtectWebSocket(client)
+    session = MagicMock()
+    session.ws_connect = AsyncMock(side_effect=lambda *a, **k: _make_ws([]))
+    client._ensure_session = AsyncMock(return_value=session)
+
+    for subscribe in (ws_socket.subscribe_devices, ws_socket.subscribe_events):
+        async with subscribe("nvr1", "default") as iterator:
+            assert [message async for message in iterator] == []
+
+    assert session.ws_connect.await_count == 2
+    for call in session.ws_connect.call_args_list:
+        assert "params" not in call.kwargs

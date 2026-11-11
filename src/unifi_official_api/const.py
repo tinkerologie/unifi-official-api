@@ -71,7 +71,7 @@ CARRIER_FABRIC_API_VERSION: Final[str] = "v1"
 
 # Pinned upstream OpenAPI / documentation specification versions
 NETWORK_SPEC_VERSION: Final[str] = "11.0.97"
-PROTECT_SPEC_VERSION: Final[str] = "7.3.70"
+PROTECT_SPEC_VERSION: Final[str] = "7.4.96"
 INNERSPACE_SPEC_VERSION: Final[str] = "1.3.23"
 MOBILITY_SPEC_VERSION: Final[str] = "1.0.0"
 SITE_MANAGER_SPEC_VERSION: Final[str] = "1.0.0"

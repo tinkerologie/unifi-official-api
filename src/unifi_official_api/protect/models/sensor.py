@@ -83,6 +83,7 @@ class Sensor(BaseModel):
     open_status_led_enabled: bool = Field(default=True, alias="openStatusLedEnabled")
     alarm_settings: dict[str, Any] | None = Field(default=None, alias="alarmSettings")
     mount_type: str | None = Field(default=None, alias="mountType")
+    is_mounted_incorrectly: bool | None = Field(default=None, alias="isMountedIncorrectly")
 
     model_config = {"populate_by_name": True, "extra": "allow"}
 

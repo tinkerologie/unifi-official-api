@@ -27,3 +27,23 @@ class SpeakersEndpoint(ProtectDeviceEndpoint[Speaker]):
         path = self._client.build_api_path(f"/speakers/{speaker_id}/test-sound", site_id)
         await self._client._post(path)
         return True
+
+    async def stop_siren(self, speaker_id: str, site_id: str | None = None) -> bool:
+        """
+        Stop the siren that is playing on the speaker.
+
+        Args:
+            speaker_id: The speaker ID.
+            site_id: An optional site ID for compatibility. The endpoint ignores it.
+
+        Returns:
+            True if the request was accepted.
+
+        Raises:
+            UniFiResponseError: If the speaker is offline or runs firmware too
+                old for siren (HTTP 400).
+
+        """
+        path = self._client.build_api_path(f"/speakers/{speaker_id}/stop-siren", site_id)
+        await self._client._post(path)
+        return True

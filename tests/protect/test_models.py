@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+import json
+from collections import UserDict
 from datetime import UTC, datetime
+from typing import Any
+
+import pytest
+from pydantic import ValidationError
 
 from unifi_official_api.protect import (
     NVR,
@@ -11,6 +17,8 @@ from unifi_official_api.protect import (
     Chime,
     Event,
     EventType,
+    ExternalArmProfile,
+    ExternalArmProfileState,
     Light,
     LightMode,
     LiveView,
@@ -85,6 +93,29 @@ class TestSensorModel:
         assert sensor.battery_status.percentage == 85
         assert sensor.battery_status.is_low is False
 
+    @pytest.mark.parametrize(
+        ("payload_key", "value"),
+        [
+            ("isMountedIncorrectly", True),
+            ("isMountedIncorrectly", False),
+            ("isMountedIncorrectly", None),
+            ("is_mounted_incorrectly", True),
+            ("is_mounted_incorrectly", None),
+            ("is_mounted_incorrectly", "omitted"),
+        ],
+    )
+    def test_is_mounted_incorrectly(self, payload_key: str, value: bool | str | None) -> None:
+        """The orientation flag reads through its alias or Python name."""
+        base = {"id": "sensor-123", "mac": "AA:BB:CC:DD:EE:FF"}
+        if value == "omitted":
+            sensor = Sensor.model_validate(base)
+            assert sensor.is_mounted_incorrectly is None
+            return
+        sensor = Sensor.model_validate({**base, payload_key: value})
+        assert sensor.is_mounted_incorrectly is value
+        assert "isMountedIncorrectly" in sensor.model_dump(by_alias=True)
+        assert "is_mounted_incorrectly" in sensor.model_dump()
+
 
 class TestLightModel:
     """Tests for Light model."""
@@ -145,6 +176,34 @@ class TestNVRModel:
         assert nvr.version == "2.9.20"
         assert nvr.camera_count == 8
         assert nvr.recording_retention_days == 30
+
+    @pytest.mark.parametrize(
+        ("feature_flags", "expected"),
+        [
+            ({"useExternalAlarmManager": True}, True),
+            ({"useExternalAlarmManager": False}, False),
+            ({}, None),
+            ({"useExternalAlarmManager": "yes"}, None),
+            ({"useExternalAlarmManager": 1}, None),
+            (None, None),
+        ],
+    )
+    def test_use_external_alarm_manager_reads_only_booleans(
+        self, feature_flags: dict[str, Any] | None, expected: bool | None
+    ) -> None:
+        """The property returns the flag only when it is a real boolean."""
+        nvr = NVR.model_validate({"id": "nvr-123", "featureFlags": feature_flags})
+        assert nvr.use_external_alarm_manager is expected
+
+    def test_use_external_alarm_manager_keeps_dictionary_access(self) -> None:
+        """The flag stays readable through the unchanged ``feature_flags`` dict."""
+        flags = {"useExternalAlarmManager": True, "futureFlag": 7}
+        nvr = NVR.model_validate({"id": "nvr-123", "featureFlags": flags})
+
+        assert nvr.feature_flags is not None
+        assert nvr.feature_flags["useExternalAlarmManager"] is True
+        assert nvr.feature_flags["futureFlag"] == 7
+        assert nvr.model_dump(by_alias=True)["featureFlags"] == flags
 
 
 class TestLiveViewModel:
@@ -208,3 +267,216 @@ class TestEventModel:
             }
         )
         assert event.duration is None
+
+
+_PIN_MARKER = "915273"
+
+
+def _texts(profile: ExternalArmProfile) -> list[str]:
+    """Return every profile representation that can reach a caller or a log."""
+    return [repr(profile), str(profile), str(profile.model_dump()), profile.model_dump_json()]
+
+
+def _error_texts(exc: BaseException) -> list[str]:
+    """Return the text and error payloads of every exception in the chain."""
+    texts: list[str] = []
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        texts.extend((str(current), repr(current)))
+        errors = getattr(current, "errors", None)
+        if callable(errors):
+            texts.append(repr(errors()))
+        current = current.__cause__ or current.__context__
+    return texts
+
+
+def _assert_no_pin(*texts: str) -> None:
+    for text in texts:
+        assert _PIN_MARKER not in text
+
+
+_FULL_PROFILE: dict[str, Any] = {
+    "id": "profile-1",
+    "title": "Home",
+    "state": "armed",
+    "state_set_at": "2026-11-01T00:00:00.000Z",
+    "state_promotion_due_at": "2026-11-01T00:00:30.000Z",
+    "created_at": "2026-10-01T00:00:00.000Z",
+    "created_by": "user-1",
+    "updated_at": "2026-11-01T00:00:00.000Z",
+    "updated_by": "user-2",
+    "activation_delay": 30,
+    "deactivation_delay": 15.5,
+    "active_breach_id": 12,
+    "alarm_ids": ["alarm-1", "alarm-2"],
+    "has_pin": True,
+    "schedule": {"mon": {"type": "all_day"}},
+}
+
+
+class TestExternalArmProfileModel:
+    """Tests for the external alarm manager arm profile model."""
+
+    def test_full_payload(self) -> None:
+        """Every documented snake_case field parses."""
+        profile = ExternalArmProfile.model_validate(_FULL_PROFILE)
+
+        assert profile.id == "profile-1"
+        assert profile.title == "Home"
+        assert profile.state is ExternalArmProfileState.ARMED
+        assert profile.state_set_at == "2026-11-01T00:00:00.000Z"
+        assert profile.state_promotion_due_at == "2026-11-01T00:00:30.000Z"
+        assert profile.activation_delay == 30
+        assert profile.deactivation_delay == 15.5
+        assert profile.active_breach_id == 12
+        assert profile.alarm_ids == ["alarm-1", "alarm-2"]
+        assert profile.has_pin is True
+        assert profile.schedule == {"mon": {"type": "all_day"}}
+        assert profile.model_dump(by_alias=True) == _FULL_PROFILE
+
+    def test_minimal_payload(self) -> None:
+        """Only ``id`` is required, as for the other arm profile models."""
+        profile = ExternalArmProfile.model_validate({"id": "profile-1"})
+
+        assert profile.id == "profile-1"
+        assert profile.state is None
+        assert profile.model_dump(exclude_none=True) == {"id": "profile-1"}
+
+    def test_unknown_state_and_extras_follow_forward_compatibility(self) -> None:
+        """A newer state stays a plain string and unknown extras are kept."""
+        profile = ExternalArmProfile.model_validate(
+            {"id": "profile-1", "state": "futureState", "futureField": {"a": 1}}
+        )
+
+        assert type(profile.state) is str
+        assert profile.state == "futureState"
+        assert profile.model_extra == {"futureField": {"a": 1}}
+
+    @pytest.mark.parametrize(
+        "pin_payload",
+        [
+            {"pin_code": _PIN_MARKER},
+            {"pinCode": _PIN_MARKER},
+            {"PIN": _PIN_MARKER},
+            {"pin_codes": [_PIN_MARKER]},
+            {"schedule": {"mon": {"pin": _PIN_MARKER}}},
+            {"extra": [{"pin_code": _PIN_MARKER}, {"pinCode": _PIN_MARKER}]},
+            {"extra": UserDict({"pinCode": _PIN_MARKER, "futureField": True})},
+            {"tuple_extra": ({"pin_code": _PIN_MARKER}, {"PIN": _PIN_MARKER})},
+            {"pin_code": _PIN_MARKER, "pinCode": _PIN_MARKER, "pin": _PIN_MARKER},
+        ],
+    )
+    def test_pin_keys_never_reach_the_model(self, pin_payload: dict[str, Any]) -> None:
+        """No PIN spelling survives into any representation or dump."""
+        profile = ExternalArmProfile.model_validate(
+            {"id": "profile-1", "has_pin": True, **pin_payload}
+        )
+
+        rendered = (repr(profile), str(profile.model_dump()), profile.model_dump_json())
+        for text in rendered:
+            assert _PIN_MARKER not in text
+        assert profile.has_pin is True
+
+    def test_container_values_are_stripped_and_preserved(self) -> None:
+        """Tuples, sets and frozensets keep their type while PIN keys go."""
+        profile = ExternalArmProfile.model_validate(
+            {
+                "id": "profile-1",
+                "tuple_extra": ({"pin_codes": _PIN_MARKER},),
+                "set_extra": {1, 2},
+                "frozenset_extra": frozenset({3}),
+            }
+        )
+
+        assert profile.model_extra == {
+            "tuple_extra": ({},),
+            "set_extra": {1, 2},
+            "frozenset_extra": frozenset({3}),
+        }
+        assert _PIN_MARKER not in repr(profile) + profile.model_dump_json()
+
+    def test_model_copy_drops_pin_spellings(self) -> None:
+        """Copy updates cannot put a PIN on the copied profile."""
+        profile = ExternalArmProfile.model_validate({"id": "profile-1", "has_pin": True})
+
+        copied = profile.model_copy(
+            update={
+                "pin_code": _PIN_MARKER,
+                "PIN": _PIN_MARKER,
+                "extra": [{"pin": _PIN_MARKER}, {"pinCode": _PIN_MARKER}],
+                "tuple_extra": ({"pin_codes": _PIN_MARKER},),
+            }
+        )
+
+        assert copied.model_extra == {"extra": [{}, {}], "tuple_extra": ({},)}
+        assert copied.has_pin is True
+        _assert_no_pin(*_texts(copied))
+
+    def test_model_copy_without_update_keeps_the_profile(self) -> None:
+        """A plain copy keeps every value."""
+        profile = ExternalArmProfile.model_validate(_FULL_PROFILE)
+
+        assert profile.model_copy() == profile
+
+    def test_assignment_drops_pin_spellings(self) -> None:
+        """Attribute assignment cannot put a PIN on the profile either."""
+        profile = ExternalArmProfile.model_validate({"id": "profile-1"})
+
+        profile.pin_code = _PIN_MARKER
+        profile.pinCode = _PIN_MARKER
+        profile.extra = [{"pin": _PIN_MARKER}]
+        profile.schedule = {"mon": {"pin": _PIN_MARKER}}
+
+        assert profile.model_extra == {"extra": [{}]}
+        assert profile.schedule == {"mon": {}}
+        _assert_no_pin(*_texts(profile))
+
+    def test_representations_hide_a_pin_injected_into_the_extra_store(self) -> None:
+        """A key written past the mutators still never reaches repr or a dump."""
+        profile = ExternalArmProfile.model_validate({"id": "profile-1"})
+        assert profile.__pydantic_extra__ is not None
+        profile.__pydantic_extra__["pin_code"] = _PIN_MARKER
+        profile.__pydantic_extra__["extra"] = [{"pinCode": _PIN_MARKER}]
+
+        _assert_no_pin(*_texts(profile))
+
+    def test_validation_errors_quote_no_input(self) -> None:
+        """A rejected non-mapping input is not echoed in the error."""
+        with pytest.raises(ValidationError) as caught:
+            ExternalArmProfile.model_validate(_PIN_MARKER)
+
+        _assert_no_pin(*_error_texts(caught.value))
+        assert caught.value.__cause__ is None
+        assert caught.value.__context__ is None
+
+    def test_malformed_json_error_quotes_no_input(self) -> None:
+        """An unparsable body is not echoed in the error."""
+        with pytest.raises(ValidationError) as caught:
+            ExternalArmProfile.model_validate_json(f'{{"pin_code":"{_PIN_MARKER}",')
+
+        _assert_no_pin(*_error_texts(caught.value))
+        assert caught.value.__cause__ is None
+        assert caught.value.__context__ is None
+
+    def test_valid_json_parses_and_drops_the_pin(self) -> None:
+        """A valid JSON body parses like a dict and the PIN never reaches the model."""
+        body = json.dumps({**_FULL_PROFILE, "pin_code": _PIN_MARKER})
+
+        profile = ExternalArmProfile.model_validate_json(body)
+
+        assert profile == ExternalArmProfile.model_validate(_FULL_PROFILE)
+        assert profile.model_dump(by_alias=True) == _FULL_PROFILE
+        assert profile.model_extra == {}
+        _assert_no_pin(repr(profile), str(profile), profile.model_dump_json())
+
+    def test_wrong_type_pin_error_quotes_no_input(self) -> None:
+        """A field error keeps its location but drops every input value."""
+        with pytest.raises(ValidationError) as caught:
+            ExternalArmProfile.model_validate_json(f'{{"id": 123, "pin_code": "{_PIN_MARKER}"}}')
+
+        _assert_no_pin(*_error_texts(caught.value))
+        assert caught.value.errors()[0]["loc"] == ("id",)
+        assert caught.value.__cause__ is None
+        assert caught.value.__context__ is None

@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Add controller-wide Network 11 statistics support through `client.stats.get_source()` and `get_recent_series()` on local and remote connections. Typed series report additive byte totals and the actual duration of each bucket (#90).
+- `SpeakersEndpoint.stop_siren(speaker_id, site_id=None)` stops a siren playing on a speaker (`POST /speakers/{id}/stop-siren`) and returns `True` after the documented 204. An offline speaker or firmware too old for siren raises `UniFiResponseError` (#87).
+- `ExternalArmProfilesEndpoint`, exposed as `client.external_arm_profiles`, manages arm profiles owned by the external alarm manager: `get_all`, `get_all_result`, `get`, `create`, `update`, `arm`, `disarm` and `delete` under `/external/arm-profiles`. `update` keeps an omitted field distinct from an explicit `null`, and every request sends `log_body=False` (#87).
+- `ProtectWebSocket.subscribe_updates(model_keys)` sends one `modelKeys` query pair per key to `/subscribe/updates`. Pass each key as a separate item. The subscription yields raw add, update and remove messages (#87).
+- `ExternalArmProfile` and `ExternalArmProfileState` model the external alarm manager response. Only `id` is required, extras are kept, and PIN-spelled keys (`pin`, `pin_code`, `pinCode`, `pincodes`) are removed from nested mappings, lists, tuples and sets on validation, assignment and `model_copy()`. Representations, dumps and validation errors never quote a PIN (#87).
+- `VideoMode.ANTI_FLICKER` (`antiFlicker`), `Sensor.is_mounted_incorrectly` (`isMountedIncorrectly`) and the read-only `NVR.use_external_alarm_manager` property (`featureFlags.useExternalAlarmManager`) (#87).
 
 ### Changed
 
@@ -19,6 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 
 - Add ASD-STE100 Issue 9 to the contributor guide. Update the glossary and the API usage guidance. (#81)
+
+### Notes
+
+- Read the external alarm manager flag through `nvr.use_external_alarm_manager`, not `nvr.feature_flags.use_external_alarm_manager`. `feature_flags` remains a dictionary so existing indexing, mutation and dumps do not change (#87).
+- `Sensor.model_dump()` now includes `is_mounted_incorrectly` (`isMountedIncorrectly` with `by_alias=True`, or with no alias in a plain dump) (#87).
+- Verified read-only against a live Protect 7.4.96 NVR: `nvr.use_external_alarm_manager`, sensor and camera parsing, `external_arm_profiles.get_all_result()` and `get()` (no PIN in output), and the `subscribe_updates` handshake with `modelKeys`. Not verified live: `speakers.stop_siren` (the test system has no speakers), external profile `arm`/`disarm`/`create`/`update`/`delete` (they change a live security system), and the payloads of `subscribe_updates` messages (no message arrived in the test window) (#87).
 
 ## [3.1.0] - 2026-11-07
 

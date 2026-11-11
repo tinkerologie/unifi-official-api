@@ -64,8 +64,10 @@ OVERRIDES: dict[str, dict[str, Any]] = {
     "application.upload_file": {"file_data": b"GIF89a", "filename": "a.gif"},
     "cameras.set_recording_mode": {"mode": RecordingMode.ALWAYS},
     "cameras.set_video_mode": {"mode": "default"},
+    "external_arm_profiles.update": {"title": "Updated"},
     "lights.set_mode": {"mode": "always"},
     "websocket.subscribe_with_callback": {"subscription_type": "events", "reconnect": False},
+    "websocket.subscribe_updates": {"model_keys": ["camera", "event"]},
 }
 # Responses for methods that read before they write; the write is what matters.
 _CHIME = {
@@ -169,7 +171,7 @@ class Recorder:
         async def get_binary(path: str, **_kwargs: Any) -> Any:
             return self._record("GET", path)
 
-        async def connect(path: str) -> Any:
+        async def connect(path: str, *, params: Any = None) -> Any:
             return self._record("GET", path)
 
         client.build_api_path = build_api_path  # type: ignore[method-assign]

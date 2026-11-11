@@ -29,6 +29,7 @@ FAMILIES = (
     "bridges",
     "cameras",
     "chimes",
+    "external_arm_profiles",
     "fobs",
     "lights",
     "link_stations",

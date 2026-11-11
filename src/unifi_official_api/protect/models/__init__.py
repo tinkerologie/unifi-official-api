@@ -21,6 +21,7 @@ from .camera import Camera, CameraChannel, CameraState, CameraType, RecordingMod
 from .chime import Chime, ChimeRingSetting
 from .doorlock import DoorLock, Doorlock
 from .event import Event, EventType, SmartDetectType
+from .external_arm_profile import ExternalArmProfile, ExternalArmProfileState
 from .files import DeviceFile, FileType, RTSPSStream, TalkbackSession
 from .fob import Fob, FobArmControlSettings, FobKeypadSettings, KeypadFob
 from .light import Light, LightMode
@@ -66,6 +67,8 @@ __all__ = [
     "Doorlock",
     "Event",
     "EventType",
+    "ExternalArmProfile",
+    "ExternalArmProfileState",
     "FileType",
     "Fob",
     "FobArmControlSettings",
