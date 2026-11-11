@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-11-11
+
 ### Added
 
 - Add controller-wide Network 11 statistics support through `client.stats.get_source()` and `get_recent_series()` on local and remote connections. Typed series report additive byte totals and the actual duration of each bucket (#90).
