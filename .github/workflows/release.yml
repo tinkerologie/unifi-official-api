@@ -22,6 +22,7 @@ jobs:
   # Skip the release when PyPI already has this version: a comment edit or a revert
   # of _version.py must not publish, and every later job needs this one.
   resolve:
+    timeout-minutes: 60
     name: Resolve version
     if: github.ref == 'refs/heads/main' || github.ref_type == 'tag'
     runs-on: ubuntu-latest
@@ -67,6 +68,7 @@ jobs:
 
   # Run tests before releasing
   test:
+    timeout-minutes: 60
     name: Test
     needs: resolve
     if: needs.resolve.outputs.release == 'true'
@@ -98,6 +100,7 @@ jobs:
 
   # Build distribution packages
   build:
+    timeout-minutes: 60
     name: Build
     needs: test
     runs-on: ubuntu-latest
@@ -149,12 +152,14 @@ jobs:
       - name: Store distribution packages
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          retention-days: 7
           name: python-package-distributions
           path: dist/
 
   # Publish to PyPI using Trusted Publishers (OIDC)
   # See: https://docs.pypi.org/trusted-publishers/
   publish-pypi:
+    timeout-minutes: 60
     name: Publish to PyPI
     needs: build
     runs-on: ubuntu-latest
@@ -176,6 +181,7 @@ jobs:
 
   # Create GitHub Release
   github-release:
+    timeout-minutes: 60
     name: GitHub Release
     needs: [resolve, publish-pypi]
     runs-on: ubuntu-latest
